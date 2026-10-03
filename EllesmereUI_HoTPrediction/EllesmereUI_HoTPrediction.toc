@@ -1,0 +1,14 @@
+## Interface: 120000, 120001, 120005, 120007, 120100, 16001
+## Title: |cff66f366EllesmereUI|r HoT Prediction
+## Notes: Conservative player self-cast HoT tick prediction overlay for EllesmereUIUnitFrames. Learns tick intervals/amounts from combat log and appends only the non-overlapping remainder after native incoming heals.
+## Author: ai-job
+## Version: 0.1.0
+## SavedVariables: EllesmereUI_HoTPredictionDB
+## Dependencies: EllesmereUIUnitFrames
+
+Core.lua
+Api.lua
+Spells.lua
+Learner.lua
+Model.lua
+Overlay.lua
