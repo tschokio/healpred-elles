@@ -301,6 +301,12 @@ function FrameMT:UpdateScrollChildRect() self._scrollUpdated = true end
 function FrameMT:EnableMouseWheel(v) self._wheelEnabled = v end
 function FrameMT:SetClipsChildren(v) self._clipsChildren = v end
 function FrameMT:RegisterForDrag(...) self._dragButtons = { ... } end
+function FrameMT:RegisterForClicks(...) self._clickButtons = { ... } end
+function FrameMT:SetChecked(v) self._checked = v end
+function FrameMT:GetChecked() return self._checked end
+function FrameMT:SetHighlightTexture(path) self._highlightTexture = path end
+function FrameMT:GetCenter() return 100, 100 end
+function FrameMT:GetEffectiveScale() return 1 end
 function FrameMT:SetMaxLetters(v) self._maxLetters = v end
 function FrameMT:SetBackdrop(v) self._backdrop = v end
 function FrameMT:SetBackdropColor(...) self._backdropColor = { ... } end

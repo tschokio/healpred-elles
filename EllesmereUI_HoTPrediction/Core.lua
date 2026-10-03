@@ -6,7 +6,7 @@
 local addonName, ns = ...
 
 ns.name = addonName
-ns.version = "0.3.2"
+ns.version = "0.4.0"
 ns.debugEnabled = false
 ns.inCombat = false
 ns.started = false
@@ -157,6 +157,8 @@ ns.DEFAULTS = {
 	amountMode = "total",          -- "total" (CLEU amount includes overheal) or "effective"
 	assumeApiExcludesHoTs = false, -- opt-in: user verified native already excludes HoTs
 	approximatePrediction = false, -- opt-in: public tooltip/manual estimate, ignores heal absorbs
+	minimapHidden = false,
+	minimapAngle = 225,
 	intervalOverrides = {},        -- [spellID] = seconds (user calibration only)
 	amountOverrides = {},          -- [spellID] = { [stacks] = exact tick total } (user calibration only)
 	extraSpells = {},              -- [spellID] = { name =, family = }
@@ -393,6 +395,7 @@ function ns.Startup()
 
 	ns.resetSession()
 	ns.InitDatabase()
+	if ns.InitOptions then ns.InitOptions() end
 
 	ns.initCapabilities()
 	if ns.learner and ns.learner.Setup then ns.learner.Setup() end
@@ -499,6 +502,7 @@ function ns.HandleCommand(input)
 
 	if cmd == "help" or cmd == "" then
 		ns.print(HELP)
+		ns.print("settings: /euihot options (or menu) | /euihot minimap on|off; minimap left-click settings, right-click diagnostics, drag to move.")
 		return
 	elseif cmd == "test" then
 		if args[1] and args[1]:lower() == "off" then
@@ -517,6 +521,15 @@ function ns.HandleCommand(input)
 		return
 	elseif cmd == "status" then
 		ns.EmitStatus()
+		return
+	elseif cmd == "options" or cmd == "menu" then
+		if ns.OpenOptions then ns.OpenOptions() end
+		return
+	elseif cmd == "minimap" then
+		local v = (args[1] or ""):lower()
+		if v ~= "on" and v ~= "off" then ns.print("usage: /euihot minimap on|off"); return end
+		ns.db.minimapHidden = v == "off"
+		if ns.UpdateMinimapButton then ns.UpdateMinimapButton() end
 		return
 	elseif cmd == "approximate" then
 		local v = (args[1] or ""):lower()

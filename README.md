@@ -40,7 +40,7 @@ StatusBar of its own and secure-hooks native callbacks read-only.
 
 The installed folder is the deliverable; there is no separate zip/binary.
 
-### Updating (to v0.3.2)
+### Updating (to v0.4.0)
 
 Replace the `EllesmereUI_HoTPrediction/` folder in your AddOns directory with the
 new one, then `/reload` (or restart). SavedVariables
@@ -50,6 +50,30 @@ value is never persisted, so update with no fake active. Verify with
 teststatus` or the copyable `/euihot window`.
 
 ## Quick start
+
+### Settings menu and minimap button (v0.4.0)
+
+* **Left-click the minimap icon** or use `/euihot options` (alias: `/euihot menu`).
+  Also available under Blizzard's **Settings → AddOns → EllesmereUI HoT Prediction**
+  when the client's settings API is available.
+* **Right-click** the icon for copyable diagnostics. **Drag** it around the minimap;
+  the angle is saved. The button follows the minimap's size with a circular path.
+* Configure overlay enable/disable, approximate mode, native style or custom RGB,
+  opacity, minimap visibility, debug logging, and the advanced native-excludes-HoTs
+  assumption. Numeric appearance edits require **Apply appearance**; toggles save
+  immediately. RGB is used only when native styling is unchecked.
+* **Preview +1000** explicitly starts fake healing; **Stop preview** returns to real
+  healing. Opening/closing settings does not start a preview or change predictions.
+* Hide/show the icon with `/euihot minimap off|on`; the menu remains accessible
+  through `/euihot options` even with the icon hidden or the overlay disabled.
+
+The window is movable and closes with Escape. No extra libraries or background
+timers are installed; cursor updates run only while dragging the minimap button.
+Manual spell/rank calibration remains in slash commands. Approximate mode still
+ignores healing absorbs and may double-count native incoming healing. Keep the
+advanced overlap assumption off unless verified for your client.
+
+### Prediction setup
 
 1. Install `EllesmereUIUnitFrames`, **enable native heal prediction** for the
    player frame, then `/reload`.

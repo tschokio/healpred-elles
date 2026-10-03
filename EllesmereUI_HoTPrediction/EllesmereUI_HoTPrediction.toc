@@ -2,7 +2,7 @@
 ## Title: |cff66f366EllesmereUI|r HoT Prediction
 ## Notes: Conservative player self-cast HoT tick prediction overlay for EllesmereUIUnitFrames. Learns tick intervals/amounts from combat log and appends only the non-overlapping remainder after native incoming heals.
 ## Author: ai-job
-## Version: 0.3.2
+## Version: 0.4.0
 ## SavedVariables: EllesmereUI_HoTPredictionDB
 ## Dependencies: EllesmereUIUnitFrames
 
@@ -14,3 +14,4 @@ Learner.lua
 Model.lua
 Overlay.lua
 DebugWindow.lua
+Options.lua

@@ -42,6 +42,7 @@ loadRel("tests/spec_debugwindow.lua")
 loadRel("tests/spec_estimates.lua")
 loadRel("tests/spec_druid.lua")
 loadRel("tests/spec_priest_shaman.lua")
+loadRel("tests/spec_options.lua")
 
 T.run()
 _G.__HOT_EXIT = (T.fail == 0) and 0 or 1
