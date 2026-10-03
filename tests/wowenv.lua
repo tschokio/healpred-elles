@@ -343,6 +343,8 @@ function Mocks.Reset()
 	Mocks.rejectSecretRange = false
 	Mocks.healingPower = 0
 	Mocks.descriptions = {}
+	Mocks.channel = nil
+	Mocks.rage = 0
 
 	_G.EllesmereUI_HoTPredictionDB = nil
 
@@ -365,7 +367,15 @@ function Mocks.Reset()
 	_G.UnitExists = function() return true end
 	_G.UnitHealth = function() return Mocks.health end
 	_G.UnitHealthMax = function() return Mocks.maxHealth end
-	_G.UnitPower = function() Mocks.powerCalls = Mocks.powerCalls + 1; return 100000 end
+	_G.UnitPower = function(_, powerType)
+		Mocks.powerCalls = Mocks.powerCalls + 1
+		return powerType == 1 and Mocks.rage or 100000
+	end
+	_G.UnitChannelInfo = function()
+		if not Mocks.channel then return nil end
+		local c = Mocks.channel
+		return "channel", nil, nil, c.start, c.finish, false, false, c.id
+	end
 	_G.GetSpellBonusHealing = function() return Mocks.healingPower end
 	_G.GetLocale = function() return "enUS" end
 	_G.C_Spell = { GetSpellDescription = function(id) return Mocks.descriptions[id] end }

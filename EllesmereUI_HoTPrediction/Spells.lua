@@ -21,12 +21,24 @@ local function addFamily(family, ids, opts)
 			stacksMatter = opts.stacksMatter and true or false,
 			approximate = opts.approximate and true or false,
 			base = true,
+			foreverInterval = opts.foreverInterval,
+			channel = opts.channel,
+			resourceHealing = opts.resourceHealing,
+			tooltipSpellID = opts.tooltipSpellID,
 		}
 	end
 end
 
-addFamily("Rejuvenation", { 774, 1058, 1430, 2090, 2091, 3627, 8910, 9839, 9840, 9841, 25299 })
-addFamily("Regrowth", { 8936, 8938, 8939, 8940, 8941, 9750, 9856, 9857, 9858 })
+addFamily("Rejuvenation", { 774, 1058, 1430, 2090, 2091, 3627, 8910, 9839, 9840, 9841, 25299 }, { foreverInterval = 3 })
+addFamily("Regrowth", { 8936, 8938, 8939, 8940, 8941, 9750, 9856, 9857, 9858 }, { foreverInterval = 3 })
+addFamily("Renew", { 139, 6074, 6075, 6076, 6077, 6078, 10927, 10928, 10929, 25315 }, { foreverInterval = 3 })
+addFamily("Riptide", { 408521, 1239242, 1239243 }, { foreverInterval = 3 })
+-- ForeverChanges spellbook, beta 1.60.1.70205 (2026-10-03). IDs, not
+-- magnitudes: healing comes from live public tooltips, including gear bonuses.
+addFamily("WildGrowth", { 408120, 1238214, 1238215 }, { approximate = true, foreverInterval = 1 })
+addFamily("Tranquility", { 740, 8918, 9862, 9863 }, { channel = true, foreverInterval = 2 })
+addFamily("FrenziedRegeneration", { 22842, 22845 },
+	{ resourceHealing = true, foreverInterval = 1, tooltipSpellID = 22842 })
 -- Candidate-only IDs observed in retail/general buff managers; NOT proof they
 -- exist on the installed client. Runtime gating decides.
 addFamily("Lifebloom", { 33763 }, { stacksMatter = true })

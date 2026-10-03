@@ -1,5 +1,5 @@
 -- Optional rough estimates from PUBLIC tooltip text; never a combat-log sample.
--- Only Rejuvenation/Regrowth are parsed automatically. No spell-power coefficient
+-- Only verified supported periodic families are parsed. No spell-power coefficient
 -- tables, base heal constants, or parsing of restricted strings are used.
 local addonName, ns = ...
 local estimates = {}
@@ -29,7 +29,7 @@ local function number(text, locale)
 end
 
 -- Fail closed on unknown locales, ranges or ambiguous periodic clauses. In
--- particular Regrowth's initial direct heal must never enter the HoT estimate.
+-- particular Regrowth/Riptide's initial direct heal must never enter the estimate.
 function estimates.Parse(text, locale)
 	if ns.isSecret(text) then return nil, "tooltip text restricted" end
 	if type(text) ~= "string" or text == "" then return nil, "tooltip text unavailable" end
@@ -45,19 +45,41 @@ function estimates.Parse(text, locale)
 		text = text:gsub("(%d)%s+(%d)", "%1%2")
 	end
 	if not (text:find("heal", 1, true) or text:find("restor", 1, true)
-		or text:find("heil", 1, true)) then return nil, "no healing clause in tooltip" end
+		or text:find("heil", 1, true) or text:find("regener", 1, true)
+		or text:find("gesundheit", 1, true)) then return nil, "no healing clause in tooltip" end
+	-- Percentage conversion must not be parsed as flat healing. The resource
+	-- model is gated by metadata and handles only current readable rage.
+	local cap, percent
+	if locale == "deDE" then
+		cap = text:match("bis%s+zu%s+" .. NUMBER .. "%s+wut%s+pro%s+sek")
+		percent = text:match("jeder%s+punkt%s+wut.-in%s+" .. NUMBER .. "%%%s+gesundheit")
+	else
+		cap = text:match("up%s+to%s+" .. NUMBER .. "%s+rage%s+per%s+second")
+		percent = text:match("each%s+point%s+of%s+rage.-into%s+" .. NUMBER .. "%%%s+health")
+	end
+	if cap and percent then
+		cap, percent = number(cap, locale), number(percent, locale)
+		if cap and percent and cap <= 100 and percent <= 100 then
+			return { kind = "ragePercent", amount = percent, seconds = 1, rageCap = cap }
+		end
+		return nil, "invalid rage conversion tooltip"
+	end
 
 	local patterns
 	if locale == "deDE" then
 		patterns = {
+			{ NUMBER .. "%s+sek%.?%s+lang%s+um%s+" .. NUMBER .. "%s+schadenspunkt", "total", true },
+			{ "alle%s+" .. NUMBER .. "%s+sek%.?%s+" .. NUMBER .. "%s+gesundheit", "tick", true },
 			{ NUMBER .. "%s+gesundheit%s+alle%s+" .. NUMBER .. "%s+sek", "tick" },
 			{ "alle%s+" .. NUMBER .. "%s+sek.-um%s+" .. NUMBER, "tick", true },
-			{ "im%s+verlauf%s+von%s+" .. NUMBER .. "%s+sek.-um%s+" .. NUMBER, "total", true },
+			{ "im%s+verlauf%s+von%s+" .. NUMBER .. "%s+sek%.?%s+um%s+weitere%s+" .. NUMBER, "total", true },
+			{ "im%s+verlauf%s+von%s+" .. NUMBER .. "%s+sek%.?%s+um%s+" .. NUMBER, "total", true },
 			{ NUMBER .. "%s+gesundheit%s+über%s+" .. NUMBER .. "%s+sek", "total" },
 			{ "um%s+" .. NUMBER .. "%s+in%s+" .. NUMBER .. "%s+sek", "total" },
 		}
 	else
 		patterns = {
+			{ NUMBER .. "%s+damage%s+over%s+" .. NUMBER .. "%s+sec", "total" },
 			{ NUMBER .. "%s+every%s+" .. NUMBER .. "%s+sec", "tick" },
 			{ NUMBER .. "%s+health%s+every%s+" .. NUMBER .. "%s+sec", "tick" },
 			{ NUMBER .. "%s+over%s+" .. NUMBER .. "%s+sec", "total" },
@@ -102,7 +124,7 @@ local function locale()
 	return "unknown"
 end
 
-local function readTooltip(id, aura)
+local function readTooltip(id, aura, meta)
 	local lang = locale()
 	local why
 	local fn = C_TooltipInfo and C_TooltipInfo.GetUnitAuraByAuraInstanceID
@@ -126,12 +148,16 @@ local function readTooltip(id, aura)
 	end
 	fn = C_Spell and C_Spell.GetSpellDescription
 	if type(fn) == "function" then
-		local ok, text = pcall(fn, id) -- exact active rank ID, never spell name
-		if ok then
-			local parsed, err = estimates.Parse(text, lang)
-			if parsed then return parsed, "spell description" end
-			why = err
-		else why = "spell description read failed" end
+		local ids = { id }
+		if meta and meta.tooltipSpellID and meta.tooltipSpellID ~= id then ids[2] = meta.tooltipSpellID end
+		for _, spellID in ipairs(ids) do
+			local ok, text = pcall(fn, spellID) -- exact rank or explicit verified effect alias
+			if ok then
+				local parsed, err = estimates.Parse(text, lang)
+				if parsed then return parsed, spellID == id and "spell description" or "spell description (effect alias)" end
+				why = err
+			else why = "spell description read failed" end
+		end
 	end
 	return nil, nil, why or "tooltip APIs unavailable; use manual amount"
 end
@@ -139,10 +165,10 @@ end
 function estimates.Fill(data, id, aura)
 	local meta = ns.spells.Meta(id)
 	if not meta then return end
-	local automaticFamily = meta.family == "Rejuvenation" or meta.family == "Regrowth"
+	local automaticFamily = meta.foreverInterval ~= nil
 	if automaticFamily and not data.interval and isForever() then
-		data.interval = 3
-		data.intervalSource = "assumed Forever 3s (approximate)"
+		data.interval = meta.foreverInterval
+		data.intervalSource = "Forever " .. tostring(meta.foreverInterval) .. "s cadence (approximate)"
 	end
 	if not automaticFamily then return end
 	if data.basePerStack and data.interval then return end -- manual/observed wins
@@ -153,13 +179,20 @@ function estimates.Fill(data, id, aura)
 	local expiration = aura and ns.toNumber(aura.expirationTime)
 	local entry = cache[id]
 	if not entry or entry.untilTime <= now or entry.instance ~= instance or entry.expiration ~= expiration then
-		local parsed, source, why = readTooltip(id, aura)
+		local parsed, source, why = readTooltip(id, aura, meta)
 		entry = { parsed = parsed, source = source, why = why, instance = instance,
 			expiration = expiration, untilTime = now + CACHE_SECONDS }
 		cache[id] = entry -- PUBLIC parsed values only; never retain tooltip strings
 	end
 	local parsed = entry.parsed
 	if parsed then
+		if parsed.kind == "ragePercent" then
+			if meta.resourceHealing then
+				data.ragePercent, data.rageCap = parsed.amount, parsed.rageCap
+				data.amountSource = entry.source .. " (current-rage budget; future rage not predicted)"
+			else data.estimateError = "percentage tooltip unsupported for this family" end
+			return
+		end
 		if not data.interval and parsed.kind == "tick" then
 			data.interval, data.intervalSource = parsed.seconds, entry.source
 		elseif parsed.kind == "tick" and not data.manualInterval and not (ns.session.learned[id] or {}).interval then
@@ -174,6 +207,9 @@ function estimates.Fill(data, id, aura)
 			end
 			if amount then
 				data.basePerStack, data.amountSource = amount, entry.source .. " (approximate)"
+				if meta.family == "WildGrowth" and parsed.kind == "total" then
+					data.amountSource = data.amountSource .. "; average tick, taper unmodelled"
+				end
 			end
 		end
 	else

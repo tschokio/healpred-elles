@@ -40,7 +40,7 @@ StatusBar of its own and secure-hooks native callbacks read-only.
 
 The installed folder is the deliverable; there is no separate zip/binary.
 
-### Updating (to v0.3.0)
+### Updating (to v0.3.2)
 
 Replace the `EllesmereUI_HoTPrediction/` folder in your AddOns directory with the
 new one, then `/reload` (or restart). SavedVariables
@@ -81,7 +81,7 @@ Automatic estimation may be unavailable on the supplied modern client. In
 conservative mode, static calibration only works when aura duration/source and native incoming
 figures are readable; it cannot bypass secret-value restrictions.
 
-## Rough prediction on Forever (v0.3.0)
+## Rough prediction on Forever
 
 After installing the updated addon and `/reload`, run:
 
@@ -104,8 +104,10 @@ conservative gates.
   withheld, never interpreted as zero. Regrowth's initial heal is excluded.
 * On Forever, Rejuvenation and Regrowth use an **assumed 3-second cadence** unless
   an observed/manual interval or explicit per-tick tooltip provides another.
-  A total of 48 over 12 seconds therefore estimates four 12-point ticks. Other
-  spell families still need manual/observed interval and amount data.
+  A total of 48 over 12 seconds therefore estimates four 12-point ticks.
+  v0.3.1 also uses a one-second assumption for Forever Wild Growth, explicit
+  tooltip intervals for Tranquility, and per-second rage conversion for Frenzied
+  Regeneration. Manual/observed intervals always take precedence.
 * Tooltip amounts are cached for five seconds and refreshed for new applications,
   gear/spec changes, or reset. Unavailable descriptions retry at that cadence,
   not every paint. Status includes the amount/interval source and parsing errors.
@@ -130,7 +132,73 @@ If parsing fails, use your actual active ID from `/euihot window`. For example,
 The previously reported aura was **1058**, not 774. A manual amount is the final
 per-tick heal and wins over observed/tooltip amounts; recalibrate after upgrades.
 
-This new mode is mock-tested, **not yet verified in the user's live client**.
+The user confirmed v0.3.0's Rejuvenation/Regrowth tooltip prediction working in
+Forever. The higher-level v0.3.1 additions are **mock-tested only**, not live-verified.
+
+### Druid spellbook coverage (v0.3.1)
+
+Reviewed [ForeverChanges' Druid spellbook](https://foreverchanges.pro/de/spellbook/druid)
+and its English counterpart on 2026-10-03, for beta **1.60.1.70205**. That site
+lists base numbers before equipment/talents/level scaling: they are used only as
+test fixtures, **not baked into runtime healing amounts**. Live public tooltip
+values remain authoritative. No website calls or downloaded databases run in game.
+
+| Effect | Coverage | Important limitation |
+| --- | --- | --- |
+| Rejuvenation | All 11 listed ranks: 774 through 25299 | Remaining self-cast ticks; assumed 3s cadence. |
+| Regrowth | All 9 listed ranks: 8936 through 9858 | HoT portion only, not the initial direct heal. |
+| Wild Growth | Forever ranks 408120, 1238214, 1238215 (levels 40/50/60) | Per-player total is divided over assumed 1s ticks; the front-loaded taper is **not modelled**, so the tail may be overestimated. Never multiply by party size. |
+| Tranquility | 740, 8918, 9862, 9863 (levels 30/40/50/60) | Estimates only healing to the player during their own active readable channel; cancellation/end clears it even if an aura lingers. Channel timing must be public. |
+| Frenzied Regeneration | 22842 and candidate effect 22845 | Reads the tooltip's rage conversion. Budgets **only current readable rage**, capped by remaining per-second conversions; no future rage is invented. Rage **and maximum health** must be public, otherwise withheld with a diagnostic. A manual final tick amount is an alternative rough assumption. |
+| Healing Touch / Swiftmend | Left to native direct-heal display | Not additional persistent HoTs. No duplicate instant-heal forecast. |
+| Revive / Rebirth | Excluded | Resurrection is not remaining self-healing. |
+| Innervate, Nature's Swiftness, dispels, buffs, forms, attacks | Excluded | Mana, utility, mitigation, or damage rather than scheduled healing. |
+
+Frenzied Regeneration's listed effect 22845 has no description on the site; when
+the live aura tooltip is unavailable, its metadata explicitly permits the listed
+22842 description as an effect alias. This mapping needs live testing. A secret
+rage/health value is never compared, multiplied, formatted or treated as zero.
+Its tooltip conversion is percentages of maximum health, **not healing power**.
+No old Classic flat 10-health-per-rage formula is used.
+
+The former Retail/general candidates (Lifebloom 33763, Germination 155777,
+Wild Growth 48438) remain manual/observation-only; this site does **not establish
+their availability in Forever**. The newly verified Forever Wild Growth IDs are
+separate. Other players' HoTs and predictions on party frames remain outside scope.
+
+### Priest, Shaman and Paladin review (v0.3.2)
+
+Reviewed the English and German ForeverChanges spellbooks for
+[Priest](https://foreverchanges.pro/de/spellbook/priest),
+[Shaman](https://foreverchanges.pro/de/spellbook/shaman) and
+[Paladin](https://foreverchanges.pro/de/spellbook/paladin), same date/build as above.
+
+* **Priest Renew:** all 10 listed ranks (139, 6074–6078, 10927–10929, 25315).
+  Live tooltip total over 15 seconds, assumed 3-second ticks. Only your own Renew
+  on yourself counts; removed/expired effects disappear normally.
+* **Shaman Riptide:** all 3 Forever ranks (408521, 1239242, 1239243), levels
+  40/50/60. Only the periodic 15-second portion counts, assumed 3-second ticks;
+  the initial direct heal and Chain Heal bonus are excluded.
+* **Paladin:** no scheduled health HoT found in this spellbook. Direct heals,
+  absorb shields, Light's Vigil, Seal/Judgement of Light procs and mana
+  restoration are not added as timed healing.
+
+This is **not complete coverage of every healing effect**. Priest Contingency
+Plan is a conditional ward followed by a separate triggered heal: the ward is
+not counted before activation, and the triggered aura IDs/cadence still need
+verification. Lightwell needs the actual clicked healing aura, its ownership and
+cadence—not the summoned object's three-minute duration. Penance needs verified
+channel recipient tracking (unlike Tranquility, it does not necessarily heal the
+caster). Prayer of Mending is conditional; Devouring Plague/Vampiric Embrace
+depend on damage to enemies and are outside player-aura-only estimation.
+Shaman Healing Stream Totem needs verified totem lifetime/rank/ownership and
+player range tracking; its summon is not treated as a five-minute player HoT.
+None of these deferred effects are automatically registered or predicted.
+
+Renew/Riptide are mock-tested in English and German but **not live-verified**.
+Character-specific public tooltip amounts include displayed bonuses without any
+additional healing-power coefficient calculation. All these integrations still
+require EllesmereUIUnitFrames and `/euihot approximate on` on restricted Forever.
 
 ## Commands
 

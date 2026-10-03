@@ -93,6 +93,51 @@ function api.ReadPlayerAuras()
 	return ns.session.auraCache
 end
 
+-- Tranquility is a channel, not a lasting HoT inferred from a cast event. Query
+-- live channel state each evaluation so cancellation/pushback immediately wins.
+-- Return only public ID/timing; never parse a restricted name or timestamp.
+function api.ReadPlayerChannel()
+	if type(UnitChannelInfo) ~= "function" then return nil end
+	local values = ns.pack(pcall(UnitChannelInfo, "player"))
+	if not values[1] then return nil end
+	local id = ns.toNumber(values[9]) -- eighth API return is spellID
+	local meta = id and ns.spells.Meta(id)
+	if not meta or not meta.channel then return nil end
+	local start = ns.toNumber(values[5]) -- start/end milliseconds
+	local finish = ns.toNumber(values[6])
+	if not start or not finish or finish <= start or finish / 1000 <= ns.now() then return nil end
+	return { spellID = id, sourceUnit = "player", duration = (finish - start) / 1000,
+		expirationTime = finish / 1000, channel = true }
+end
+
+function api.ReadPredictionAuras()
+	local cached = api.ReadPlayerAuras()
+	local out = {}
+	for _, aura in ipairs(cached) do
+		local meta = ns.spells.Meta(aura.spellID)
+		-- Never duplicate Tranquility's channel as an aura, nor let an aura survive
+		-- its interrupted channel. Other self/foreign records retain normal gates.
+		if not (meta and meta.channel) then out[#out + 1] = aura end
+	end
+	local channel = api.ReadPlayerChannel()
+	if channel then out[#out + 1] = channel end
+	return out
+end
+
+function api.GetRageHealingBudget()
+	if type(UnitPower) ~= "function" or type(UnitHealthMax) ~= "function" then
+		return nil, "rage or maximum-health API unavailable"
+	end
+	local ok, raw = pcall(UnitPower, "player", (Enum and Enum.PowerType and Enum.PowerType.Rage) or 1)
+	local rage = ok and ns.toNumber(raw)
+	ok, raw = pcall(UnitHealthMax, "player")
+	local max = ok and ns.toNumber(raw)
+	if not rage or rage < 0 or not max or max <= 0 then
+		return nil, "rage or maximum health restricted/unavailable; use manual per-tick amount"
+	end
+	return { rage = rage, max = max }
+end
+
 -- Returns every parsable aura record; strict ownership is enforced by the
 -- consumers (Model/Learner/status) so unknown or foreign casters can be
 -- reported as reasons rather than silently dropped.

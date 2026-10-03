@@ -76,6 +76,18 @@ function model.ComputeAuraEstimate(aura, meta, data, now, eps)
 	if count == 0 then
 		return { ticks = 0, amount = 0, perTick = 0, stacks = 1, approximate = meta and meta.approximate or false }
 	end
+	if meta and meta.resourceHealing and data.ragePercent and not data.manualAmount then
+		local budget, why = ns.api.GetRageHealingBudget()
+		if not budget then return nil, why end
+		local rage = math.min(budget.rage, count * data.rageCap)
+		local perPoint = budget.max * data.ragePercent / 100
+		local amount = rage * perPoint
+		if not ns.isFinite(amount) or amount > ns.AMOUNT_OVERRIDE_MAX then
+			return nil, "rage healing estimate outside safety bound"
+		end
+		return { ticks = count, amount = amount,
+			perTick = math.min(budget.rage, data.rageCap) * perPoint, stacks = 1, approximate = true }
+	end
 
 	if meta and meta.stacksMatter then
 		local stacks = model.EffectiveStacks(aura, meta)
@@ -102,9 +114,10 @@ end
 -- casters are recorded as reasons and never counted.
 function model.CollectPlayerHoTs(now)
 	local out = { total = nil, details = {}, reasons = {} }
-	local auras = (ns.api and ns.api.ReadPlayerAuras and ns.api.ReadPlayerAuras()) or {}
+	local auras = (ns.api and ns.api.ReadPredictionAuras and ns.api.ReadPredictionAuras()) or {}
 	local sum = 0
 	local any = false
+	local resourceFamilies = {}
 	for i = 1, #auras do
 		local aura = auras[i]
 		local meta = ns.spells.Meta(aura.spellID)
@@ -112,13 +125,16 @@ function model.CollectPlayerHoTs(now)
 			if aura.sourceUnit ~= "player" then
 				out.reasons[#out.reasons + 1] = string.format("%s: %s caster",
 					tostring(aura.spellID), aura.sourceUnit and tostring(aura.sourceUnit) or "unknown")
-			else
+			elseif not (meta.resourceHealing and resourceFamilies[meta.family]) then
 				local data = ns.learner.GetSpellData(aura.spellID, aura)
 				if data.nextEstimateRetry then
 					out.nextEstimateRetry = math.min(out.nextEstimateRetry or data.nextEstimateRetry, data.nextEstimateRetry)
 				end
 				local res, err = model.ComputeAuraEstimate(aura, meta, data, now)
 				if res then
+					-- Frenzied Regeneration's cast/effect aliases describe the same
+					-- rage budget; never spend it twice if both appear as active auras.
+					if meta.resourceHealing then resourceFamilies[meta.family] = true end
 					if res.amount > 0 then
 						sum = sum + res.amount
 						any = true

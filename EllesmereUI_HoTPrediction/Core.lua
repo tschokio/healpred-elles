@@ -6,7 +6,7 @@
 local addonName, ns = ...
 
 ns.name = addonName
-ns.version = "0.3.0"
+ns.version = "0.3.2"
 ns.debugEnabled = false
 ns.inCombat = false
 ns.started = false
@@ -359,6 +359,8 @@ local RUNTIME_EVENTS = {
 	"UNIT_AURA", "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_HEAL_PREDICTION",
 	"UNIT_HEAL_ABSORB_AMOUNT_CHANGED", "PLAYER_EQUIPMENT_CHANGED",
 	"ACTIVE_TALENT_GROUP_CHANGED", "SPELLS_CHANGED",
+	"UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_UPDATE", "UNIT_SPELLCAST_CHANNEL_STOP",
+	"UNIT_SPELLCAST_INTERRUPTED", "UNIT_POWER_UPDATE",
 }
 
 -- Disabling stops the timer and unregisters gameplay events. Secure hooks cannot
@@ -466,6 +468,13 @@ ns.on("UNIT_HEALTH", function(_, unit) requestPaintForUnit(unit) end)
 ns.on("UNIT_MAXHEALTH", function(_, unit) requestPaintForUnit(unit) end)
 ns.on("UNIT_HEAL_PREDICTION", function(_, unit) requestPaintForUnit(unit) end)
 ns.on("UNIT_HEAL_ABSORB_AMOUNT_CHANGED", function(_, unit) requestPaintForUnit(unit) end)
+for _, event in ipairs({ "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_UPDATE",
+	"UNIT_SPELLCAST_CHANNEL_STOP", "UNIT_SPELLCAST_INTERRUPTED" }) do
+	ns.on(event, function(_, unit) requestPaintForUnit(unit) end)
+end
+ns.on("UNIT_POWER_UPDATE", function(_, unit, powerType)
+	if powerType == "RAGE" then requestPaintForUnit(unit) end
+end)
 
 ------------------------------------------------------------------------------
 -- slash commands
@@ -888,7 +897,7 @@ function ns._BuildStatusReport(includeDebug)
 
 	-- active HoTs, each with spell/rank, expiry, stacks, learned amount/interval,
 	-- remaining ticks, and the total/visible prediction.
-	local auras = (ns.api and ns.api.ReadPlayerAuras and ns.api.ReadPlayerAuras()) or {}
+	local auras = (ns.api and ns.api.ReadPredictionAuras and ns.api.ReadPredictionAuras()) or {}
 	local tracked = 0
 	local now = ns.now()
 	local okHot, hotErr = pcall(function()
@@ -913,6 +922,7 @@ function ns._BuildStatusReport(includeDebug)
 				if data.amountSource then tag = tag .. " amountSource=" .. data.amountSource end
 				if data.intervalSource then tag = tag .. " intervalSource=" .. data.intervalSource end
 				if data.estimateError then tag = tag .. " tooltip=" .. data.estimateError end
+				if data.ragePercent then tag = tag .. " rage conversion=" .. tostring(data.ragePercent) .. "% per point (resource-gated)" end
 				add("  hot %s [%s] stacks=%s exp=%s dur=%s interval=%s ticksLeft=%s amount=%s%s",
 					tostring(aura.spellID), tostring(meta.name or meta.family), tostring(aura.stacks),
 					tostring(ns.round(aura.expirationTime, 1)), tostring(ns.round(aura.duration, 1)),
