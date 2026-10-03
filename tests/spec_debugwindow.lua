@@ -254,6 +254,35 @@ T.register("debugwindow: adds no ticker/event/OnUpdate and touches no native fra
 	assert_eq(_G.EllesmereUI._ModuleNS.EllesmereUIUnitFrames, moduleBefore, "module table untouched")
 end)
 
+T.register("debugwindow: button callbacks are wired (Refresh/Select All/Close)", function()
+	local env = newEnv()
+	local ns = env.ns
+	ns.OpenDebugWindow()
+	local f = ns.debugWindow
+	local function findButton(label)
+		for i = 1, #Mocks.frames do
+			local fr = Mocks.frames[i]
+			if fr._parent == f and fr._text == label then return fr end
+		end
+		return nil
+	end
+	local refresh = findButton("Refresh")
+	local selectAll = findButton("Select All")
+	local close = findButton("Close")
+	assert_not_nil(refresh, "Refresh button exists")
+	assert_not_nil(selectAll, "Select All button exists")
+	assert_not_nil(close, "Close button exists")
+
+	f.editBox:SetText("old text")
+	refresh:GetScript("OnClick")()
+	assert_true(f.editBox:GetText():match("teststatus unit=") ~= nil, "Refresh callback rebuilt the report")
+	selectAll:GetScript("OnClick")()
+	assert_true(f.editBox:HasFocus(), "Select All callback focuses")
+	assert_eq(#f.editBox:GetSelectedText(), #f.editBox:GetText(), "Select All callback selects the report")
+	close:GetScript("OnClick")()
+	assert_false(f:IsShown(), "Close callback hides the window")
+end)
+
 T.register("debugwindow: /window and /debug window open it; /debug on still toggles", function()
 	local env = newEnv()
 	local ns = env.ns
