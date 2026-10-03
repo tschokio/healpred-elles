@@ -78,14 +78,49 @@ local function newFrame(frameType, name, parent)
 		_color = { 1, 1, 1 }, _alpha = 1,
 		_level = 1, _strata = "MEDIUM",
 		_scripts = {}, _events = {}, _children = {},
+		_text = "", _selStart = 0, _selEnd = 0, _focus = false,
 		_seq = frameSeq,
 	}, FrameMT)
 	f._sbTexture = newTexture(f)
 	if parent and parent._children then
 		parent._children[#parent._children + 1] = f
 	end
+	-- Named frames are global in the real client; mirror that so tests can assert
+	-- one reusable frame and so named globals can be cleaned up between envs.
+	if name then
+		_G[name] = f
+		if Mocks.namedGlobals then Mocks.namedGlobals[name] = f end
+	end
 	Mocks.frames[#Mocks.frames + 1] = f
 	return f
+end
+
+-- A minimal FontString: enough to record what the window sets and to read it
+-- back in tests. Widgets in the real client also expose these methods.
+local function newFontString(owner)
+	return {
+		_owner = owner,
+		_text = "",
+		_points = {},
+		SetText = function(self, t) self._text = tostring(t or "") end,
+		GetText = function(self) return self._text end,
+		SetFont = function(self, ...) self._font = { ... } end,
+		GetFont = function(self) return self._font and unpack(self._font) end,
+		SetTextColor = function(self, r, g, b, a) self._color = { r, g, b, a } end,
+		GetTextColor = function(self)
+			local c = self._color or { 1, 1, 1, 1 }
+			return c[1], c[2], c[3], c[4]
+		end,
+		SetJustifyH = function(self, j) self._justifyH = j end,
+		SetJustifyV = function(self, j) self._justifyV = j end,
+		SetWordWrap = function(self, w) self._wordWrap = w end,
+		SetPoint = function(self, ...) self._points[#self._points + 1] = { ... } end,
+		ClearAllPoints = function(self) self._points = {} end,
+		SetWidth = function(self, w) self._width = w end,
+		GetWidth = function(self) return self._width end,
+		SetSize = function(self, w, h) self._width, self._height = w, h end,
+		GetStringWidth = function(self) return #self._text * 6 end,
+	}
 end
 
 function FrameMT:SetPoint(...)
@@ -110,8 +145,15 @@ function FrameMT:SetHeight(h) self._height = h end
 function FrameMT:GetWidth() return self._width end
 function FrameMT:GetHeight() return self._height end
 function FrameMT:Show() self._shown = true end
-function FrameMT:Hide() self._shown = false end
-function FrameMT:SetShown(v) self._shown = v and true or false end
+-- Hiding fires OnHide (like the client) so an OnHide-based cleanup is exercised.
+function FrameMT:Hide()
+	local was = self._shown
+	self._shown = false
+	if was and self._scripts["OnHide"] then pcall(self._scripts["OnHide"], self) end
+end
+function FrameMT:SetShown(v)
+	if v then self:Show() else self:Hide() end
+end
 function FrameMT:IsShown() return self._shown end
 function FrameMT:GetParent() return self._parent end
 function FrameMT:SetParent(p) self._parent = p end
@@ -165,17 +207,92 @@ function FrameMT:HookScript(name, fn)
 	self._scripts[name] = function(...) if orig then orig(...) end return fn(...) end
 end
 
+-- Layout / behaviour toggles used by the debug window (real frame methods).
+function FrameMT:EnableMouse(v) self._mouseEnabled = v and true or false end
+function FrameMT:SetMovable(v) self._movable = v and true or false end
+function FrameMT:IsMovable() return self._movable and true or false end
+function FrameMT:SetClampedToScreen(v) self._clamped = v and true or false end
+function FrameMT:IsClampedToScreen() return self._clamped and true or false end
+function FrameMT:SetToplevel(v) self._toplevel = v and true or false end
+function FrameMT:StartMoving() self._moving = true end
+function FrameMT:StopMovingOrSizing() self._moving = false end
+
+-- FontString creation (enough for title/instruction labels).
+function FrameMT:CreateFontString(name, layer, template) return newFontString(self) end
+
+-- Text on buttons/frames.
+function FrameMT:SetText(t) self._text = tostring(t or "") end
+function FrameMT:GetText() return self._text end
+
+-- EditBox + ScrollFrame surface. Real clients expose these on the widgets; a
+-- user "typing" is modelled by SetText/Insert firing OnTextChanged.
+function FrameMT:SetMultiLine(v) self._multiLine = v and true or false end
+function FrameMT:IsMultiLine() return self._multiLine and true or false end
+function FrameMT:SetAutoFocus(v) self._autoFocus = v and true or false end
+function FrameMT:SetFont(path, size, flags) self._font = { path, size, flags } end
+function FrameMT:GetFont() return self._font and unpack(self._font) end
+function FrameMT:SetTextInsets(l, r, t, b) self._insets = { l, r, t, b } end
+function FrameMT:SetJustifyH(j) self._justifyH = j end
+function FrameMT:SetJustifyV(j) self._justifyV = j end
+function FrameMT:HighlightText()
+	self._selStart, self._selEnd = 0, #(self._text or "")
+	self:SetFocus()
+end
+function FrameMT:SetFocus()
+	if Mocks.focused and Mocks.focused ~= self then Mocks.focused._focus = false end
+	self._focus = true
+	Mocks.focused = self
+end
+function FrameMT:ClearFocus()
+	self._focus = false
+	if Mocks.focused == self then Mocks.focused = nil end
+end
+function FrameMT:HasFocus() return self._focus and true or false end
+function FrameMT:SetCursorPosition(p)
+	self._selStart = p or 0
+	self._selEnd = self._selStart
+end
+function FrameMT:GetCursorPosition() return self._selStart or 0, self._selEnd or 0 end
+function FrameMT:GetSelectedText()
+	local s, e = self._selStart or 0, self._selEnd or 0
+	if e > s then return (self._text or ""):sub(s + 1, e) end
+	return ""
+end
+function FrameMT:Insert(t)
+	self._text = (self._text or "") .. tostring(t or "")
+	local cb = self._scripts["OnTextChanged"]
+	if cb then cb(self, false) end
+end
+function FrameMT:SetScrollChild(c) self._scrollChild = c end
+function FrameMT:GetScrollChild() return self._scrollChild end
+function FrameMT:SetVerticalScroll(v) self._vscroll = v end
+function FrameMT:GetVerticalScroll() return self._vscroll or 0 end
+function FrameMT:SetHorizontalScroll(v) self._hscroll = v end
+function FrameMT:GetHorizontalScroll() return self._hscroll or 0 end
+function FrameMT:SetTextColor(r, g, b, a) self._textColor = { r, g, b, a } end
+function FrameMT:GetTextColor()
+	local c = self._textColor or { 1, 1, 1, 1 }
+	return c[1], c[2], c[3], c[4]
+end
+
 ------------------------------------------------------------------------------
 -- global mock environment
 ------------------------------------------------------------------------------
 
 function Mocks.Reset()
+	-- Clean up named frames from the previous environment so a named-global test
+	-- (the debug window) cannot leak a stale frame into the next one.
+	if Mocks.namedGlobals then
+		for name in pairs(Mocks.namedGlobals) do _G[name] = nil end
+	end
+	Mocks.namedGlobals = {}
 	Mocks.frames = {}
 	Mocks.chat = {}
 	Mocks.hooks = {}
 	Mocks.tickers = {}
 	Mocks.registrationAttempts = {}
 	Mocks._ns = nil
+	Mocks.focused = nil
 	Mocks.now = 100
 	Mocks.playerGUID = "Player-0001"
 	Mocks.health = 5000
@@ -194,6 +311,10 @@ function Mocks.Reset()
 	_G.UIParent = newFrame("Frame", "UIParent", nil)
 	_G.DEFAULT_CHAT_FRAME = { AddMessage = function(_, msg) Mocks.chat[#Mocks.chat + 1] = msg end }
 	_G.SlashCmdList = {}
+	-- Escape-to-close registry consumed by the client's FrameXML; the debug
+	-- window appends its one named frame here. Reset per environment.
+	_G.UISpecialFrames = {}
+	_G.STANDARD_TEXT_FONT = "Fonts\\FRIZQT__.TTF"
 
 	_G.CreateFrame = function(t, n, p) return newFrame(t, n, p) end
 	_G.GetTime = function() return Mocks.now end

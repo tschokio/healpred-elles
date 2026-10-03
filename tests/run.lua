@@ -38,6 +38,7 @@ loadRel("tests/harness.lua")
 loadRel("tests/wowenv.lua")
 loadRel("tests/spec_model.lua")
 loadRel("tests/spec_integration.lua")
+loadRel("tests/spec_debugwindow.lua")
 
 T.run()
 _G.__HOT_EXIT = (T.fail == 0) and 0 or 1
