@@ -6,7 +6,7 @@
 local addonName, ns = ...
 
 ns.name = addonName
-ns.version = "0.4.0"
+ns.version = "0.5.0"
 ns.debugEnabled = false
 ns.inCombat = false
 ns.started = false
@@ -159,6 +159,8 @@ ns.DEFAULTS = {
 	approximatePrediction = false, -- opt-in: public tooltip/manual estimate, ignores heal absorbs
 	minimapHidden = false,
 	minimapAngle = 225,
+	queuedSwingEnabled = true,
+	queuedSwingColor = { 0.0, 1.0, 1.0 }, -- distinct opaque next-swing border
 	intervalOverrides = {},        -- [spellID] = seconds (user calibration only)
 	amountOverrides = {},          -- [spellID] = { [stacks] = exact tick total } (user calibration only)
 	extraSpells = {},              -- [spellID] = { name =, family = }
@@ -363,6 +365,11 @@ local RUNTIME_EVENTS = {
 	"ACTIVE_TALENT_GROUP_CHANGED", "SPELLS_CHANGED",
 	"UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_UPDATE", "UNIT_SPELLCAST_CHANNEL_STOP",
 	"UNIT_SPELLCAST_INTERRUPTED", "UNIT_POWER_UPDATE",
+	"UPDATE_SHAPESHIFT_FORM", "UNIT_DISPLAYPOWER",
+	"ACTIONBAR_UPDATE_STATE", "ACTIONBAR_SLOT_CHANGED", "ACTIONBAR_PAGE_CHANGED",
+	"UPDATE_BONUS_ACTIONBAR", "UPDATE_OVERRIDE_ACTIONBAR", "UPDATE_VEHICLE_ACTIONBAR",
+	"UPDATE_MACROS", "PLAYER_TARGET_CHANGED", "UNIT_SPELLCAST_SUCCEEDED",
+	"UNIT_SPELLCAST_FAILED", "PLAYER_DEAD", "PLAYER_ALIVE",
 }
 
 -- Disabling stops the timer and unregisters gameplay events. Secure hooks cannot
@@ -385,6 +392,7 @@ function ns.SetRuntimeEnabled(enabled)
 		ns.SetupCLEU(false)
 	end
 	if ns.overlay and ns.overlay.SetEnabled then ns.overlay.SetEnabled(enabled) end
+	if ns.queuedSwing then ns.queuedSwing.SetEnabled() end
 end
 
 -- Called once after the matching ADDON_LOADED. Attempts a real init and, only
@@ -479,6 +487,16 @@ ns.on("UNIT_POWER_UPDATE", function(_, unit, powerType)
 	if powerType == "RAGE" then requestPaintForUnit(unit) end
 end)
 
+-- Form changes can alter maximum health and the native bar layout, and aura /
+-- spell data may settle slightly after the first notification. Do not reset
+-- learned tick phase or manual calibration just because the player changes form.
+ns.on("UPDATE_SHAPESHIFT_FORM", function()
+	if ns.overlay then ns.overlay.RequestFormRefresh() end
+end)
+ns.on("UNIT_DISPLAYPOWER", function(_, unit)
+	if unit == "player" and ns.overlay then ns.overlay.RequestFormRefresh() end
+end)
+
 ------------------------------------------------------------------------------
 -- slash commands
 ------------------------------------------------------------------------------
@@ -503,6 +521,27 @@ function ns.HandleCommand(input)
 	if cmd == "help" or cmd == "" then
 		ns.print(HELP)
 		ns.print("settings: /euihot options (or menu) | /euihot minimap on|off; minimap left-click settings, right-click diagnostics, drag to move.")
+		ns.print("next-swing borders: /euihot queue on|off | queue color <r> <g> <b> | queue status")
+		return
+	elseif cmd == "queue" then
+		local op = (args[1] or "status"):lower()
+		if op == "on" or op == "off" then
+			ns.db.queuedSwingEnabled = op == "on"
+			if ns.queuedSwing then ns.queuedSwing.SetEnabled() end
+		elseif op == "color" then
+			local r, g, b = tonumber(args[2]), tonumber(args[3]), tonumber(args[4])
+			if not ns.isFinite(r) or not ns.isFinite(g) or not ns.isFinite(b) or r > 1 or g > 1 or b > 1 then
+				ns.print("usage: /euihot queue color <r> <g> <b> (0..1)"); return
+			end
+			ns.db.queuedSwingColor = { r, g, b }
+			if ns.queuedSwing then ns.queuedSwing.Refresh() end
+		elseif op ~= "status" then
+			ns.print("usage: /euihot queue on|off | queue color <r> <g> <b> | queue status"); return
+		end
+		local s = ns.queuedSwing
+		ns.print(string.format("next-swing enabled=%s buttons=%d highlighted=%d state=%s",
+			tostring(ns.db.queuedSwingEnabled), s and #s.candidates or 0, s and s.active or 0,
+			s and s.reason or "module unavailable"))
 		return
 	elseif cmd == "test" then
 		if args[1] and args[1]:lower() == "off" then
@@ -852,6 +891,11 @@ function ns._BuildStatusReport(includeDebug)
 		tostring(ns.version), tostring(ns.db.enabled), tostring(ns.db.debug), tostring(ns.db.amountMode),
 		tostring(ns.db.assumeApiExcludesHoTs), tostring(ns.db.shareNativeStyle), ns.db.alpha or 0)
 	add("approximate prediction=%s", tostring(ns.db.approximatePrediction))
+	local swing = ns.queuedSwing
+	if swing then
+		add("next-swing enabled=%s candidates=%d highlighted=%d state=%s",
+			tostring(ns.db.queuedSwingEnabled), #swing.candidates, swing.active, swing.reason)
+	end
 	if ns.db.approximatePrediction then
 		add("ROUGH ESTIMATE: healing absorbs ignored; restricted native overlap unverified; tooltip bonuses/tick phase may differ from actual healing.")
 	end

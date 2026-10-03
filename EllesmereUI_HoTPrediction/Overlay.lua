@@ -76,6 +76,16 @@ function overlay.RequestStyle()
 	overlay.state.paintRequested = true
 end
 
+function overlay.RequestFormRefresh()
+	if not ns.db or not ns.db.enabled then return end
+	ns.api.InvalidateAuraCache()
+	overlay.InvalidateStructure()
+	-- Coalesce the two form notifications. No additional timer is created:
+	-- the existing ticker performs two bounded retries, then returns to idle.
+	overlay.state.nextFormRefresh = ns.now() + 0.25
+	overlay.state.finalFormRefresh = ns.now() + 0.75
+end
+
 ------------------------------------------------------------------------------
 -- frame lifecycle
 ------------------------------------------------------------------------------
@@ -640,7 +650,15 @@ function overlay.Tick(force)
 		return
 	end
 	overlay.state.counts.ticks = overlay.state.counts.ticks + 1
+	if ns.queuedSwing then ns.queuedSwing.Tick() end
 	local now = ns.now()
+	local formRefresh = overlay.state.nextFormRefresh and now >= overlay.state.nextFormRefresh
+	if formRefresh then
+		ns.api.InvalidateAuraCache()
+		overlay.InvalidateStructure()
+		overlay.state.nextFormRefresh = overlay.state.finalFormRefresh
+		overlay.state.finalFormRefresh = nil
+	end
 
 	-- Cheap identity probe; if the vendor structure changed, resolve (deferred
 	-- in combat) rather than painting stale handles.
@@ -654,7 +672,7 @@ function overlay.Tick(force)
 		or (overlay.state.active and fake == nil)
 		or (fake == nil and overlay.state.nextEstimateRetry and now >= overlay.state.nextEstimateRetry)
 	-- Missing native frames must not retry full attachment every 150ms forever.
-	if not overlay.state.ab and not force and not probe then return end
+	if not overlay.state.ab and not force and not probe and not formRefresh then return end
 
 	if not needPaint then
 		-- Idle: throttle. A ~1s cheap probe keeps attachment current without a
@@ -745,6 +763,8 @@ function overlay.SetEnabled(enabled)
 		if overlay.state.timerFrame then overlay.state.timerFrame:SetScript("OnUpdate", nil) end
 		overlay.state.active = false
 		overlay.state.nextEstimateRetry = nil
+		overlay.state.nextFormRefresh = nil
+		overlay.state.finalFormRefresh = nil
 		overlay.state.paintRequested = false
 		overlay.Hide("addon disabled")
 		return

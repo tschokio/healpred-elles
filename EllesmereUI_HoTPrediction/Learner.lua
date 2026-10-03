@@ -63,6 +63,7 @@ function learner.ResetAmounts()
 		d.baseCount = 0
 	end
 	if ns.api and ns.api.InvalidateAuraCache then ns.api.InvalidateAuraCache() end
+	if ns.overlay then ns.overlay.RequestPaint() end
 end
 
 -- Robust interval from a bounded recent window: most common 0.1s bucket,

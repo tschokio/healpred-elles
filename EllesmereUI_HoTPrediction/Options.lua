@@ -115,7 +115,7 @@ local function ensureWindow()
 	if not CreateFrame then return nil end
 	local f = CreateFrame("Frame", WINDOW, UIParent, "BackdropTemplate")
 	ns.optionsWindow = f
-	f:SetSize(540, 570)
+	f:SetSize(540, 610)
 	f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
 	f:SetFrameStrata("DIALOG")
 	f:SetClampedToScreen(true)
@@ -145,7 +145,7 @@ local function ensureWindow()
 		c.read = read
 		f.controls[key] = c
 	end
-	check("enabled", "Enable healing overlay", -62, function() return ns.db.enabled end,
+	check("enabled", "Enable helper (healing overlay and next-swing borders)", -62, function() return ns.db.enabled end,
 		function(v) command("enable " .. (v and "on" or "off")) end)
 	check("approximate", "Approximate tooltip prediction (needed on restricted Forever)", -92,
 		function() return ns.db.approximatePrediction end, function(v) command("approximate " .. (v and "on" or "off")) end)
@@ -206,7 +206,9 @@ local function ensureWindow()
 	button("diagnostics", "Copy diagnostics", 340, -435, 175, function() ns.OpenDebugWindow() end)
 	local status = label(f, "", 24, -470)
 	label(f, "Preview is session-only; Stop preview to display real healing again.\nManual rank/tick calibration: /euihot help. Changes save immediately.", 24, -495)
-	button("close", "Close", 420, -532, 95, function() f:Hide() end)
+	check("queue", "Highlight genuinely queued Maul / Heroic Strike / Cleave", -532,
+		function() return ns.db.queuedSwingEnabled end, function(v) command("queue " .. (v and "on" or "off")) end)
+	button("close", "Close", 420, -572, 95, function() f:Hide() end)
 	f.Refresh = function()
 		refreshing = true
 		for _, c in pairs(f.controls) do if c.read then c:SetChecked(c.read()) end end

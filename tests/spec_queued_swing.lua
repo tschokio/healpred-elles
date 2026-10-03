@@ -1,0 +1,216 @@
+local function env(opts)
+	local e = Mocks.NewEnv(opts)
+	local actions, current, macroSpells, currentSpells = {}, {}, {}, {}
+	_G.C_ActionBar, _G.C_Spell = nil, nil
+	_G.GetActionInfo = function(slot)
+		local a = actions[slot]
+		if a then return a[1], a[2] end
+	end
+	_G.IsCurrentAction = function(slot) return current[slot] == true end
+	_G.IsCurrentSpell = function(id) return currentSpells[id] == true end
+	_G.GetMacroSpell = function(id) return macroSpells[id] end
+	local function button(index, slot, id, kind)
+		local b = CreateFrame("CheckButton", "EABButton" .. index, UIParent)
+		b:SetAttribute("action", slot)
+		actions[slot] = { kind or "spell", id }
+		return b
+	end
+	e.actions, e.current, e.macroSpells, e.currentSpells, e.button = actions, current, macroSpells, currentSpells, button
+	e.swing = e.ns.queuedSwing
+	return e
+end
+local function border(e, b) return e.swing.buttons[b].border end
+local function poll(e)
+	local script = e.swing.driver:GetScript("OnUpdate")
+	if script then script(e.swing.driver, 0.05) end
+end
+
+T.register("queue: cast attempts and failed resource/range checks never light buttons", function()
+	local e = env({ noCLEU = true })
+	local b = e.button(1, 1, 6807)
+	e.swing.Scan()
+	Mocks.Fire("UNIT_SPELLCAST_SENT", "player", "target", "cast", 6807)
+	Mocks.Fire("UNIT_SPELLCAST_FAILED", "player", "cast", 6807)
+	poll(e)
+	assert_false(border(e, b):IsShown())
+	assert_eq(e.swing.active, 0)
+	e.current[1] = true
+	Mocks.Fire("ACTIONBAR_UPDATE_STATE")
+	assert_true(border(e, b):IsShown(), "real state paints during event, not next timer")
+	assert_eq(border(e, b)._borderColor[4], 1)
+	assert_nil(b:GetScript("OnClick"), "no vendor button hooks or click changes")
+end)
+
+T.register("queue: execution cancellation and invalidation clear state without a combat log", function()
+	local e = env({ noCLEU = true })
+	local b = e.button(1, 1, 78)
+	e.current[1] = true
+	e.swing.Scan()
+	e.current[1] = false
+	Mocks.Fire("UNIT_SPELLCAST_SUCCEEDED", "player", "cast", 78)
+	assert_false(border(e, b):IsShown())
+	e.current[1] = true; Mocks.Fire("ACTIONBAR_UPDATE_STATE")
+	e.current[1] = false; Mocks.Fire("ACTIONBAR_UPDATE_STATE")
+	assert_false(border(e, b):IsShown())
+	e.current[1] = true; Mocks.Fire("ACTIONBAR_UPDATE_STATE")
+	e.current[1] = false -- no event: safety poll must still clear it
+	poll(e)
+	assert_false(border(e, b):IsShown())
+end)
+
+T.register("queue: ranks duplicates and replacing Heroic Strike with Cleave", function()
+	local e = env()
+	local hs = e.button(1, 1, 11567)
+	local duplicate = e.button(2, 2, 11567)
+	local cleave = e.button(3, 3, 20569)
+	e.current[1], e.current[2] = true, true
+	e.swing.Scan()
+	assert_true(border(e, hs):IsShown()); assert_true(border(e, duplicate):IsShown())
+	assert_false(border(e, cleave):IsShown())
+	e.current[1], e.current[2], e.current[3] = false, false, true
+	Mocks.Fire("ACTIONBAR_UPDATE_STATE")
+	assert_false(border(e, hs):IsShown()); assert_false(border(e, duplicate):IsShown())
+	assert_true(border(e, cleave):IsShown())
+end)
+
+T.register("queue: auto attack autorepeat and unrelated spells are excluded", function()
+	local e = env()
+	local attack = e.button(1, 1, 6603)
+	local hot = e.button(2, 2, 774)
+	e.current[1], e.current[2] = true, true
+	e.swing.Scan()
+	assert_eq(#e.swing.candidates, 0)
+	assert_false(border(e, attack):IsShown()); assert_false(border(e, hot):IsShown())
+end)
+
+T.register("queue: action slot is live attribute not original name or protected action mirror", function()
+	local e = env()
+	local b = e.button(1, 73, 6807)
+	b.action = Mocks.MakeSecret()
+	e.current[73] = true
+	e.swing.Scan()
+	assert_true(border(e, b):IsShown())
+	e.actions[85] = { "spell", 774 }; e.current[85] = true
+	b:SetAttribute("action", 85)
+	poll(e)
+	assert_false(border(e, b):IsShown(), "paging without an event cannot retain previous glow")
+	e.actions[85] = { "spell", 9881 }
+	Mocks.Fire("UPDATE_SHAPESHIFT_FORM")
+	assert_true(border(e, b):IsShown())
+end)
+
+T.register("queue: effective macro spell uses real spell state not macro press or tooltip", function()
+	local e = env()
+	local b = e.button(1, 1, 7, "macro")
+	e.macroSpells[7] = 6807
+	e.current[1] = true -- a current macro slot alone is not queue evidence
+	e.swing.Scan()
+	assert_false(border(e, b):IsShown())
+	e.currentSpells[6807] = true
+	Mocks.Fire("ACTIONBAR_UPDATE_STATE")
+	assert_true(border(e, b):IsShown())
+	e.macroSpells[7] = 774
+	poll(e)
+	assert_false(border(e, b):IsShown())
+	e.macroSpells[7] = nil
+	Mocks.Fire("UPDATE_MACROS")
+	assert_eq(#e.swing.candidates, 0)
+end)
+
+T.register("queue: missing erroring and secret state fail closed; false stays authoritative", function()
+	local e = env()
+	local b = e.button(1, 1, 78)
+	e.current[1] = true; e.swing.Scan()
+	_G.IsCurrentAction = function() return Mocks.MakeSecret() end
+	poll(e)
+	assert_false(border(e, b):IsShown())
+	assert_eq(e.swing.reason, "queue API unavailable/restricted")
+	_G.IsCurrentAction = function() error("unavailable") end
+	poll(e); assert_false(border(e, b):IsShown())
+	_G.IsCurrentAction = nil; _G.IsCurrentSpell = nil
+	poll(e); assert_false(border(e, b):IsShown())
+	_G.IsCurrentSpell = function() return true end
+	poll(e); assert_true(border(e, b):IsShown(), "public spell fallback")
+	_G.IsCurrentAction = function() return false end
+	poll(e); assert_false(border(e, b):IsShown(), "never override false with fallback")
+	b:SetAttribute("action", Mocks.MakeSecret())
+	poll(e); assert_false(border(e, b):IsShown())
+end)
+
+T.register("queue: modern namespaced adapters and legacy numeric flags", function()
+	local e = env()
+	local b = e.button(1, 1, 845)
+	_G.C_ActionBar = { GetActionInfo = function() return "spell", 845 end,
+		IsCurrentAction = function() return 1 end }
+	_G.GetActionInfo = nil; _G.IsCurrentAction = nil
+	e.swing.Scan(); assert_true(border(e, b):IsShown())
+	_G.C_ActionBar.IsCurrentAction = function() return 0 end
+	poll(e); assert_false(border(e, b):IsShown())
+	_G.C_ActionBar = nil
+end)
+
+T.register("queue: combat only updates prepared own borders; late creation waits for regen", function()
+	local e = env()
+	local b = e.button(1, 1, 6807)
+	e.swing.Scan()
+	local old = border(e, b)
+	Mocks.inCombat = true
+	e.current[1] = true; Mocks.Fire("ACTIONBAR_UPDATE_STATE")
+	assert_eq(border(e, b), old); assert_true(old:IsShown())
+	local late = e.button(2, 2, 845)
+	e.current[2] = true
+	e.swing.Scan()
+	assert_nil(border(e, late))
+	Mocks.inCombat = false; Mocks.Fire("PLAYER_REGEN_ENABLED")
+	assert_true(border(e, late):IsShown())
+	_G.EABButton1 = nil
+	e.swing.Scan()
+	assert_false(old:IsShown(), "replaced or removed frames hide old owned borders")
+end)
+
+T.register("queue: settings persisted independently; disabling stops poll and hides immediately", function()
+	local e = env()
+	local b = e.button(1, 1, 6807)
+	e.current[1] = true; e.swing.Scan()
+	e.ns.HandleCommand("queue color 1 0.3 0")
+	assert_eq(border(e, b)._borderColor[2], 0.3)
+	e.ns.HandleCommand("queue color 2 0 0")
+	assert_eq(e.ns.db.queuedSwingColor[2], 0.3)
+	e.ns.HandleCommand("queue off")
+	assert_false(border(e, b):IsShown()); assert_nil(e.swing.driver:GetScript("OnUpdate"))
+	e.ns.HandleCommand("queue on")
+	assert_true(border(e, b):IsShown())
+	e.ns.HandleCommand("enable off")
+	assert_false(border(e, b):IsShown()); assert_nil(e.swing.driver:GetScript("OnUpdate"))
+	assert_false(e.ns.eventRegistered("ACTIONBAR_UPDATE_STATE"))
+	e.ns.HandleCommand("enable on")
+	assert_true(border(e, b):IsShown())
+	assert_true(e.ns.BuildStatusReport():find("next%-swing enabled=true") ~= nil)
+end)
+
+T.register("queue: existing timer discovers late buttons without native heal prediction", function()
+	local e = env()
+	e.ab._predOn = false
+	local b = e.button(1, 1, 6807)
+	e.current[1] = true
+	Mocks.now = Mocks.now + 1.1
+	e.ns.overlay.Tick()
+	assert_true(border(e, b):IsShown())
+	e.ns.OpenOptions()
+	assert_true(e.ns.optionsWindow.controls.queue:GetChecked())
+end)
+
+T.register("queue: legacy macro ID tuple and restricted identities are guarded", function()
+	local e = env()
+	local b = e.button(1, 1, 7, "macro")
+	_G.GetMacroSpell = function() return "Maul", "Rank 1", 6807 end
+	e.currentSpells[6807] = true
+	e.swing.Scan()
+	assert_true(border(e, b):IsShown())
+	_G.GetMacroSpell = function() return Mocks.MakeSecret() end
+	poll(e); assert_false(border(e, b):IsShown())
+	_G.GetActionInfo = function() return Mocks.MakeSecret(), Mocks.MakeSecret() end
+	poll(e); assert_false(border(e, b):IsShown())
+	_G.GetActionInfo = function() error("restricted action info") end
+	poll(e); assert_false(border(e, b):IsShown())
+end)

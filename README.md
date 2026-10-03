@@ -40,7 +40,7 @@ StatusBar of its own and secure-hooks native callbacks read-only.
 
 The installed folder is the deliverable; there is no separate zip/binary.
 
-### Updating (to v0.4.0)
+### Updating (to v0.5.0)
 
 Replace the `EllesmereUI_HoTPrediction/` folder in your AddOns directory with the
 new one, then `/reload` (or restart). SavedVariables
@@ -50,6 +50,45 @@ value is never persisted, so update with no fake active. Verify with
 teststatus` or the copyable `/euihot window`.
 
 ## Quick start
+
+### Queued next-swing action borders (v0.5.0)
+
+With `EllesmereUIActionBars` installed, the existing helper now draws a thick,
+opaque **cyan border** around buttons whose Maul, Heroic Strike or Cleave is
+actually queued. Enabled by default; no separate addon or vendor edits required.
+This feature does **not** require native healing prediction to be enabled.
+
+* `/euihot queue on|off` toggles the feature independently of healing prediction.
+* `/euihot queue color <r> <g> <b>` sets its persisted RGB (0–1 each), independently
+  of the healing overlay's appearance. `/euihot queue status` reports candidates,
+  highlighted buttons and queue-readability status; full status/window includes it.
+* The existing options menu has a next-swing checkbox. `/euihot enable off`
+  disables both features immediately and stops their background work.
+
+Only exact known next-swing spell/rank IDs are eligible. Direct spell buttons use
+public `IsCurrentAction(liveSlot)` (or `IsCurrentSpell` if the action API is absent).
+Macro buttons require the client's effective `GetMacroSpell` ID and a public
+`IsCurrentSpell` result; ambiguous macros are not guessed from text or tooltips.
+Readable false is authoritative. Missing, erroring or secret state fails closed.
+No press/cast-sent flag, Rage/range/usability inference, combat log, cooldown or
+proc glow is treated as queue evidence. A failed attempt therefore cannot start
+a border, nor does a failed attempt clear an already genuinely queued ability.
+
+Queue events update borders immediately. A 50 ms local safety poll runs only when
+eligible buttons exist and catches queue termination even without an event.
+Existing helper timer discovery checks for new/replaced EllesmereUI buttons once
+per second. Live action attributes are re-read to handle paging/forms and macros;
+duplicate eligible buttons can all show the border. Auto Attack, auto-repeat,
+stance/pet buttons and ordinary spells are excluded. Only addon-owned decoration
+frames are changed, not vendor checked textures, proc glows, attributes or scripts.
+Borders are prepared outside combat. A new button first discovered in combat
+waits until combat ends for its border; prepared borders update during combat.
+
+Mock-tested, **not live-verified**. Client APIs must expose the real current/queued
+flag for these abilities; an instant-cast version or unavailable/restricted flag
+does not receive a guessed highlight. In game, verify sufficient-Rage queue →
+border, next swing/cancel → no border, insufficient-Rage failed press → no border,
+and repeat with Cleave, Maul, forms/pages and any macros you use.
 
 ### Settings menu and minimap button (v0.4.0)
 
@@ -72,6 +111,21 @@ timers are installed; cursor updates run only while dragging the minimap button.
 Manual spell/rank calibration remains in slash commands. Approximate mode still
 ignores healing absorbs and may double-count native incoming healing. Keep the
 advanced overlap assumption off unless verified for your client.
+
+### Shapeshift refresh (v0.4.1)
+
+The helper now listens for player form and power-type changes. It refreshes aura
+data and its own native-derived layout, then does two bounded follow-up refreshes
+after 0.25/0.75 seconds to catch delayed client updates. Maximum-health scaling
+is reapplied when rendering. `SPELLS_CHANGED` now requests a repaint after clearing
+cached magnitudes, instead of leaving a previously blocked prediction idle.
+Form changes do not restart HoT duration or discard manual calibration.
+
+These fixes are mock-tested, not live-verified. They do not retain removed HoTs,
+bypass restricted aura timing/ownership, or reparent replaced native frames in
+combat. At full health the prediction may legitimately be clipped away. If an
+active HoT still vanishes while injured, copy `/euihot window` snapshots before
+and after shifting so we can identify the remaining suppression/attachment issue.
 
 ### Prediction setup
 
@@ -300,6 +354,8 @@ diagnostics), `Api.lua` (defensive client/EllesmereUI adapters + aura cache),
 (tick math + overlap), `Overlay.lua` (our bar, anchoring, combat deferral),
 `DebugWindow.lua` (lazy copyable snapshot window; no timers or frame scans).
 `Estimates.lua` supplies the optional public-tooltip estimates.
+`QueuedSwing.lua` supplies real-state action-button borders, using the same
+namespace, saved database, runtime enable switch, timer discovery and diagnostics.
 
 ### CLEU (combat log) access and the engine gate
 Modern clients deliver **no varargs** to `COMBAT_LOG_EVENT_UNFILTERED`; the
