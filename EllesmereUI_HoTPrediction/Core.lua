@@ -6,7 +6,7 @@
 local addonName, ns = ...
 
 ns.name = addonName
-ns.version = "0.2.1"
+ns.version = "0.2.2"
 ns.debugEnabled = false
 ns.inCombat = false
 ns.started = false
@@ -124,6 +124,10 @@ function ns.resetSession()
 		fake = nil,        -- active fake overlay, never persisted
 		lastSuppress = nil,
 		lastStatus = nil,
+		-- PUBLIC render diagnostics: never hold a secret range/value, only a
+		-- short label of its source and whether it was restricted.
+		lastRange = nil,
+		lastRenderReason = nil,
 	}
 end
 
@@ -445,7 +449,7 @@ local function parseNumber(s)
 	return tonumber(s)
 end
 
-local HELP = "commands: test <v> | test off | status | debug [on|off] | enable on|off | alpha <a> | color <r> <g> <b> | color overlay <r> <g> <b> | color native | interval <id> <s>|off | amount <id> <tickTotal> [stacks]|off [stacks] | observe on|off | spell add|remove <id> [name] | amountmode total|effective | excludehots on|off | reset | help"
+local HELP = "commands: test <v> | test off | teststatus | status | debug [on|off] | enable on|off | alpha <a> | color <r> <g> <b> | color overlay <r> <g> <b> | color native | interval <id> <s>|off | amount <id> <tickTotal> [stacks]|off [stacks] | observe on|off | spell add|remove <id> [name] | amountmode total|effective | excludehots on|off | reset | help"
 
 -- Bound for a manual tick-total calibration. It only has to be a sane upper
 -- limit on a single heal tick, not a game mechanic.
@@ -477,6 +481,9 @@ function ns.HandleCommand(input)
 		return
 	elseif cmd == "status" then
 		ns.EmitStatus()
+		return
+	elseif cmd == "teststatus" then
+		ns.EmitTestStatus()
 		return
 	elseif cmd == "debug" then
 		local v = (args[1] or ""):lower()
@@ -790,16 +797,29 @@ function ns._EmitStatus()
 	add("tracked active HoTs=%d", tracked)
 
 	local res = ns.session.lastStatus
-	if res then
+	if res and res.fake then
+		-- Fake is a render exercise only. Never report a real-model "no active
+		-- HoT" or a numeric visible amount: the native clip (and a restricted
+		-- current health) may hide part of it.
+		add("fake test requested=%s rendered=%s range=%s",
+			tostring(res.requested), tostring(res.rendered and true or false),
+			tostring(ns.session.lastRange or "n/a"))
+		add("fake visible amount unknown (engine-clipped; native clip may hide it, health may be restricted)")
+		add("fake render reason=%s", tostring(res.renderReason or res.reason or "n/a"))
+	elseif res then
 		local visible = res.added
-		add("prediction total=%s visible=%s native=%s reason=%s",
+		add("prediction total=%s visible=%s native=%s reason=%s render=%s",
 			tostring(res.hotEstimate), tostring(visible),
-			tostring(res.native and res.native.total), tostring(res.reason))
+			tostring(res.native and res.native.total), tostring(res.reason),
+			tostring(res.renderReason or "n/a"))
 	else
 		add("prediction not evaluated yet")
 	end
 	if ns.session.lastSuppress then
 		add("last suppress: %s", tostring(ns.session.lastSuppress))
+	end
+	if ns.session.lastRange then
+		add("last range: %s", tostring(ns.session.lastRange))
 	end
 	if ns.session.fake then
 		add("fake active=%s", tostring(ns.session.fake.value))
@@ -810,6 +830,59 @@ function ns._EmitStatus()
 	end
 
 	ns.print(table.concat(lines, "\n"))
+end
+
+-- Concise ONE-LINE render status, for users whose chat scrollback is broken by
+-- the long /status dump. Reports only PUBLIC facts; a secret range/value is
+-- never formatted or read back (only the widget keeps it).
+function ns.EmitTestStatus()
+	local ok, err = pcall(ns._EmitTestStatus)
+	if not ok then
+		ns.print("teststatus error (protected): " .. tostring(err))
+	end
+end
+
+function ns._EmitTestStatus()
+	if not ns.db then ns.InitDatabase() end
+	local st = (ns.overlay and ns.overlay.state) or {}
+
+	local unit, uerr
+	local player = ns.api and ns.api.GetPlayerFrame and ns.api.GetPlayerFrame()
+	if player then unit, uerr = ns.api.GetFrameUnit(player) end
+
+	local ab = st.ab
+	local native
+	if not ab then
+		native = "no-frame"
+	elseif ab._predOn ~= true then
+		native = "disabled"
+	elseif not ab._predMy or not ab._predOther then
+		native = "bars-missing"
+	else
+		native = "ready"
+	end
+
+	local f = st.frame
+	local shown = false
+	if f and f.IsShown then
+		local ok2, v = pcall(f.IsShown, f)
+		shown = ok2 and v and true or false
+	end
+
+	local fakeReq = ns.session and ns.session.fake and ns.session.fake.value
+	local cleuFn = ns.api and ns.api.CombatLogAvailable and ns.api.CombatLogAvailable() or false
+	local delivered = (ns.capabilities and ns.capabilities.cleuDelivered) or 0
+
+	-- `unit` may be nil with a public reason; never print a secret unit name.
+	local unitLabel = unit
+	if unitLabel == nil then unitLabel = (uerr or "?") end
+
+	ns.print(string.format(
+		"teststatus unit=%s native=%s fakeRequested=%s overlayShown=%s range=%s render=%s visible=%s cleu=%s delivered=%s",
+		tostring(unitLabel), tostring(native), tostring(fakeReq or "none"), tostring(shown),
+		tostring(ns.session and ns.session.lastRange or "n/a"),
+		tostring(ns.session and ns.session.lastRenderReason or "n/a"),
+		"unknown (engine-clipped)", tostring(cleuFn), tostring(delivered)))
 end
 
 -- Rich on-demand diagnostics used only while debug is enabled.
@@ -858,10 +931,13 @@ function ns.EmitDebugDetails(lines)
 	end
 	local last = ns.session.lastStatus
 	if last then
-		add("tick hot=%s added=%s nativeTotal=%s reason=%s",
-			tostring(last.hotEstimate), tostring(last.added),
-			tostring(last.native and last.native.total), tostring(last.reason))
+		add("tick fake=%s hot=%s added=%s nativeTotal=%s reason=%s render=%s",
+			tostring(last.fake), tostring(last.hotEstimate), tostring(last.added),
+			tostring(last.native and last.native.total), tostring(last.reason),
+			tostring(last.renderReason or "n/a"))
 	end
+	add("render range=%s reason=%s", tostring(ns.session.lastRange or "n/a"),
+		tostring(ns.session.lastRenderReason or "n/a"))
 	if ns.overlay and ns.overlay.state and ns.overlay.state.frame then
 		local f2 = ns.overlay.state.frame
 		local v = n(f2.GetValue and f2:GetValue())

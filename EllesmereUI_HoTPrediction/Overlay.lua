@@ -391,7 +391,10 @@ end
 function overlay.Hide(reason)
 	local f = overlay.state.frame
 	if f and f.Hide then f:Hide() end
-	if reason then ns.session.lastSuppress = reason end
+	if reason then
+		ns.session.lastSuppress = reason
+		ns.session.lastRenderReason = reason
+	end
 end
 
 -- Structural failure: drop handles and suppress rather than paint stale ones.
@@ -401,23 +404,118 @@ function overlay.HideHard(reason)
 	overlay.state.ab = nil
 	overlay.state.parent = nil
 	-- Retain mask ownership so the next attachment can remove old masks.
-	if reason then ns.session.lastSuppress = reason end
-end
-
-local function resolveMax(ab)
-	if ab and ab._predMy and ab._predMy.GetMinMaxValues then
-		local ok, _min, max = pcall(ab._predMy.GetMinMaxValues, ab._predMy)
-		if ok and ns.toNumber(max) and max > 0 then return max end
+	if reason then
+		ns.session.lastSuppress = reason
+		ns.session.lastRenderReason = reason
 	end
-	local health = ns.api.GetHealthNumbers and ns.api.GetHealthNumbers()
-	if health and health.max and health.max > 0 then return health.max end
-	return nil
 end
 
+-----------------------------------------------------------------------------
+-- range resolution / secret-safe setter
+--
+-- A secret max is OPAQUE. We must never compare, calculate, stringify, index or
+-- branch on it. The only allowed use is to hand it verbatim to an engine-driven
+-- UI setter (exactly what native EllesmereUI does with `UnitHealthMax(unit)`).
+-- Our bar's own value stays a plain public number from the model.
+-----------------------------------------------------------------------------
+
+-- PUBLIC label for a range value we already know is either a plain number or a
+-- secret. Never reads the value itself.
+local function rangeVisibility(v)
+	if ns.isSecret(v) then return "restricted" end
+	return "public"
+end
+
+-- Read the native prediction range through its protected getter. The secret test
+-- happens BEFORE any numeric check. Returns raw, usable, reason:
+--   usable = true  -> raw is a finite >0 number OR a secret value
+--   usable = false -> raw is nil; reason is a short PUBLIC explanation
+local function readNativeRange(ab)
+	if not (ab and ab._predMy and ab._predMy.GetMinMaxValues) then
+		return nil, false, "native range getter unavailable"
+	end
+	local ok, _min, max = pcall(ab._predMy.GetMinMaxValues, ab._predMy)
+	if not ok then
+		return nil, false, "native range getter error"
+	end
+	if ns.isSecret(max) then
+		return max, true, nil
+	end
+	local n = ns.toNumber(max)
+	if n and n > 0 then return n, true, nil end
+	return nil, false, "native range nonpositive/unusable"
+end
+
+-- Fallback range: UnitHealthMax ONLY. Deliberately independent of current
+-- health (we never call GetHealthNumbers here), so a secret current health can
+-- never block a perfectly usable max. Same return contract as above.
+local function readUnitHealthMax()
+	local f = UnitHealthMax
+	if type(f) ~= "function" then
+		return nil, false, "UnitHealthMax unavailable"
+	end
+	local ok, raw = pcall(f, "player")
+	if not ok then
+		return nil, false, "UnitHealthMax error"
+	end
+	if ns.isSecret(raw) then
+		return raw, true, nil
+	end
+	local n = ns.toNumber(raw)
+	if n and n > 0 then return n, true, nil end
+	return nil, false, "UnitHealthMax nonpositive/unusable"
+end
+
+-- Resolve and apply the range to OUR OWN bar. A secret value is passed verbatim
+-- to the engine-driven setter (pcall; boolean result only). A public value must
+-- be a finite >0 number. Returns ok(boolean), diag(PUBLIC string). The diag
+-- records the source and whether it was restricted, never the value.
+function overlay.ApplyRange(bar, ab)
+	if not bar or not bar.SetMinMaxValues then
+		return false, "overlay range setter unavailable"
+	end
+
+	-- 1. Prefer the native prediction range (exactly what native uses).
+	local raw, usable = readNativeRange(ab)
+	local nativeWhy
+	if usable then
+		local applied = pcall(bar.SetMinMaxValues, bar, 0, raw)
+		if applied then
+			return true, "native-range (" .. rangeVisibility(raw) .. ")"
+		end
+		nativeWhy = "native-range setter refused"
+	end
+
+	-- 2. Fallback is tried INDEPENDENTLY of the native attempt.
+	local raw2, usable2, why2 = readUnitHealthMax()
+	if usable2 then
+		local applied2 = pcall(bar.SetMinMaxValues, bar, 0, raw2)
+		if applied2 then
+			return true, "UnitHealthMax (" .. rangeVisibility(raw2) .. ")"
+		end
+		return false, "UnitHealthMax (" .. rangeVisibility(raw2) .. "); setter refused"
+	end
+
+	if nativeWhy then
+		return false, nativeWhy .. "; " .. tostring(why2 or "no fallback range")
+	end
+	return false, "no readable range (" .. tostring(why2 or "native range unavailable") .. ")"
+end
+
+-- Render our bar. Returns ok(boolean), reason(PUBLIC string). `value` must be a
+-- plain finite positive number produced by the model; it is never a secret. The
+-- range may be restricted and is consumed by ApplyRange without inspection. A
+-- successful render clears the stale suppress reason.
 function overlay.RenderValue(value, reason)
+	reason = reason or "render"
 	if not ns.db or not ns.db.enabled then
 		overlay.Hide("addon disabled")
-		return
+		return false, "addon disabled"
+	end
+	local v = ns.toNumber(value)
+	if not v or v <= 0 then
+		overlay.Hide(reason)
+		return false, reason
 	end
 	local f = overlay.state.frame
 	if not f then
@@ -425,36 +523,89 @@ function overlay.RenderValue(value, reason)
 		if overlay.IsCombat() then
 			overlay.state.pending = true
 			overlay.Hide("overlay not created; applies after combat")
-			return
+			return false, "overlay not created; applies after combat"
 		end
 		overlay.InvalidateStructure()
 		overlay.Resolve()
 		f = overlay.state.frame
 		if not f then
 			overlay.Hide("no native prediction frame")
-			return
+			return false, "no native prediction frame"
 		end
 	end
 	local ab = overlay.state.ab
 	if not ab then
 		overlay.Hide("no native prediction frame")
-		return
+		return false, "no native prediction frame"
 	end
-	if not value or value <= 0 then
-		overlay.Hide(reason or "nothing to append")
-		return
+
+	local rangeOk, rangeDiag = overlay.ApplyRange(f, ab)
+	if not rangeOk then
+		overlay.Hide(rangeDiag)
+		return false, rangeDiag
 	end
-	local max = resolveMax(ab)
-	if not max then
-		overlay.Hide("no readable max for overlay scaling")
-		return
-	end
-	if f.SetMinMaxValues then f:SetMinMaxValues(0, max) end
-	if f.SetValue then f:SetValue(value) end
+	if f.SetValue then pcall(f.SetValue, f, v) end
 	if f.Show then f:Show() end
+	ns.session.lastSuppress = nil
+	ns.session.lastRange = rangeDiag
+	ns.session.lastRenderReason = "shown; " .. rangeDiag
+	return true, ns.session.lastRenderReason
 end
 
 ------------------------------------------------------------------------------
+-- fake render gate (own; never consults the real HoT estimate)
+--
+-- Model.Evaluate still evaluates real HoTs for the actual prediction. The fake
+-- test is only a rendering exercise, so its status must reflect the REQUESTED
+-- amount and the render outcome -- never an unrelated "no active self HoT".
+-- This gate mirrors the native-structure requirements (player unit, prediction
+-- on, both bars) without touching the aura/model estimate at all.
+-----------------------------------------------------------------------------
+
+function overlay.EvaluateFake(ab, requested)
+	local out = { fake = true, details = {}, reasons = {} }
+	local playerFrame = ns.api and ns.api.GetPlayerFrame and ns.api.GetPlayerFrame()
+	if playerFrame then
+		local unit, uerr = ns.api.GetFrameUnit(playerFrame)
+		if unit ~= "player" then
+			out.added = 0
+			out.suppressed = true
+			out.reason = "player frame unit " .. tostring(unit) .. " (" .. tostring(uerr) .. ")"
+			return out
+		end
+	end
+	if not ab then
+		out.added = 0
+		out.suppressed = true
+		out.reason = "no native prediction frame"
+		return out
+	end
+	if ab._predOn ~= true then
+		out.added = 0
+		out.suppressed = true
+		out.reason = "native prediction disabled"
+		return out
+	end
+	if not ab._predMy or not ab._predOther then
+		out.added = 0
+		out.suppressed = true
+		out.reason = "native prediction bars missing"
+		return out
+	end
+	local v = ns.toNumber(requested)
+	out.requested = v
+	if not v or v <= 0 then
+		out.added = 0
+		out.suppressed = true
+		out.reason = "fake test needs a positive requested amount"
+		return out
+	end
+	out.added = v
+	out.reason = "fake test requested; visible amount engine-clipped"
+	return out
+end
+
+-----------------------------------------------------------------------------
 -- periodic evaluation
 ------------------------------------------------------------------------------
 
@@ -513,32 +664,45 @@ function overlay.Tick(force)
 	end
 
 	if fake then
-		local res = ns.model.Evaluate(now, { fake = true, ab = overlay.state.ab })
-		ns.session.lastStatus = res
-		if res.suppressed or not fake.value or fake.value <= 0 then
+		-- Fake is a render exercise only: our own gate checks the native
+		-- structure but never consults the real HoT estimate, so its reason is
+		-- always about this request, never "no active self HoT estimate".
+		local res = overlay.EvaluateFake(overlay.state.ab, fake.value)
+		local rendered, renderReason
+		if res.suppressed or not res.added or res.added <= 0 then
 			overlay.state.active = false
 			overlay.Hide(res.reason or "fake test")
+			rendered, renderReason = false, res.reason or "fake test"
 		else
 			overlay.state.active = true
-			overlay.RenderValue(fake.value, "fake test")
+			rendered, renderReason = overlay.RenderValue(res.added, res.reason or "fake test")
+			overlay.state.active = rendered and true or false
 		end
-		debugChange("fake|" .. tostring(fake.value) .. "|" .. tostring(res.suppressed),
-			"fake render value=%s native=%s hot=%s reason=%s", tostring(fake.value),
-			tostring(res.native and res.native.total), tostring(res.hotEstimate), tostring(res.reason))
+		res.rendered = rendered and true or false
+		res.renderReason = renderReason
+		ns.session.lastStatus = res
+		debugChange("fake|" .. tostring(fake.value) .. "|" .. tostring(rendered) .. "|" .. tostring(renderReason),
+			"fake requested=%s shown=%s render=%s range=%s", tostring(fake.value),
+			tostring(rendered), tostring(renderReason), tostring(ns.session.lastRange))
 		return
 	end
 
 	local res = ns.model.Evaluate(now, { ab = overlay.state.ab })
-	ns.session.lastStatus = res
 	overlay.state.active = (res.hotEstimate and res.hotEstimate > 0) and true or false
+	local rendered, renderReason
 	if res.added and res.added > 0 then
-		overlay.RenderValue(res.added, res.reason)
+		rendered, renderReason = overlay.RenderValue(res.added, res.reason)
 	else
 		overlay.Hide(res.reason)
+		rendered, renderReason = false, res.reason
 	end
+	res.rendered = rendered and true or false
+	res.renderReason = renderReason
+	ns.session.lastStatus = res
 	debugChange(tostring(res.added) .. "|" .. tostring(res.reason) .. "|" .. tostring(res.hotEstimate),
-		"tick hot=%s native=%s added=%s reason=%s", tostring(res.hotEstimate),
-		tostring(res.native and res.native.total), tostring(res.added), tostring(res.reason))
+		"tick hot=%s native=%s added=%s reason=%s render=%s", tostring(res.hotEstimate),
+		tostring(res.native and res.native.total), tostring(res.added), tostring(res.reason),
+		tostring(renderReason))
 end
 
 function overlay.Setup()
