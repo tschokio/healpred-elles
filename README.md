@@ -36,14 +36,14 @@ StatusBar of its own and secure-hooks native callbacks read-only.
 
 The installed folder is the deliverable; there is no separate zip/binary.
 
-### Updating (to v0.2.2)
+### Updating (to v0.2.3)
 
 Replace the `EllesmereUI_HoTPrediction/` folder in your AddOns directory with the
 new one, then `/reload` (or restart). SavedVariables
 (`EllesmereUI_HoTPredictionDB`) carry over; only the code changes. The fake test
 value is never persisted, so update with no fake active. Verify with
-`/euihot status` (version line) and, while previewing a fake, `/euihot
-teststatus`.
+`/euihot status` (version line), and, while previewing a fake, `/euihot
+teststatus` or the copyable `/euihot window`.
 
 ## Quick start
 
@@ -85,6 +85,8 @@ All commands are `/euihot ...` (alias `/hotpred ...`).
 | `test off` | Clear the fake segment. |
 | `teststatus` | One concise line for the fake render: unit/native readiness, requested amount, own overlay `IsShown`, range source (`native-range`/`UnitHealthMax`, public/restricted), last render reason, engine-clipped visible amount. Use this when chat scrollback is broken. |
 | `status` | One concise report: settings, honest CLEU capability (`function`/`requested`/`registration`/`delivered`/gate), overlay structure, tracked HoTs (manual/approximate labels), prediction. |
+| `window` | Open the copyable debug snapshot window (alias `debug window`). Lazy-created on first use; a titled, movable, clamped dialog with a selectable scrollable text box and Refresh / Select All / Close. |
+| `debug window` | Same as `window`. |
 | `debug [on\|off]` | Toggle on-demand diagnostics (prints status when turned on). Debug lines are emitted on change, not per tick. |
 | `enable on\|off` | Enable/disable the overlay. |
 | `alpha <0..1>` | Overlay opacity (composited with the inherited native alpha). |
@@ -114,7 +116,8 @@ so a restricted client can never resurrect a forbidden registration.
 Modules (loaded in TOC order): `Core.lua` (namespace, settings, events, slash,
 diagnostics), `Api.lua` (defensive client/EllesmereUI adapters + aura cache),
 `Spells.lua` (candidate IDs), `Learner.lua` (combat-log learning), `Model.lua`
-(tick math + overlap), `Overlay.lua` (our bar, anchoring, combat deferral).
+(tick math + overlap), `Overlay.lua` (our bar, anchoring, combat deferral),
+`DebugWindow.lua` (lazy copyable snapshot window; no timers or frame scans).
 
 ### CLEU (combat log) access and the engine gate
 Modern clients deliver **no varargs** to `COMBAT_LOG_EVENT_UNFILTERED`; the
@@ -358,6 +361,39 @@ When a fake is active, full `/status` labels it as a fake test and no longer
 reports an unrelated real-model "no active self HoT estimate" or a bogus numeric
 `visible=0`; a secret range/value is never formatted.
 
+### Copyable debug window (`/euihot window`)
+
+For chat scrollback that is broken or too small to select, `/euihot window`
+(alias `/euihot debug window`) opens an addon-owned, titled, movable and
+screen-clamped dialog containing a plain-text **snapshot** of the diagnostics.
+The window is created lazily on the first open and reused thereafter (hidden,
+never deleted, so its position sticks for the session); Escape closes it via the
+standard `UISpecialFrames` registry.
+
+* The text lives in a scrollable, multiline `EditBox` that is automatically
+  **not** focused when the window merely opens. To copy: click **Select All**,
+  then press **Ctrl+C**. The operating system performs the copy — the addon does
+  not claim any clipboard API, it only selects the text.
+* **Refresh** captures a new snapshot. A snapshot is *not* a live log: it
+  contains a public `GetTime` capture timestamp plus a compact `teststatus` line
+  and the full status with rich internals **forced on** for that capture,
+  irrespective of the persisted `debug` setting (which is never changed). No
+  character name or other private data is included.
+* There are no timers, `OnUpdate` handlers, network calls or frame scans, so a
+  live overlay tick can never steal a selection you are copying. Refresh clears
+  the old selection/focus, writes the whole report and resets the scroll to the
+  top.
+* Typing in the box edits the on-screen copy only; it can never mutate addon
+  settings, learned data or the fake test. The text is plain (no `|c`/`|r`
+  artifacts) and never contains a raw secret value.
+* The shared builders `ns.BuildStatusReport(includeDebug)` and
+  `ns.BuildTestStatusReport()` return the same text as strings without printing;
+  `/status` and `/teststatus` print them unchanged. On a build failure the
+  window shows useful fallback text rather than a repeated Lua error. If the
+  client cannot create frames or is missing an optional widget API, opening the
+  window degrades gracefully (one clear chat line) and the report builders still
+  return copyable text.
+
 ---
 
 ## Tests
@@ -397,7 +433,9 @@ both overlap modes; excludes clamp including native; vehicle and nil-unit hiding
 (real and fake); native off even for fake; overlay masks, retexture and texture
 rotation with vendor textures untouched; deferred hook work and automatic timer
 replacement; combat deferral; commands, validation, session-only fake, quiet
-startup. v0.2.1 adds: restricted retail/Forever builds never attempt forbidden
+startup. The mocked environment also provides EditBox/ScrollFrame/button
+widgets, FontStrings, real focus/highlight/selection state and a per-environment
+`UISpecialFrames` table with named-global cleanup. v0.2.1 adds: restricted retail/Forever builds never attempt forbidden
 CLEU registration; a missing CLEU function never registers; `/observe off`
 unregisters and `/observe on` re-requests; an accepted registration is shown as
 `delivered=0` until a real event arrives; `/reset` preserves registration and
@@ -417,7 +455,15 @@ stays hidden with the actual reason and a bool return; `/test off` hides on the
 next tick; `EvaluateFake` still honours native-off/vehicle gates; `/teststatus`
 is one concise line and neither it nor `/status` claims a real HoT or a numeric
 visible zero for a fake; a real manual HoT stays suppressed on secret incoming;
-no raw secret is retained anywhere except our own widget.
+no raw secret is retained anywhere except our own widget. v0.2.3 adds: the
+debug snapshot window is created lazily and reused as one named frame; repeated
+opens/refreshes print no chat; a forced-internals report is produced while the
+persisted `debug` setting stays off; Refresh reflects a changed fake amount;
+Select All focuses and selects the whole report; a live overlay tick does not
+disturb the text or selection; Close/Escape hide it and clear focus; manual
+editing cannot mutate addon data; the window adds no ticker, event, `OnUpdate`
+or vendor-frame change; and missing Ellesmere/CLEU/secret-range inputs still
+yield copyable text instead of errors.
 
 ---
 
