@@ -194,11 +194,12 @@ T.register("debugwindow: Escape hides it and clears focus", function()
 	local f = ns.OpenDebugWindow()
 	local eb = ns.debugWindow.editBox
 	ns.SelectAllDebugWindow()
-	-- Escape pressed inside the EditBox drops focus first...
+	-- Escape in the focused text closes the dialog in one action.
 	eb:GetScript("OnEscapePressed")(eb)
 	assert_false(eb:HasFocus(), "editbox escape clears focus")
-	assert_true(f:IsShown(), "the box alone does not hide the window")
-	-- ...then the client hides frames registered in UISpecialFrames.
+	assert_false(f:IsShown(), "focused editbox Escape hides the window")
+	ns.OpenDebugWindow()
+	-- Escape elsewhere uses the client's registered-frame mechanism.
 	pressEscape()
 	assert_false(f:IsShown(), "escape hides the window")
 	assert_false(eb:HasFocus(), "hidden window leaves no focus")
@@ -330,4 +331,37 @@ T.register("debugwindow: graceful failure when CreateFrame is unavailable", func
 	assert_true(Mocks.chat[#Mocks.chat]:match("debug window unavailable") ~= nil, "useful message")
 	assert_true(type(ns.BuildSnapshotReport()) == "string", "report still builds without a window")
 	_G.CreateFrame = saved
+end)
+
+T.register("debugwindow: labels are fonted, drag handlers work, backdrop is visible", function()
+	local env = newEnv()
+	local f = env.ns.OpenDebugWindow()
+	assert_eq(f._template, "BackdropTemplate")
+	assert_not_nil(f._backdrop)
+	assert_true(f._backdropColor[4] > 0)
+	assert_eq(f._fontStrings[1]._template, "GameFontNormalLarge")
+	assert_eq(f._fontStrings[2]._template, "GameFontHighlightSmall")
+	assert_eq(f._dragButtons[1], "LeftButton")
+	f:GetScript("OnDragStart")(f)
+	assert_true(f._moving)
+	f:GetScript("OnDragStop")(f)
+	assert_false(f._moving)
+end)
+
+T.register("debugwindow: long text has scrollable content and working clamped mouse wheel", function()
+	local env = newEnv()
+	local f = env.ns.OpenDebugWindow()
+	local scroll = f.scrollFrame
+	assert_eq(scroll._template, "UIPanelScrollFrameTemplate")
+	assert_true(scroll._wheelEnabled)
+	f.editBox:SetText(string.rep("long report text\n", 120))
+	assert_true(f.editBox:GetHeight() > scroll:GetHeight())
+	assert_true(scroll._scrollUpdated)
+	local wheel = scroll:GetScript("OnMouseWheel")
+	wheel(scroll, -1)
+	assert_eq(scroll:GetVerticalScroll(), 32)
+	wheel(scroll, 1000)
+	assert_eq(scroll:GetVerticalScroll(), 0)
+	wheel(scroll, -1000)
+	assert_eq(scroll:GetVerticalScroll(), scroll:GetVerticalScrollRange())
 end)

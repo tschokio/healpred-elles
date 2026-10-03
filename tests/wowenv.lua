@@ -64,10 +64,11 @@ local function newTexture(owner)
 	}
 end
 
-local function newFrame(frameType, name, parent)
+local function newFrame(frameType, name, parent, template)
 	frameSeq = frameSeq + 1
 	local f = setmetatable({
 		_type = frameType or "Frame",
+		_template = template,
 		_name = name,
 		_parent = parent,
 		_points = {},
@@ -120,6 +121,15 @@ local function newFontString(owner)
 		GetWidth = function(self) return self._width end,
 		SetSize = function(self, w, h) self._width, self._height = w, h end,
 		GetStringWidth = function(self) return #self._text * 6 end,
+		GetStringHeight = function(self)
+			local columns = math.max(1, math.floor((self._width or 556) / 6))
+			local rows = 0
+			for line in (self._text .. "\n"):gmatch("([^\n]*)\n") do
+				rows = rows + math.max(1, math.ceil(#line / columns))
+			end
+			return rows * 12
+		end,
+		Hide = function(self) self._shown = false end,
 	}
 end
 
@@ -218,10 +228,20 @@ function FrameMT:StartMoving() self._moving = true end
 function FrameMT:StopMovingOrSizing() self._moving = false end
 
 -- FontString creation (enough for title/instruction labels).
-function FrameMT:CreateFontString(name, layer, template) return newFontString(self) end
+function FrameMT:CreateFontString(name, layer, template)
+	local text = newFontString(self)
+	text._template = template
+	self._fontStrings = self._fontStrings or {}
+	self._fontStrings[#self._fontStrings + 1] = text
+	return text
+end
 
 -- Text on buttons/frames.
-function FrameMT:SetText(t) self._text = tostring(t or "") end
+function FrameMT:SetText(t)
+	self._text = tostring(t or "")
+	local cb = self._scripts["OnTextChanged"]
+	if cb then cb(self, false) end
+end
 function FrameMT:GetText() return self._text end
 
 -- EditBox + ScrollFrame surface. Real clients expose these on the widgets; a
@@ -269,6 +289,17 @@ function FrameMT:SetVerticalScroll(v) self._vscroll = v end
 function FrameMT:GetVerticalScroll() return self._vscroll or 0 end
 function FrameMT:SetHorizontalScroll(v) self._hscroll = v end
 function FrameMT:GetHorizontalScroll() return self._hscroll or 0 end
+function FrameMT:GetVerticalScrollRange()
+	return math.max(0, (self._scrollChild and self._scrollChild:GetHeight() or 0) - self:GetHeight())
+end
+function FrameMT:UpdateScrollChildRect() self._scrollUpdated = true end
+function FrameMT:EnableMouseWheel(v) self._wheelEnabled = v end
+function FrameMT:SetClipsChildren(v) self._clipsChildren = v end
+function FrameMT:RegisterForDrag(...) self._dragButtons = { ... } end
+function FrameMT:SetMaxLetters(v) self._maxLetters = v end
+function FrameMT:SetBackdrop(v) self._backdrop = v end
+function FrameMT:SetBackdropColor(...) self._backdropColor = { ... } end
+function FrameMT:SetBackdropBorderColor(...) self._borderColor = { ... } end
 function FrameMT:SetTextColor(r, g, b, a) self._textColor = { r, g, b, a } end
 function FrameMT:GetTextColor()
 	local c = self._textColor or { 1, 1, 1, 1 }
@@ -316,7 +347,7 @@ function Mocks.Reset()
 	_G.UISpecialFrames = {}
 	_G.STANDARD_TEXT_FONT = "Fonts\\FRIZQT__.TTF"
 
-	_G.CreateFrame = function(t, n, p) return newFrame(t, n, p) end
+	_G.CreateFrame = function(t, n, p, template) return newFrame(t, n, p, template) end
 	_G.GetTime = function() return Mocks.now end
 	-- Default mocked build is a clean (non-restricted) engine so the automatic
 	-- learning tests exercise guarded CLEU registration. Restricted-client tests
