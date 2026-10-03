@@ -4,10 +4,13 @@ A lightweight, standalone World of Warcraft addon that adds a **conservative
 player self-cast HoT (heal-over-time) prediction segment** on top of the native
 `EllesmereUIUnitFrames` incoming-heal prediction bars.
 
-It learns tick intervals and per-tick amounts from the combat log at runtime,
-schedules the remaining ticks through expiry, and appends only the part of that
-estimate that the native incoming number does **not** already explain. It never
-modifies EllesmereUI files, frames, textures or functions — it creates one small
+It can learn tick intervals and per-tick amounts from the combat log at runtime
+**when the client actually exposes CLEU**, schedules the remaining ticks through
+expiry, and appends only the part of that estimate that the native incoming
+number does **not** already explain. On modern restricted clients the combat log
+event is not accessible, so the supported path is explicit, persisted **manual
+calibration** (`/euihot interval` + `/euihot amount`). It never modifies
+EllesmereUI files, frames, textures or functions — it creates one small
 StatusBar of its own and secure-hooks native callbacks read-only.
 
 > Runtime status: this addon was developed and tested in a deterministic mocked
@@ -33,6 +36,36 @@ StatusBar of its own and secure-hooks native callbacks read-only.
 
 The installed folder is the deliverable; there is no separate zip/binary.
 
+## Quick start
+
+1. Install `EllesmereUIUnitFrames`, **enable native heal prediction** for the
+   player frame, then `/reload`.
+2. While injured, verify rendering with `/euihot test 1000` (a fake `+1000`
+   segment). `/euihot test off` clears it. `/euihot status` reports what the
+   addon actually sees.
+3. Automatic prediction needs combat-log access. If `/euihot status` shows
+   `delivered=0` (unverified) or `automatic tick learning unavailable`, this
+   client does not expose CLEU. Calibrate by hand from numbers **you observe in
+   the game** for the exact spell and stack count:
+
+   ```
+   /euihot interval <actualSpellID> <seconds>
+   /euihot amount   <actualSpellID> <tickTotal> [stacks]
+   ```
+
+   EXAMPLE ONLY (these are not game-mechanics constants, just a made-up
+   illustration): if your own tick logged `200` and ticks arrive every `3s`,
+   `/euihot interval 774 3` and `/euihot amount 774 200` describe a 4-tick
+   remainder of `800`.
+4. `/euihot test off`, then `/euihot status` to confirm the tracked HoTs and the
+   manual/approximate labels.
+5. Recalibrate `/euihot amount` after any gear or spell-rank change — manual
+   values are user-authoritative and are **not** re-derived for you.
+
+Automatic estimation may be unavailable on the supplied modern client. Static
+calibration only works when the aura's duration/source and the native incoming
+figures are readable; it cannot bypass secret-value restrictions.
+
 ## Commands
 
 All commands are `/euihot ...` (alias `/hotpred ...`).
@@ -41,21 +74,28 @@ All commands are `/euihot ...` (alias `/hotpred ...`).
 | --- | --- |
 | `test <value>` | Show a fake `+value` segment after the native chain (session only, finite non-negative). |
 | `test off` | Clear the fake segment. |
-| `status` | One concise report: settings, CLEU access/registration, overlay structure, tracked HoTs, prediction. |
+| `status` | One concise report: settings, honest CLEU capability (`function`/`requested`/`registration`/`delivered`/gate), overlay structure, tracked HoTs (manual/approximate labels), prediction. |
 | `debug [on\|off]` | Toggle on-demand diagnostics (prints status when turned on). Debug lines are emitted on change, not per tick. |
 | `enable on\|off` | Enable/disable the overlay. |
 | `alpha <0..1>` | Overlay opacity (composited with the inherited native alpha). |
 | `color <r> <g> <b>` | Set the custom overlay colour (0..1) and stop inheriting native style. |
 | `color overlay <r> <g> <b>` | Same as above (explicit spelling). |
 | `color native` | Restore the default: inherit native texture/colour. |
-| `interval <spellID> <seconds>` | Manual interval calibration (persisted). Positive id, seconds in (0, 300]. |
+| `interval <spellID> <seconds>` | Manual tick-interval calibration (persisted). Positive id, seconds in (0, 300]. |
+| `interval <spellID> off` | Clear the manual interval for one spell. |
+| `amount <spellID> <tickTotal> [stacks]` | Manual per-tick total for an exact stack count (persisted, user-authoritative). Positive finite value, exact total — never multiplied by stacks. Stacks only meaningful for stacking families (Lifebloom). |
+| `amount <spellID> off [stacks]` | Clear the manual amount for one spell (or one stack count). |
+| `observe on\|off` | Session-only CLEU override. `on` requests guarded registration even on a restricted engine; `off` unregisters it. Never persisted. |
 | `spell add\|remove <spellID> [name]` | Register/remove a modified spell/rank ID at runtime. |
 | `amountmode total\|effective` | CLEU adapter assumption (see below); resets learned magnitudes. |
 | `excludehots on\|off` | Explicit excludes-HoTs overlap opt-in (see below). |
 | `reset` | Clear session learning and invalidate the aura cache. |
 
-Settings persist in `EllesmereUI_HoTPredictionDB`. A fake test value is **never**
-persisted; a reload always starts with no fake active.
+Settings persist in `EllesmereUI_HoTPredictionDB`. Manual interval/amount
+calibration is persisted (it is user DPS/HPS data, not derived learning) and is
+never erased by `/reset` or gear/spec events. A fake test value is **never**
+persisted; a reload always starts with no fake active. `observe` is session-only
+so a restricted client can never resurrect a forbidden registration.
 
 ---
 
@@ -66,15 +106,32 @@ diagnostics), `Api.lua` (defensive client/EllesmereUI adapters + aura cache),
 `Spells.lua` (candidate IDs), `Learner.lua` (combat-log learning), `Model.lua`
 (tick math + overlap), `Overlay.lua` (our bar, anchoring, combat deferral).
 
-### CLEU (combat log) access
+### CLEU (combat log) access and the engine gate
 Modern clients deliver **no varargs** to `COMBAT_LOG_EVENT_UNFILTERED`; the
 current event tuple is fetched with `CombatLogGetCurrentEventInfo()` and carried
 as an explicit pack so nil holes and trailing `false` survive. A client that
-instead delivers explicit varargs is handled by a documented legacy fallback.
-The function's presence and the event registration result are recorded and shown
-by `/status`. **If CLEU is unavailable, automatic tick learning is unavailable**
-— the prototype still loads, but intervals/amounts must come from
-`/euihot interval` or estimates are withheld.
+instead delivers explicit varargs is handled by a documented legacy fallback. A
+missing function, a `nil` tuple or an erroring getter is handled gracefully and
+never raises.
+
+Known restricted "Midnight" engines (current retail, interface/`toc` >= 120000,
+i.e. 12.0.0/12.0.1, and Forever interface 16000..19999) **forbid** this event. On
+those engines the addon does **not even attempt** registration by default, and it
+also never registers when the API is missing. `/euihot observe on` requests a
+guarded registration for a user who knows a modified client exposes the event;
+`/euihot observe off` unregisters it. The override is session-only and is not
+written to SavedVariables.
+
+`/euihot status` reports honest capability rather than implying success:
+`function=` (is the API present), `requested=` (did we ask), `registration=`
+(did the client accept), `delivered=` (how many `COMBAT_LOG_EVENT_UNFILTERED`
+events were **actually observed** — `0` means unverified), plus the gating
+reason. A successful `pcall` / registration is **not** treated as proof the event
+is accessible; only an observed delivery is. **When delivery is still 0,
+automatic tick learning is unverified** (it may simply not have triggered yet) —
+the addon loads quietly (no startup error), and `/euihot status` prints the
+manual calibration instruction once, on demand. `/euihot reset` preserves
+registration/delivery capability facts; it only clears learned data.
 
 ### Auras (strict self-cast only)
 Reads `C_UnitAuras.GetAuraDataByIndex("player", i, "HELPFUL|PLAYER")` (with a
@@ -97,9 +154,11 @@ spell ID is a candidate, and a **positively owned current aura** exists.
 * **Timing** is observed for *every* valid owned periodic event, including crit
   and absorbed ticks. A delta is only accepted for the **same aura instance and
   the same application/expiration signature**, so an in-place refresh resets the
-  phase and never contributes a cross-refresh interval. The interval is a robust
-  estimate over a bounded recent window (haste changes adapt; dropped ticks do
-  not inflate the cadence).
+  phase and never contributes a cross-refresh interval. A **non-nil readable
+  `auraInstanceID` is required** for a learned interval: without one the addon
+  conservatively declines to time the aura rather than risk mixing two
+  applications. The interval is a robust estimate over a bounded recent window
+  (haste changes adapt; dropped ticks do not inflate the cadence).
 * **Magnitude** is learned only from readable, valid, **non-crit, non-absorbed**
   ticks.
 * **Stacking families** (e.g. Lifebloom) are **not** modelled as
@@ -115,16 +174,44 @@ spell ID is a candidate, and a **positively owned current aura** exists.
   is an explicit, switchable assumption.
 * Learning is **session only** (avoids stale gear values) and is invalidated on
   gear/spec changes (`PLAYER_EQUIPMENT_CHANGED`, `SPELLS_CHANGED`,
-  `ACTIVE_TALENT_GROUP_CHANGED`). Form changes do not destroy data. Only explicit
-  `/euihot interval` calibrations persist.
+  `ACTIVE_TALENT_GROUP_CHANGED`). Form changes do not destroy data. Explicit
+  `/euihot interval` and `/euihot amount` calibration **persists** and is never
+  erased by `/reset`, gear or spec events.
+
+### Manual calibration (the supported path when CLEU is unavailable)
+On a restricted client there is no automatic learning; you calibrate from numbers
+you observe yourself. Values are persisted separately from learned data and are
+**user-authoritative** — they win over any learned value in both `GetSpellData`
+and `AmountForStack`. They are labelled `(manual)` / `(manual interval)` in
+`/euihot status`; the addon never pretends they were learned.
+
+* `/euihot interval <spellID> <seconds>` sets the tick interval (0 < s <= 300).
+  `/euihot interval <spellID> off` clears it.
+* `/euihot amount <spellID> <tickTotal> [stacks]` sets the **exact total per
+  tick** at a given stack count (positive, bounded). It is used as-is, never
+  multiplied by the stack count. `/euihot amount <spellID> off [stacks]` clears
+  one stack count or the whole spell. Non-stacking families are always keyed at
+  stack 1 (the `[stacks]` argument is ignored for them); stacking families
+  (Lifebloom) are keyed per exact stack count.
+* A calibrated remainder still needs a **readable, player-owned active aura**
+  (`sourceUnit == "player"`, readable duration/expiration). Foreign, nil, secret
+  or expired auras are withheld; calibration never bypasses these gates.
+* A freshly applied aura is timed on the **application grid**
+  (`expirationTime - duration`) until a phase is actually observed; that is a
+  documented approximation, not a measurement. If CLEU is explicitly enabled and
+  actually delivered, a matching observed tick improves the phase.
+* **Gear and spell-rank changes require recalibration.** Manual values are not
+  re-derived; a rank/gear change can silently change the true tick size.
+* `/euihot test` remains an unrelated fake overlay and never feeds calibration.
 
 ### Ticks
 Ticks are placed on the application grid (`expirationTime - duration`) or on the
 last observed tick when it belongs to the current aura instance **and signature**.
 Only future ticks at or before expiry are counted; the tick exactly at expiry is
 included (tolerance 1e-6). For non-stacking HoTs the per-tick amount is the
-learned total. Missing interval or amount => the estimate is withheld with a
-reason.
+manual override if present, else the learned total; for stacking HoTs it is the
+exact manual/learned total at the current stack count (never `base * stacks`).
+Missing interval or amount => the estimate is withheld with a reason.
 
 ### Overlap / double-counting (conservative by default)
 The native aggregate alone cannot prove whether it includes HoTs, so the default
@@ -170,6 +257,13 @@ own** fill texture and removed safely on change — the vendor textures are neve
 altered. Texture/colour/mask/layout are applied only on structural resolve or
 when a native hook queues a style refresh, not every tick.
 
+Native apply/layout/mask hooks only queue deferred work, and are **filtered to
+the current player frame**: a callback carrying a different frame/unit (target,
+focus, …) is ignored instead of forcing a player rescan. The native painter hook
+only ever requests a repaint. A callback with no identifying argument is treated
+conservatively (it may mark the player), which is what the deterministic tests
+exercise.
+
 First attach and later frame replacement are detected automatically by a cheap
 periodic identity probe and applied out of combat; there is no need to call any
 resolve function manually. Reparent/create/hook installation happen out of
@@ -201,14 +295,17 @@ self tick and flagged `approximate` in status/debug.
 
 ## Diagnostics
 
-`/euihot status` reports: settings; CLEU function and event-registration access
-(with an explicit warning when automatic learning is unavailable); whether the
-overlay frame exists with its real frame/hp names and references; the client
+`/euihot status` reports: settings; **honest CLEU capability** (`function=`,
+`requested=`, `registration=`, `delivered=` with the gate reason) and, when no
+delivery has been observed, the explicit manual-calibration instruction; whether
+the overlay frame exists with its real frame/hp names and references; the client
 build from `GetBuildInfo`; each tracked active owned HoT with spell name, stacks,
-expiry/duration, learned interval, remaining ticks and learned amount; the total
-vs visible (clamped) prediction and the suppress reason. `/euihot debug on` adds
-rich internals. Status formatting is pcall-protected. There are no automatic
-chat prints except one useful startup failure line.
+expiry/duration, interval, remaining ticks and amount, labelled `(manual)` /
+`(approximate)` where applicable; the total vs visible (clamped) prediction and
+the suppress reason. `/euihot debug on` adds rich internals including manual
+calibration counts. Status formatting is pcall-protected and only printed on
+demand. There are no automatic chat prints except one useful startup failure
+line.
 
 ---
 
@@ -249,7 +346,17 @@ both overlap modes; excludes clamp including native; vehicle and nil-unit hiding
 (real and fake); native off even for fake; overlay masks, retexture and texture
 rotation with vendor textures untouched; deferred hook work and automatic timer
 replacement; combat deferral; commands, validation, session-only fake, quiet
-startup.
+startup. v0.2.1 adds: restricted retail/Forever builds never attempt forbidden
+CLEU registration; a missing CLEU function never registers; `/observe off`
+unregisters and `/observe on` re-requests; an accepted registration is shown as
+`delivered=0` until a real event arrives; `/reset` preserves registration and
+delivery capability; `RegisterEvent` returning `false` is treated as rejection;
+manual `interval`+`amount` estimate works with no CLEU at all (identical
+`800`/clamp/expiry/foreign-source behaviour); stack-specific exact Lifebloom
+amounts; calibration validation and `off` clearing; overrides survive reset and
+gear changes and beat learned values; status reports the calibration instruction;
+target/focus hook callbacks are ignored while player/argless callbacks mark the
+player; the native painter only requests a paint.
 
 ---
 
@@ -261,11 +368,17 @@ startup.
 * **First tick(s) are delayed**: nothing is appended until an interval (and, for
   stacking families, the current stack count's magnitude) has been observed or
   calibrated.
-* If CLEU is unavailable/forbidden, automatic estimation is unavailable; only
-  explicit `/euihot interval` calibrations (with no learned magnitudes) apply.
+* Automatic estimation may be **unavailable on the supplied modern client**: the
+  restricted Midnight engines forbid CLEU and the addon deliberately does not
+  attempt registration there. Static manual calibration works only when the
+  aura's duration/source and the native incoming fields are readable — it cannot
+  bypass secret-value restrictions.
+* Manual calibration is **user data, not learning**: it must be recalibrated
+  after gear or spell-rank changes and is never silently adjusted.
 * Default overlap is conservative and may under-predict during direct casts.
 * Strength-varying HoTs are conservatively approximated.
 * Secret/unavailable incoming, unknown/positive heal absorbs, a non-player/secret
   frame unit, or unreadable bar scaling suppress the overlay rather than guess.
 * Haste-curve phase drift is approximated by the recent-window learned interval.
-* Learning is per session (no persisted gear-dependent amounts).
+* Automatic learning is per session; only explicit manual interval/amount
+  calibration persists.
