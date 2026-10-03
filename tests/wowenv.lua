@@ -48,10 +48,19 @@ local function newTexture(owner)
 		_owner = owner,
 		_path = nil,
 		_points = {},
+		_masks = {},
+		_rotation = 0,
 		SetTexture = function(self, p) self._path = p end,
 		GetTexture = function(self) return self._path end,
 		SetPoint = function(self, ...) self._points[#self._points + 1] = { ... } end,
 		ClearAllPoints = function(self) self._points = {} end,
+		AddMaskTexture = function(self, m) self._masks[#self._masks + 1] = m end,
+		RemoveMaskTexture = function(self, m)
+			for i = #self._masks, 1, -1 do if self._masks[i] == m then table.remove(self._masks, i) end end
+		end,
+		GetMaskTextureCount = function(self) return #self._masks end,
+		SetRotation = function(self, r) self._rotation = r end,
+		GetRotation = function(self) return self._rotation end,
 	}
 end
 
@@ -106,6 +115,9 @@ function FrameMT:SetShown(v) self._shown = v and true or false end
 function FrameMT:IsShown() return self._shown end
 function FrameMT:GetParent() return self._parent end
 function FrameMT:SetParent(p) self._parent = p end
+function FrameMT:GetName() return self._name end
+function FrameMT:GetAttribute(name) return self._attributes and self._attributes[name] end
+function FrameMT:SetAttribute(name, v) self._attributes = self._attributes or {}; self._attributes[name] = v end
 function FrameMT:GetFrameLevel() return self._level end
 function FrameMT:SetFrameLevel(l) self._level = l end
 function FrameMT:GetFrameStrata() return self._strata end
@@ -125,6 +137,8 @@ function FrameMT:SetValue(v) self._value = v end
 function FrameMT:GetValue() return self._value end
 function FrameMT:SetStatusBarColor(r, g, b) self._color = { r, g, b } end
 function FrameMT:GetStatusBarColor() return self._color[1], self._color[2], self._color[3] end
+function FrameMT:SetStatusBarAlpha(a) self._sbAlpha = a end
+function FrameMT:GetStatusBarAlpha() return self._sbAlpha or self._alpha end
 function FrameMT:SetAlpha(a) self._alpha = a end
 function FrameMT:GetAlpha() return self._alpha end
 function FrameMT:SetOrientation(o) self._orientation = o end
@@ -150,6 +164,7 @@ function Mocks.Reset()
 	Mocks.chat = {}
 	Mocks.hooks = {}
 	Mocks.tickers = {}
+	Mocks._ns = nil
 	Mocks.now = 100
 	Mocks.playerGUID = "Player-0001"
 	Mocks.health = 5000
@@ -157,8 +172,10 @@ function Mocks.Reset()
 	Mocks.healAbsorb = 0
 	Mocks.inCombat = false
 	Mocks.auras = {}
+	Mocks.auraCalls = 0
 	Mocks.cleu = nil
 	Mocks.powerCalls = 0
+	Mocks.healAbsorbApiPresent = true
 
 	_G.EllesmereUI_HoTPredictionDB = nil
 
@@ -174,7 +191,10 @@ function Mocks.Reset()
 	_G.UnitHealth = function() return Mocks.health end
 	_G.UnitHealthMax = function() return Mocks.maxHealth end
 	_G.UnitPower = function() Mocks.powerCalls = Mocks.powerCalls + 1; return 100000 end
-	_G.UnitGetTotalHealAbsorbs = function() return Mocks.healAbsorb end
+	_G.UnitGetTotalHealAbsorbs = function()
+		if not Mocks.healAbsorbApiPresent then error("missing heal absorb API") end
+		return Mocks.healAbsorb
+	end
 	_G.UnitGetTotalAbsorbs = function() return 0 end
 	_G.issecretvalue = Mocks.IsSecretlike
 	_G.hooksecurefunc = function(tbl, name, fn)
@@ -189,20 +209,39 @@ function Mocks.Reset()
 	_G.C_Timer = { NewTicker = function(interval, fn) Mocks.tickers[#Mocks.tickers + 1] = { interval = interval, fn = fn }; return { Cancel = function() end } end }
 	_G.C_UnitAuras = {
 		GetAuraDataByIndex = function(unit, i, filter)
+			Mocks.auraCalls = Mocks.auraCalls + 1
+			if unit ~= "player" then return nil end
 			if not Mocks.auras or not Mocks.auras[i] then return nil end
 			return Mocks.auras[i]
 		end,
 	}
 	_G.CombatLogGetCurrentEventInfo = function()
-		if not Mocks.cleu then return nil end
-		return unpack(Mocks.cleu)
+		local t = Mocks.cleu
+		if not t then return nil end
+		local n = t.n or #t
+		return unpack(t, 1, n)
 	end
 	_G.EllesmereUI = nil
 end
 
 function Mocks.SetNow(t) Mocks.now = t end
-function Mocks.SetAuras(list) Mocks.auras = list or {} end
-function Mocks.SetCLEU(tuple) Mocks.cleu = tuple end
+function Mocks.SetAuras(list, opts)
+	Mocks.auras = list or {}
+	if not (opts and opts.noInvalidate) and Mocks._ns and Mocks._ns.api then
+		Mocks._ns.api.InvalidateAuraCache()
+	end
+end
+function Mocks.SetCLEU(tuple)
+	if type(tuple) ~= "table" then
+		Mocks.cleu = nil
+		return
+	end
+	if tuple.n == nil then tuple.n = #tuple end
+	Mocks.cleu = tuple
+end
+function Mocks.PackCLEU(...)
+	return { n = select("#", ...), ... }
+end
 function Mocks.Fire(event, ...)
 	-- route through the addon's own dispatcher
 	if Mocks._ns and Mocks._ns.dispatch then
@@ -218,6 +257,7 @@ function Mocks.BuildEUF()
 	local player = newFrame("Frame", "EUF_Player", _G.UIParent)
 	player:SetFrameLevel(5)
 	player:SetFrameStrata("MEDIUM")
+	player._euiUnit = "player"
 
 	local hp = newFrame("StatusBar", "EUF_PlayerHealth", player)
 	hp:SetSize(200, 30)
@@ -237,8 +277,12 @@ function Mocks.BuildEUF()
 	predOther:SetMinMaxValues(0, Mocks.maxHealth)
 	predOther:SetValue(0)
 	predOther:SetStatusBarTexture("Interface\\pred.blp")
-	predOther:SetStatusBarColor(40 / 255, 170 / 255, 40 / 255)
+	predOther:SetStatusBarColor(40 / 255, 40 / 255, 40 / 255)
 	predOther:Hide()
+
+	local absorbMask = newFrame("Frame", "EUF_AbsorbMask", hp)
+	local blizzMask = newFrame("Frame", "EUF_BlizzMask", hp)
+	hp._blizzMask = blizzMask
 
 	local ab = {
 		_predOn = true,
@@ -247,7 +291,9 @@ function Mocks.BuildEUF()
 		_missClip = missClip,
 		_predMy = predMy,
 		_predOther = predOther,
-		_predCalc = { GetIncomingHeals = function() return nil, 0, 0 end },
+		_absorbMask = absorbMask,
+		_blizzMask = blizzMask,
+		_blizzMaskOn = false,
 	}
 	player.Health = hp
 	player.HealthPrediction = { damageAbsorb = ab }
@@ -259,6 +305,7 @@ function Mocks.BuildEUF()
 				UF_HealPredApply = function() end,
 				UF_AnchorHealPred = function() end,
 				UF_HealPredLayout = function() end,
+				UF_PaintHealPred = function() end,
 			},
 		},
 	}
