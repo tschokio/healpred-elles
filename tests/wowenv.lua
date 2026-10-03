@@ -146,7 +146,12 @@ function FrameMT:GetOrientation() return self._orientation end
 function FrameMT:SetReverseFill(v) self._reverse = v and true or false end
 function FrameMT:IsReverseFill() return self._reverse end
 function FrameMT:GetReverseFill() return self._reverse end
-function FrameMT:RegisterEvent(e) self._events[e] = true end
+function FrameMT:RegisterEvent(e)
+	self._events[e] = true
+	if Mocks.registrationAttempts then
+		Mocks.registrationAttempts[e] = (Mocks.registrationAttempts[e] or 0) + 1
+	end
+end
 function FrameMT:UnregisterEvent(e) self._events[e] = nil end
 function FrameMT:SetScript(name, fn) self._scripts[name] = fn end
 function FrameMT:GetScript(name) return self._scripts[name] end
@@ -164,6 +169,7 @@ function Mocks.Reset()
 	Mocks.chat = {}
 	Mocks.hooks = {}
 	Mocks.tickers = {}
+	Mocks.registrationAttempts = {}
 	Mocks._ns = nil
 	Mocks.now = 100
 	Mocks.playerGUID = "Player-0001"
@@ -185,6 +191,10 @@ function Mocks.Reset()
 
 	_G.CreateFrame = function(t, n, p) return newFrame(t, n, p) end
 	_G.GetTime = function() return Mocks.now end
+	-- Default mocked build is a clean (non-restricted) engine so the automatic
+	-- learning tests exercise guarded CLEU registration. Restricted-client tests
+	-- override this via Mocks.SetBuild / Mocks.NewEnv{ build = ... }.
+	_G.GetBuildInfo = function() return "11.0.5", 58000, "2024-01-01", 110005 end
 	_G.InCombatLockdown = function() return Mocks.inCombat end
 	_G.UnitGUID = function() return Mocks.playerGUID end
 	_G.UnitExists = function() return true end
@@ -238,6 +248,11 @@ function Mocks.SetCLEU(tuple)
 	end
 	if tuple.n == nil then tuple.n = #tuple end
 	Mocks.cleu = tuple
+end
+
+-- Force the mocked GetBuildInfo tuple. `toc` is the 4th return (interface).
+function Mocks.SetBuild(version, build, date, toc)
+	_G.GetBuildInfo = function() return version, build, date, toc end
 end
 function Mocks.PackCLEU(...)
 	return { n = select("#", ...), ... }
@@ -348,8 +363,14 @@ function Mocks.LoadAddon(addonName)
 	return ns
 end
 
-function Mocks.NewEnv()
+function Mocks.NewEnv(opts)
 	Mocks.Reset()
+	if opts and opts.build then
+		Mocks.SetBuild(opts.build[1], opts.build[2], opts.build[3], opts.build[4])
+	end
+	if opts and opts.noCLEU then
+		_G.CombatLogGetCurrentEventInfo = nil
+	end
 	local euf = Mocks.BuildEUF()
 	local ns = Mocks.LoadAddon()
 	Mocks.Fire("ADDON_LOADED", "EllesmereUI_HoTPrediction")
