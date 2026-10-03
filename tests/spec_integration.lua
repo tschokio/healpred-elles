@@ -1160,3 +1160,205 @@ T.register("integration: native hooks ignore target/focus and only mark the play
 	assert_true(env.ns.overlay.state.paintRequested, "painter only requests a paint")
 	assert_false(env.ns.overlay.state.structureDirty, "painter never resolves")
 end)
+
+-----------------------------------------------------------------------------
+-- v0.2.2 secret-range rendering + fake diagnostics
+-----------------------------------------------------------------------------
+
+T.register("integration: fake renders 20000 with restricted ranges, health and native incoming", function()
+	local env = newEnv({ noCLEU = true })
+	local secretMax = Mocks.MakeSecret()
+	Mocks.health = Mocks.MakeSecret()
+	Mocks.maxHealth = Mocks.MakeSecret()
+	env.ab._predMy:SetMinMaxValues(0, secretMax)
+	env.ab._predOther:SetMinMaxValues(0, secretMax)
+	env.ab._predMy:SetValue(Mocks.MakeSecret())
+	env.ab._predOther:SetValue(Mocks.MakeSecret())
+	env.ns.HandleCommand("test 20000")
+	runTimer()
+	local f = env.ns.overlay.state.frame
+	assert_not_nil(f, "overlay frame exists")
+	assert_true(f:IsShown(), "fake shows despite restricted range/health/incoming")
+	assert_near(f:GetValue(), 20000, 1e-9, "requested public value applied to our bar")
+	local res = env.ns.session.lastStatus
+	assert_true(res and res.fake, "status is the fake render, not a real estimate")
+	assert_eq(res.requested, 20000, "status carries the requested amount")
+	assert_true(res.rendered, "status records render success")
+	assert_true(tostring(env.ns.session.lastRange):match("native%-range") ~= nil, "range source is the native bar")
+	assert_true(tostring(env.ns.session.lastRange):match("restricted") ~= nil, "range labelled restricted")
+	assertNoSecrets(env.ns.session)
+	assert_true(Mocks.IsSecretlike(f._max), "only our own widget stores the restricted range verbatim")
+end)
+
+T.register("integration: ApplyRange passes a restricted native range through untouched", function()
+	local env = newEnv()
+	env.ns.overlay.Resolve()
+	local f = env.ns.overlay.state.frame
+	local secretMax = Mocks.MakeSecret()
+	env.ab._predMy:SetMinMaxValues(0, secretMax)
+	local ok, diag = env.ns.overlay.ApplyRange(f, env.ab)
+	assert_true(ok, "restricted range accepted by the engine-driven setter")
+	assert_true(tostring(diag):match("native%-range") ~= nil)
+	assert_true(tostring(diag):match("restricted") ~= nil)
+	assert_true(Mocks.IsSecretlike(f._max), "sentinel stored verbatim, never reinterpreted as plain")
+end)
+
+T.register("integration: ApplyRange falls back to public UnitHealthMax when native getter is gone", function()
+	local env = newEnv()
+	env.ns.overlay.Resolve()
+	local f = env.ns.overlay.state.frame
+	env.ab._predMy.GetMinMaxValues = false
+	Mocks.health = Mocks.MakeSecret() -- must not matter: scaling never reads current health
+	Mocks.maxHealth = 4321
+	local ok, diag = env.ns.overlay.ApplyRange(f, env.ab)
+	assert_true(ok, "fallback succeeds")
+	assert_true(tostring(diag):match("UnitHealthMax") ~= nil)
+	assert_true(tostring(diag):match("public") ~= nil)
+	assert_near(f._max, 4321, 1e-9)
+end)
+
+T.register("integration: ApplyRange tries the fallback independently after a restricted setter refusal", function()
+	local env = newEnv()
+	env.ns.overlay.Resolve()
+	local f = env.ns.overlay.state.frame
+	env.ab._predMy:SetMinMaxValues(0, Mocks.MakeSecret())
+	Mocks.rejectSecretRange = true
+	Mocks.maxHealth = 7777
+	local ok, diag = env.ns.overlay.ApplyRange(f, env.ab)
+	assert_true(ok, "fallback used even though the native setter refused the secret")
+	assert_true(tostring(diag):match("UnitHealthMax") ~= nil)
+	assert_near(f._max, 7777, 1e-9)
+end)
+
+T.register("integration: secret current health never blocks a public max", function()
+	local env = newEnv()
+	env.ns.overlay.Resolve()
+	local f = env.ns.overlay.state.frame
+	Mocks.health = Mocks.MakeSecret()
+	-- native range public, current health secret: still usable
+	env.ab._predMy:SetMinMaxValues(0, 5000)
+	local okNative = env.ns.overlay.ApplyRange(f, env.ab)
+	assert_true(okNative)
+	assert_near(f._max, 5000, 1e-9)
+	-- native range gone, UnitHealthMax public, current health secret
+	env.ab._predMy.GetMinMaxValues = false
+	Mocks.maxHealth = 6000
+	local ok = env.ns.overlay.ApplyRange(f, env.ab)
+	assert_true(ok)
+	assert_near(f._max, 6000, 1e-9)
+end)
+
+T.register("integration: missing range or an erroring setter hides with an accurate reason", function()
+	local env = newEnv()
+	env.ns.overlay.Resolve()
+	local f = env.ns.overlay.state.frame
+	env.ab._predMy.GetMinMaxValues = false
+	Mocks.maxHealth = 0
+	local ok, diag = env.ns.overlay.ApplyRange(f, env.ab)
+	assert_false(ok)
+	assert_true(tostring(diag):match("no readable range") ~= nil, "actual reason reported")
+	f.SetMinMaxValues = function() error("setter exploded") end
+	Mocks.maxHealth = 5000
+	local ok2, diag2 = env.ns.overlay.ApplyRange(f, env.ab)
+	assert_false(ok2)
+	assert_true(tostring(diag2):match("setter refused") ~= nil)
+	local rok, rreason = env.ns.overlay.RenderValue(500, "test")
+	assert_false(rok, "render reports failure instead of raising")
+	assert_eq(rreason, diag2)
+	assert_false(f:IsShown(), "hidden on setter error")
+	assert_eq(env.ns.session.lastRenderReason, diag2)
+end)
+
+T.register("integration: fake render respects native-off and vehicle gates", function()
+	local env = newEnv()
+	env.ab._predOn = false
+	local res = env.ns.overlay.EvaluateFake(env.ab, 1000)
+	assert_true(res.suppressed)
+	assert_eq(res.reason, "native prediction disabled")
+	env.ab._predOn = true
+	env.player._euiUnit = "vehicle"
+	local res2 = env.ns.overlay.EvaluateFake(env.ab, 1000)
+	assert_true(res2.suppressed)
+	env.player._euiUnit = "player"
+	local res3 = env.ns.overlay.EvaluateFake(env.ab, 1000)
+	assert_false(res3.suppressed)
+	assert_eq(res3.added, 1000)
+	assert_eq(res3.requested, 1000)
+end)
+
+T.register("integration: fake tick never consults the real HoT/aura estimate", function()
+	local env = newEnv()
+	runTimer() -- attach
+	Mocks.auraCalls = 0
+	env.ns.HandleCommand("test 1000")
+	runTimer()
+	assert_eq(Mocks.auraCalls, 0, "fake render made no aura API calls")
+	local res = env.ns.session.lastStatus
+	assert_true(res and res.fake)
+	assert_eq(res.hotEstimate, nil, "no real hot estimate involved")
+	assert_nil(res.native, "fake does not evaluate native incoming either")
+end)
+
+T.register("integration: /test off hides the overlay on the next tick", function()
+	local env = newEnv()
+	env.ns.HandleCommand("test 1000")
+	runTimer()
+	assert_true(env.ns.overlay.state.frame:IsShown())
+	env.ns.HandleCommand("test off")
+	runTimer()
+	assert_false(env.ns.overlay.state.frame:IsShown(), "hidden after test off")
+	assert_nil(env.ns.session.fake)
+end)
+
+T.register("integration: fake teststatus is one concise line and never claims a real HoT", function()
+	local env = newEnv({ noCLEU = true })
+	env.ab._predMy:SetMinMaxValues(0, Mocks.MakeSecret())
+	Mocks.health = Mocks.MakeSecret()
+	Mocks.maxHealth = Mocks.MakeSecret()
+	env.ns.HandleCommand("test 20000")
+	runTimer()
+	Mocks.chat = {}
+	env.ns.HandleCommand("teststatus")
+	local line = table.concat(Mocks.chat, "\n")
+	assert_true(line:match("teststatus unit=player") ~= nil, "unit readiness")
+	assert_true(line:match("native=ready") ~= nil, "native readiness")
+	assert_true(line:match("fakeRequested=20000") ~= nil, "requested amount")
+	assert_true(line:match("overlayShown=true") ~= nil, "own overlay shown")
+	assert_true(line:match("range=native%-range") ~= nil, "range source")
+	assert_true(line:match("restricted") ~= nil, "restricted/public label")
+	assert_true(line:match("engine%-clipped") ~= nil, "visible amount unknown")
+	assert_true(line:match("no active self HoT") == nil, "never conflates with the real estimate")
+	assert_eq(select(2, line:gsub("\n", "\n")), 0, "single line only")
+end)
+
+T.register("integration: full status labels fake and never reports a real visible zero", function()
+	local env = newEnv({ noCLEU = true })
+	env.ab._predMy:SetMinMaxValues(0, Mocks.MakeSecret())
+	Mocks.health = Mocks.MakeSecret()
+	Mocks.maxHealth = Mocks.MakeSecret()
+	env.ns.HandleCommand("test 20000")
+	runTimer()
+	Mocks.chat = {}
+	env.ns.HandleCommand("status")
+	local joined = table.concat(Mocks.chat, "\n")
+	assert_true(joined:match("fake test requested=20000") ~= nil, "fake labelled")
+	assert_true(joined:match("engine%-clipped") ~= nil, "visible unknown/engine-clipped")
+	assert_true(joined:match("no active self HoT estimate") == nil, "no unrelated real reason")
+	assert_true(joined:match("visible=0") == nil, "no numeric zero claim")
+	assert_true(joined:match("restricted") ~= nil, "range restricted label")
+end)
+
+T.register("integration: real manual HoT stays suppressed on secret incoming", function()
+	local env = newEnv()
+	env.ns.HandleCommand("interval 774 3")
+	env.ns.HandleCommand("amount 774 200")
+	liveAura(env)
+	env.ab._predMy:SetValue(Mocks.MakeSecret())
+	Mocks.SetNow(0)
+	local res = env.ns.model.Evaluate(0, { ab = env.ab })
+	assert_true(res.suppressed, "secret native incoming still suppresses the real overlay")
+	assert_true(tostring(res.reason):match("secret") ~= nil)
+	runTimer()
+	assert_false(env.ns.overlay.state.frame:IsShown(), "real overlay hidden")
+end)
+

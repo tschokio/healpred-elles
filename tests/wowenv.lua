@@ -131,7 +131,12 @@ function FrameMT:SetStatusBarTexture(t)
 		self._sbTexture = t
 	end
 end
-function FrameMT:SetMinMaxValues(a, b) self._min, self._max = a, b end
+function FrameMT:SetMinMaxValues(a, b)
+	if Mocks.rejectSecretRange and Mocks.IsSecretlike(b) then
+		error("setter refuses secret range")
+	end
+	self._min, self._max = a, b
+end
 function FrameMT:GetMinMaxValues() return self._min, self._max end
 function FrameMT:SetValue(v) self._value = v end
 function FrameMT:GetValue() return self._value end
@@ -182,6 +187,7 @@ function Mocks.Reset()
 	Mocks.cleu = nil
 	Mocks.powerCalls = 0
 	Mocks.healAbsorbApiPresent = true
+	Mocks.rejectSecretRange = false
 
 	_G.EllesmereUI_HoTPredictionDB = nil
 

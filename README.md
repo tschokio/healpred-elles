@@ -36,13 +36,22 @@ StatusBar of its own and secure-hooks native callbacks read-only.
 
 The installed folder is the deliverable; there is no separate zip/binary.
 
+### Updating (to v0.2.2)
+
+Replace the `EllesmereUI_HoTPrediction/` folder in your AddOns directory with the
+new one, then `/reload` (or restart). SavedVariables
+(`EllesmereUI_HoTPredictionDB`) carry over; only the code changes. The fake test
+value is never persisted, so update with no fake active. Verify with
+`/euihot status` (version line) and, while previewing a fake, `/euihot
+teststatus`.
+
 ## Quick start
 
 1. Install `EllesmereUIUnitFrames`, **enable native heal prediction** for the
    player frame, then `/reload`.
 2. While injured, verify rendering with `/euihot test 1000` (a fake `+1000`
-   segment). `/euihot test off` clears it. `/euihot status` reports what the
-   addon actually sees.
+   segment) and `/euihot teststatus` (one concise line). `/euihot test off`
+   clears it. `/euihot status` reports what the addon actually sees.
 3. Automatic prediction needs combat-log access. If `/euihot status` shows
    `delivered=0` (unverified) or `automatic tick learning unavailable`, this
    client does not expose CLEU. Calibrate by hand from numbers **you observe in
@@ -74,6 +83,7 @@ All commands are `/euihot ...` (alias `/hotpred ...`).
 | --- | --- |
 | `test <value>` | Show a fake `+value` segment after the native chain (session only, finite non-negative). |
 | `test off` | Clear the fake segment. |
+| `teststatus` | One concise line for the fake render: unit/native readiness, requested amount, own overlay `IsShown`, range source (`native-range`/`UnitHealthMax`, public/restricted), last render reason, engine-clipped visible amount. Use this when chat scrollback is broken. |
 | `status` | One concise report: settings, honest CLEU capability (`function`/`requested`/`registration`/`delivered`/gate), overlay structure, tracked HoTs (manual/approximate labels), prediction. |
 | `debug [on\|off]` | Toggle on-demand diagnostics (prints status when turned on). Debug lines are emitted on change, not per tick. |
 | `enable on\|off` | Enable/disable the overlay. |
@@ -203,6 +213,23 @@ and `AmountForStack`. They are labelled `(manual)` / `(manual interval)` in
 * **Gear and spell-rank changes require recalibration.** Manual values are not
   re-derived; a rank/gear change can silently change the true tick size.
 * `/euihot test` remains an unrelated fake overlay and never feeds calibration.
+  It is a pure rendering exercise: it still requires the native structure
+  (player unit, prediction on, both bars) but it never consults the real HoT
+  estimate, so a missing self HoT is never reported as its reason. `/euihot
+  teststatus` prints one concise line for it.
+
+**What `/euihot test` can and cannot show (v0.2.2).** The fake segment sets our
+own bar's `SetMinMaxValues(0, max)` and `SetValue(requested)`. The `max` comes
+from the native prediction range (`_predMy:GetMinMaxValues`) or, failing that,
+`UnitHealthMax` — exactly the restricted values the native EllesmereUI frame
+consumes. If a value is **secret**, it is passed verbatim to the setter and never
+inspected, compared, formatted or stored by us (only our widget holds it); the
+settle is pcall-protected and a refusal hides the segment with a short reason.
+Because the native clip still bounds the bar, and the current health may itself
+be secret, the requested amount is not guaranteed to be fully visible: the
+status calls it `unknown (engine-clipped)` rather than claiming a number. The
+fake path also never calls the health-combining `GetHealthNumbers` adapter for
+scaling, so a secret current health cannot block a perfectly usable max.
 
 ### Ticks
 Ticks are placed on the application grid (`expirationTime - duration`) or on the
@@ -257,6 +284,21 @@ own** fill texture and removed safely on change — the vendor textures are neve
 altered. Texture/colour/mask/layout are applied only on structural resolve or
 when a native hook queues a style refresh, not every tick.
 
+**Range / restricted values (v0.2.2).** The bar range is resolved by our own
+`ApplyRange` adapter: it reads the native prediction range under `pcall` and
+tests `issecretvalue` **before** any numeric check. A secret max is handed
+verbatim to our own `SetMinMaxValues(0, max)` (pcall; boolean result only) and
+never compared, calculated, stringified or branched on. A public max must be a
+finite number `> 0`. If the native range is unavailable or the setter refuses it
+(for example an engine that will not accept a restricted range from us), the
+fallback is `UnitHealthMax` — deliberately **not** the current-health-combining
+`GetHealthNumbers` adapter, so a secret current health cannot block a usable max.
+The failure reason is a short public label of the source and whether it was
+`restricted`; the range value itself is never placed in chat or session state
+(only our widget stores it). The real overlap path is unchanged and still
+refuses a secret native incoming: this range fix enables safe rendering, it does
+not claim automatic prediction works.
+
 Native apply/layout/mask hooks only queue deferred work, and are **filtered to
 the current player frame**: a callback carrying a different frame/unit (target,
 focus, …) is ignored instead of forcing a player rescan. The native painter hook
@@ -307,6 +349,15 @@ calibration counts. Status formatting is pcall-protected and only printed on
 demand. There are no automatic chat prints except one useful startup failure
 line.
 
+`/euihot teststatus` (v0.2.2) is a compact one-line alternative to the long
+`/status` dump, intended for a broken chat scrollback. It reports the player unit
+and native readiness, the fake requested amount, whether our own overlay is
+shown, the last range source and whether it was `public` or `restricted`, the
+last render reason, and calls the visible amount `unknown (engine-clipped)`.
+When a fake is active, full `/status` labels it as a fake test and no longer
+reports an unrelated real-model "no active self HoT estimate" or a bogus numeric
+`visible=0`; a secret range/value is never formatted.
+
 ---
 
 ## Tests
@@ -356,7 +407,17 @@ manual `interval`+`amount` estimate works with no CLEU at all (identical
 amounts; calibration validation and `off` clearing; overrides survive reset and
 gear changes and beat learned values; status reports the calibration instruction;
 target/focus hook callbacks are ignored while player/argless callbacks mark the
-player; the native painter only requests a paint.
+player; the native painter only requests a paint. v0.2.2 adds: the fake `+20000`
+segment renders while the native ranges, current/max health and native incoming
+are all secret and CLEU is unavailable; a restricted native range is passed
+through to our setter untouched; `UnitHealthMax` fallback is tried independently
+when the native getter is gone or the setter refuses a secret; a secret current
+health never blocks a public max; a missing/invalid range or an erroring setter
+stays hidden with the actual reason and a bool return; `/test off` hides on the
+next tick; `EvaluateFake` still honours native-off/vehicle gates; `/teststatus`
+is one concise line and neither it nor `/status` claims a real HoT or a numeric
+visible zero for a fake; a real manual HoT stays suppressed on secret incoming;
+no raw secret is retained anywhere except our own widget.
 
 ---
 
@@ -379,6 +440,11 @@ player; the native painter only requests a paint.
 * Strength-varying HoTs are conservatively approximated.
 * Secret/unavailable incoming, unknown/positive heal absorbs, a non-player/secret
   frame unit, or unreadable bar scaling suppress the overlay rather than guess.
+  v0.2.2 fixes only the **rendering** path (`SetMinMaxValues`/`UnitHealthMax` range
+  handling); it does not make automatic prediction work where CLEU is
+  unavailable, and the real overlap still refuses a secret native incoming.
+  The real CLEU/native restrictions on the supplied restricted client remain
+  unresolved and are not worked around.
 * Haste-curve phase drift is approximated by the recent-window learned interval.
 * Automatic learning is per session; only explicit manual interval/amount
   calibration persists.
