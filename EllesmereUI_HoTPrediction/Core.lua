@@ -6,7 +6,7 @@
 local addonName, ns = ...
 
 ns.name = addonName
-ns.version = "0.2.2"
+ns.version = "0.2.3"
 ns.debugEnabled = false
 ns.inCombat = false
 ns.started = false
@@ -449,7 +449,7 @@ local function parseNumber(s)
 	return tonumber(s)
 end
 
-local HELP = "commands: test <v> | test off | teststatus | status | debug [on|off] | enable on|off | alpha <a> | color <r> <g> <b> | color overlay <r> <g> <b> | color native | interval <id> <s>|off | amount <id> <tickTotal> [stacks]|off [stacks] | observe on|off | spell add|remove <id> [name] | amountmode total|effective | excludehots on|off | reset | help"
+local HELP = "commands: test <v> | test off | teststatus | status | window | debug [on|off] | debug window | enable on|off | alpha <a> | color <r> <g> <b> | color overlay <r> <g> <b> | color native | interval <id> <s>|off | amount <id> <tickTotal> [stacks]|off [stacks] | observe on|off | spell add|remove <id> [name] | amountmode total|effective | excludehots on|off | reset | help"
 
 -- Bound for a manual tick-total calibration. It only has to be a sane upper
 -- limit on a single heal tick, not a game mechanic.
@@ -485,8 +485,23 @@ function ns.HandleCommand(input)
 	elseif cmd == "teststatus" then
 		ns.EmitTestStatus()
 		return
+	elseif cmd == "window" then
+		if ns.OpenDebugWindow then
+			ns.OpenDebugWindow()
+		else
+			ns.print("debug window unavailable (DebugWindow.lua not loaded).")
+		end
+		return
 	elseif cmd == "debug" then
 		local v = (args[1] or ""):lower()
+		if v == "window" then
+			if ns.OpenDebugWindow then
+				ns.OpenDebugWindow()
+			else
+				ns.print("debug window unavailable (DebugWindow.lua not loaded).")
+			end
+			return
+		end
 		if v == "on" then
 			ns.db.debug = true
 			ns.debugEnabled = true
@@ -689,7 +704,8 @@ end
 -- diagnostics
 ------------------------------------------------------------------------------
 
-local function buildString()
+-- Client build line. Public and never raises.
+function ns.BuildString()
 	local f = GetBuildInfo
 	if type(f) == "function" then
 		local ok, version, build, date, toc = pcall(f)
@@ -700,17 +716,62 @@ local function buildString()
 	return "GetBuildInfo unavailable (addon v" .. tostring(ns.version) .. ")"
 end
 
--- Public status is concise; it is always pcall-protected so a weird widget can
--- never raise in a user's chat frame.
-function ns.EmitStatus()
-	local ok, err = pcall(ns._EmitStatus)
-	if not ok then
-		ns.print("status error (protected): " .. tostring(err))
-	end
+-- Remove WoW chat/format escape artifacts so report text is plain copyable
+-- text. We never generate colour codes ourselves, but error text might carry one.
+function ns.StripFormatting(s)
+	if type(s) ~= "string" then s = tostring(s) end
+	s = s:gsub("|c%x%x%x%x%x%x%x%x", "") -- |cAARRGGBB
+	s = s:gsub("|r", "")
+	s = s:gsub("|H.-|h", "")
+	s = s:gsub("|h", "")
+	s = s:gsub("|T.-|t", "")
+	s = s:gsub("||", "|")
+	return s
 end
 
-function ns._EmitStatus()
+function ns.Truncate(s, n)
+	s = tostring(s or "")
+	n = n or 200
+	if #s > n then return s:sub(1, n) .. "..." end
+	return s
+end
+
+-- Last-resort copyable text when a report builder itself fails; never repeats a
+-- raw Lua error verbatim and never raises.
+function ns.BuildStatusFallback(err)
+	return string.format(
+		"addon v%s diagnostics unavailable (protected)\nerror=%s\nbuild=%s\nThis fallback is safe to copy; /euihot status may work after /reload.",
+		tostring(ns.version), ns.Truncate(err, 200), ns.BuildString())
+end
+
+-- PUBLIC, non-printing report builders. They return plain text and never touch
+-- chat; EmitStatus/EmitTestStatus below print them, and the debug window shows
+-- them in a selectable EditBox. Both are error-protected so a weird widget can
+-- never raise in a user's chat frame: a failed build returns useful fallback
+-- text instead of a repeated Lua error (a partial report is preferred).
+function ns.BuildStatusReport(includeDebug)
+	local ok, res = pcall(ns._BuildStatusReport, includeDebug)
+	if ok and type(res) == "string" and res ~= "" then
+		return ns.StripFormatting(res)
+	end
+	return ns.BuildStatusFallback(ok and "empty report" or res)
+end
+
+function ns.BuildTestStatusReport()
+	local ok, res = pcall(ns._BuildTestStatusReport)
+	if ok and type(res) == "string" and res ~= "" then
+		return ns.StripFormatting(res)
+	end
+	return ns.BuildStatusFallback(ok and "empty report" or res)
+end
+
+function ns.EmitStatus()
+	ns.print(ns.BuildStatusReport(nil))
+end
+
+function ns._BuildStatusReport(includeDebug)
 	if not ns.db then ns.InitDatabase() end
+	if includeDebug == nil then includeDebug = ns.db.debug and true or false end
 	local lines = {}
 	local function add(fmt, ...)
 		if select("#", ...) > 0 then
@@ -755,11 +816,16 @@ function ns._EmitStatus()
 		local ok, v = pcall(st.hp.GetName, st.hp)
 		if ok then hpName = v end
 	end
+	local shown = false
+	if f and f.IsShown then
+		local okS, v = pcall(f.IsShown, f)
+		shown = okS and v and true or false
+	end
 	add("overlay frame=%s shown=%s parent=%s hp=%s",
 		f and (tostring(frameName) .. " ref=" .. tostring(f)) or "MISSING",
-		tostring(f and f.IsShown and f:IsShown() or false),
+		tostring(shown),
 		tostring(st.parent ~= nil), tostring(hpName))
-	add("build=%s", buildString())
+	add("build=%s", ns.BuildString())
 	add("native predOn=%s predMy=%s predOther=%s missClip=%s",
 		tostring(st.ab and st.ab._predOn), tostring(st.ab and st.ab._predMy ~= nil),
 		tostring(st.ab and st.ab._predOther ~= nil), tostring(st.ab and st.ab._missClip ~= nil))
@@ -769,30 +835,35 @@ function ns._EmitStatus()
 	local auras = (ns.api and ns.api.ReadPlayerAuras and ns.api.ReadPlayerAuras()) or {}
 	local tracked = 0
 	local now = ns.now()
-	for i = 1, #auras do
-		local aura = auras[i]
-		local meta = ns.spells.Meta(aura.spellID)
-		if meta and aura.sourceUnit == "player" then
-			tracked = tracked + 1
-			local data = ns.learner.GetSpellData(aura.spellID)
-			local ticks = ns.model.ComputeTicks(aura, data, now)
-			local amount, manual
-			if meta.stacksMatter then
-				amount = ns.learner.AmountForStack(aura.spellID, aura.stacks)
-				manual = ns.spells.AmountOverride(aura.spellID, aura.stacks) ~= nil
-			else
-				amount = data.basePerStack
-				manual = data.manualAmount and true or false
+	local okHot, hotErr = pcall(function()
+		for i = 1, #auras do
+			local aura = auras[i]
+			local meta = ns.spells.Meta(aura.spellID)
+			if meta and aura.sourceUnit == "player" then
+				tracked = tracked + 1
+				local data = ns.learner.GetSpellData(aura.spellID)
+				local ticks = ns.model.ComputeTicks(aura, data, now)
+				local amount, manual
+				if meta.stacksMatter then
+					amount = ns.learner.AmountForStack(aura.spellID, aura.stacks)
+					manual = ns.spells.AmountOverride(aura.spellID, aura.stacks) ~= nil
+				else
+					amount = data.basePerStack
+					manual = data.manualAmount and true or false
+				end
+				local tag = meta.approximate and " (approximate)" or ""
+				if manual then tag = tag .. " (manual)" end
+				if data.manualInterval then tag = tag .. " (manual interval)" end
+				add("  hot %s [%s] stacks=%s exp=%s dur=%s interval=%s ticksLeft=%s amount=%s%s",
+					tostring(aura.spellID), tostring(meta.name or meta.family), tostring(aura.stacks),
+					tostring(ns.round(aura.expirationTime, 1)), tostring(ns.round(aura.duration, 1)),
+					tostring(ns.round(data.interval, 2)), tostring(ticks),
+					tostring(amount and ns.round(amount, 1) or "?"), tag)
 			end
-			local tag = meta.approximate and " (approximate)" or ""
-			if manual then tag = tag .. " (manual)" end
-			if data.manualInterval then tag = tag .. " (manual interval)" end
-			add("  hot %s [%s] stacks=%s exp=%s dur=%s interval=%s ticksLeft=%s amount=%s%s",
-				tostring(aura.spellID), tostring(meta.name or meta.family), tostring(aura.stacks),
-				tostring(ns.round(aura.expirationTime, 1)), tostring(ns.round(aura.duration, 1)),
-				tostring(ns.round(data.interval, 2)), tostring(ticks),
-				tostring(amount and ns.round(amount, 1) or "?"), tag)
 		end
+	end)
+	if not okHot then
+		add("hot scan error (protected): %s", ns.Truncate(hotErr, 160))
 	end
 	add("tracked active HoTs=%d", tracked)
 
@@ -825,24 +896,22 @@ function ns._EmitStatus()
 		add("fake active=%s", tostring(ns.session.fake.value))
 	end
 
-	if ns.db.debug then
-		pcall(ns.EmitDebugDetails, lines)
+	if includeDebug then
+		local ok, err = pcall(ns.EmitDebugDetails, lines)
+		if not ok then add("debug details error (protected): %s", ns.Truncate(err, 160)) end
 	end
 
-	ns.print(table.concat(lines, "\n"))
+	return table.concat(lines, "\n")
 end
 
 -- Concise ONE-LINE render status, for users whose chat scrollback is broken by
 -- the long /status dump. Reports only PUBLIC facts; a secret range/value is
 -- never formatted or read back (only the widget keeps it).
 function ns.EmitTestStatus()
-	local ok, err = pcall(ns._EmitTestStatus)
-	if not ok then
-		ns.print("teststatus error (protected): " .. tostring(err))
-	end
+	ns.print(ns.BuildTestStatusReport())
 end
 
-function ns._EmitTestStatus()
+function ns._BuildTestStatusReport()
 	if not ns.db then ns.InitDatabase() end
 	local st = (ns.overlay and ns.overlay.state) or {}
 
@@ -877,12 +946,12 @@ function ns._EmitTestStatus()
 	local unitLabel = unit
 	if unitLabel == nil then unitLabel = (uerr or "?") end
 
-	ns.print(string.format(
+	return string.format(
 		"teststatus unit=%s native=%s fakeRequested=%s overlayShown=%s range=%s render=%s visible=%s cleu=%s delivered=%s",
 		tostring(unitLabel), tostring(native), tostring(fakeReq or "none"), tostring(shown),
 		tostring(ns.session and ns.session.lastRange or "n/a"),
 		tostring(ns.session and ns.session.lastRenderReason or "n/a"),
-		"unknown (engine-clipped)", tostring(cleuFn), tostring(delivered)))
+		"unknown (engine-clipped)", tostring(cleuFn), tostring(delivered))
 end
 
 -- Rich on-demand diagnostics used only while debug is enabled.

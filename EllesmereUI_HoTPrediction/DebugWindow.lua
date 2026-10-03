@@ -1,0 +1,207 @@
+-- EllesmereUI_HoTPrediction / DebugWindow.lua
+-- A lazy, copyable in-game diagnostic snapshot window.
+--
+-- Design constraints (see README):
+--   * Created ONLY when the user opens it (/euihot window, /euihot debug window).
+--   * Exactly one named addon-owned frame; no other new globals. The name is
+--     registered with UISpecialFrames so Escape closes it.
+--   * Hidden, never deleted, so it is reused and keeps its position while the
+--     session lasts.
+--   * No timers, no OnUpdate, no network, no frame scans. A snapshot is captured
+--     only on Open/Refresh, so a live tick can never steal the user's selection.
+--   * The EditBox is plain text (no |c/|r artifacts) and never contains a raw
+--     secret value; editing it only edits the on-screen copy, it can never mutate
+--     addon settings or learned data.
+--
+-- This file only builds the widget and assembles report text. The report text
+-- itself comes from the shared, non-printing builders in Core.lua.
+
+local addonName, ns = ...
+
+-- The one named frame global we introduce. Everything else lives on `ns` or is
+-- local to this file.
+local WINDOW_NAME = "EllesmereUI_HoTPredictionDebugWindow"
+local TITLE = "EllesmereUI HoTPrediction - debug snapshot"
+local HINT = "Select All, then Ctrl+C to copy; Refresh captures a new snapshot (a snapshot is not live)."
+
+-- Call a widget method if it exists, swallowing errors: the window must degrade
+-- gracefully on a client that is missing an optional API instead of raising.
+local function safe(obj, method, ...)
+	if obj == nil then return nil end
+	local ok, fn = pcall(function() return obj[method] end)
+	if not ok or type(fn) ~= "function" then return nil end
+	local ok2, res = pcall(fn, obj, ...)
+	if ok2 then return res end
+	return nil
+end
+
+------------------------------------------------------------------------------
+-- snapshot text (public, non-printing)
+------------------------------------------------------------------------------
+
+-- A copyable snapshot: a compact one-line teststatus plus the full status with
+-- rich internals FORCED on, irrespective of the persisted debug setting (which
+-- is not changed). Both come from the shared builders, so neither prints chat.
+function ns.BuildSnapshotReport()
+	local ok, res = pcall(ns._BuildSnapshotReport)
+	if ok and type(res) == "string" and res ~= "" then
+		return ns.StripFormatting(res)
+	end
+	return ns.BuildStatusFallback(ok and "empty report" or res)
+end
+
+function ns._BuildSnapshotReport()
+	local t = ns.toNumber(GetTime and GetTime() or nil)
+	local tlabel = t and string.format("%.2f", t) or "unknown"
+	local lines = {
+		string.format("EllesmereUI_HoTPrediction v%s - diagnostic snapshot", tostring(ns.version)),
+		string.format("captured t=%s (public GetTime seconds; a snapshot, not a live log)", tlabel),
+		"copy: click Select All, then Ctrl+C (the operating system owns the clipboard).",
+		"--- teststatus ---",
+		ns.BuildTestStatusReport(),
+		"--- status (forced internals) ---",
+		ns.BuildStatusReport(true),
+	}
+	return table.concat(lines, "\n")
+end
+
+------------------------------------------------------------------------------
+-- lazy window construction
+------------------------------------------------------------------------------
+
+local function ensureDebugWindow()
+	if ns.debugWindow then return ns.debugWindow end
+	if type(CreateFrame) ~= "function" then return nil end
+
+	local parent = UIParent
+	local f = CreateFrame("Frame", WINDOW_NAME, parent)
+	if not f then return nil end
+	ns.debugWindow = f
+
+	safe(f, "SetSize", 600, 440)
+	safe(f, "SetPoint", "CENTER", parent or UIParent, "CENTER", 0, 0)
+	safe(f, "SetMovable", true)
+	safe(f, "SetClampedToScreen", true)
+	safe(f, "EnableMouse", true)
+	safe(f, "SetFrameStrata", "DIALOG")
+	safe(f, "SetToplevel", true)
+	safe(f, "Hide")
+
+	local title = safe(f, "CreateFontString", nil, "OVERLAY")
+	if title then
+		safe(title, "SetPoint", "TOPLEFT", f, "TOPLEFT", 12, -10)
+		safe(title, "SetJustifyH", "LEFT")
+		safe(title, "SetText", TITLE)
+	end
+	local hint = safe(f, "CreateFontString", nil, "OVERLAY")
+	if hint then
+		safe(hint, "SetPoint", "TOPLEFT", f, "TOPLEFT", 12, -30)
+		safe(hint, "SetPoint", "TOPRIGHT", f, "TOPRIGHT", -12, -30)
+		safe(hint, "SetJustifyH", "LEFT")
+		safe(hint, "SetText", HINT)
+	end
+
+	-- ScrollFrame + multiline EditBox: the text is selectable/copyable while
+	-- staying scrollable for a long newline-delimited report.
+	local scroll = CreateFrame("ScrollFrame", nil, f)
+	safe(scroll, "SetPoint", "TOPLEFT", f, "TOPLEFT", 12, -52)
+	safe(scroll, "SetPoint", "BOTTOMRIGHT", f, "BOTTOMRIGHT", -12, 42)
+	local edit = CreateFrame("EditBox", nil, scroll)
+	safe(edit, "SetMultiLine", true)
+	safe(edit, "SetAutoFocus", false)
+	if edit.SetFont then
+		safe(edit, "SetFont", (STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"), 11, "")
+	end
+	safe(edit, "SetTextInsets", 4, 4, 4, 4)
+	safe(edit, "SetJustifyH", "LEFT")
+	safe(edit, "SetJustifyV", "TOP")
+	safe(edit, "SetWidth", 560)
+	safe(edit, "SetPoint", "TOPLEFT", scroll, "TOPLEFT", 0, 0)
+	safe(scroll, "SetScrollChild", edit)
+	-- A single Escape inside the edit box only drops focus; UISpecialFrames then
+	-- closes the window on the next Escape.
+	safe(edit, "SetScript", "OnEscapePressed", function(self) safe(self, "ClearFocus") end)
+
+	f.editBox = edit
+	f.scrollFrame = scroll
+
+	-- Hiding (button, Escape, or /reload) always clears the selection/focus so no
+	-- invisible select-all text stays armed on a hidden frame.
+	safe(f, "SetScript", "OnHide", function()
+		local eb = ns.debugWindow and ns.debugWindow.editBox
+		safe(eb, "ClearFocus")
+	end)
+
+	local function button(label, offset, onclick)
+		local b = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+		safe(b, "SetSize", 90, 22)
+		safe(b, "SetPoint", "BOTTOMRIGHT", f, "BOTTOMRIGHT", offset, 12)
+		safe(b, "SetText", label)
+		safe(b, "SetScript", "OnClick", onclick)
+		return b
+	end
+	button("Select All", -216, function() ns.SelectAllDebugWindow() end)
+	button("Refresh", -114, function() ns.RefreshDebugWindow() end)
+	button("Close", -12, function() ns.CloseDebugWindow() end)
+
+	-- Escape integration: register the one named frame once.
+	if type(UISpecialFrames) == "table" then
+		local present = false
+		for i = 1, #UISpecialFrames do
+			if UISpecialFrames[i] == WINDOW_NAME then present = true break end
+		end
+		if not present then UISpecialFrames[#UISpecialFrames + 1] = WINDOW_NAME end
+	end
+
+	return f
+end
+
+------------------------------------------------------------------------------
+-- public open/close/refresh/select-all
+------------------------------------------------------------------------------
+
+-- Open creates lazily on the first call, then reuses the same frame.
+function ns.OpenDebugWindow()
+	local f = ensureDebugWindow()
+	if not f then
+		ns.print("debug window unavailable: this client cannot create frames.")
+		return nil
+	end
+	ns.RefreshDebugWindow()
+	safe(f, "Show")
+	return f
+end
+
+-- Hide (not delete); position is retained for the rest of the session.
+function ns.CloseDebugWindow()
+	local f = ns.debugWindow
+	if not f then return false end
+	safe(f, "Hide")
+	return true
+end
+
+-- Capture a fresh snapshot: drop the stale selection/focus first, write the full
+-- report, then reset the scroll to the top.
+function ns.RefreshDebugWindow()
+	local f = ns.debugWindow
+	if not f then return nil end
+	local eb = f.editBox
+	if not eb then return nil end
+	safe(eb, "ClearFocus")
+	safe(eb, "SetCursorPosition", 0)
+	local text = ns.BuildSnapshotReport()
+	safe(eb, "SetText", text)
+	safe(f.scrollFrame, "SetVerticalScroll", 0)
+	return text
+end
+
+-- Focus the EditBox and highlight everything so native Ctrl+A/Ctrl+C work.
+function ns.SelectAllDebugWindow()
+	local f = ns.debugWindow
+	if not f then return false end
+	local eb = f.editBox
+	if not eb then return false end
+	safe(eb, "SetFocus")
+	safe(eb, "HighlightText")
+	return true
+end
