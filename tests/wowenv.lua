@@ -113,6 +113,7 @@ local function newFontString(owner)
 			return c[1], c[2], c[3], c[4]
 		end,
 		SetJustifyH = function(self, j) self._justifyH = j end,
+		SetWordWrap = function(self, v) self._wordWrap = v end,
 		SetJustifyV = function(self, j) self._justifyV = j end,
 		SetWordWrap = function(self, w) self._wordWrap = w end,
 		SetPoint = function(self, ...) self._points[#self._points + 1] = { ... } end,

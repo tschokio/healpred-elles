@@ -7,9 +7,15 @@ ns.queuedSwing = swing
 -- Exact next-melee rank IDs, not localized names. Modern instant versions with
 -- these IDs still require the client's current-action flag; a press isn't enough.
 local spells = {}
-for _, id in ipairs({ 6807, 6808, 6809, 8972, 9745, 9880, 9881, 26996, 48479, 48480,
-	78, 284, 285, 1608, 11564, 11565, 11566, 11567, 25286, 25242, 29707, 30324, 47449, 47450,
-	845, 7369, 11608, 11609, 20569, 25231, 47519, 47520 }) do spells[id] = true end
+local families = {
+	Maul = { 6807, 6808, 6809, 8972, 9745, 9880, 9881, 26996, 48479, 48480 },
+	["Heroic Strike"] = { 78, 284, 285, 1608, 11564, 11565, 11566, 11567, 25286, 25242, 29707, 30324, 47449, 47450 },
+	Cleave = { 845, 7369, 11608, 11609, 20569, 25231, 47519, 47520 },
+}
+for family, ids in pairs(families) do
+	for _, id in ipairs(ids) do spells[id] = family end
+end
+swing.spells = spells -- GUI catalog uses the detector's actual registry.
 
 local function api(group, key, legacy)
 	local t = _G[group]
@@ -81,6 +87,44 @@ local function prepare(button)
 	return ok and border or nil
 end
 
+local function style(record)
+	local f, db = record.border, ns.db
+	if not f then return end
+	-- Reconfigure only our decoration, never resize the actual action button.
+	-- Geometry edits wait for regen; color/opacity can change immediately.
+	if not ns.api.InCombat() then
+		if record.thickness ~= db.queuedSwingThickness then
+			f:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = db.queuedSwingThickness })
+			record.thickness, record.color = db.queuedSwingThickness, nil
+		end
+		if record.padding ~= db.queuedSwingPadding then
+			local p = db.queuedSwingPadding
+			f:ClearAllPoints()
+			f:SetPoint("TOPLEFT", record.button, "TOPLEFT", -p, p)
+			f:SetPoint("BOTTOMRIGHT", record.button, "BOTTOMRIGHT", p, -p)
+			record.padding = p
+		end
+	end
+	local c = db.queuedSwingColor
+	if record.color ~= c or record.alpha ~= db.queuedSwingAlpha then
+		f:SetBackdropBorderColor(c[1], c[2], c[3], db.queuedSwingAlpha)
+		record.color, record.alpha = c, db.queuedSwingAlpha
+	end
+end
+
+-- One atomic, validated appearance update shared by the GUI and renderer.
+function swing.SetAppearance(thickness, padding, alpha, r, g, b)
+	if not ns.toNumber(thickness) or not ns.toNumber(padding) or not ns.toNumber(alpha)
+		or not ns.toNumber(r) or not ns.toNumber(g) or not ns.toNumber(b)
+		or thickness < 1 or thickness > 12 or padding < -12 or padding > 24
+		or alpha < 0 or alpha > 1 or r < 0 or r > 1 or g < 0 or g > 1 or b < 0 or b > 1 then return false end
+	ns.db.queuedSwingThickness, ns.db.queuedSwingPadding, ns.db.queuedSwingAlpha = thickness, padding, alpha
+	ns.db.queuedSwingColor = { r, g, b }
+	for _, record in pairs(swing.buttons) do style(record) end
+	swing.Refresh()
+	return true
+end
+
 function swing.Refresh()
 	swing.active = 0
 	local unknown = false
@@ -94,11 +138,7 @@ function swing.Refresh()
 		local f = record.border
 		if f then
 			if shown then
-				local c = ns.db.queuedSwingColor
-				if record.color ~= c then
-					f:SetBackdropBorderColor(c[1], c[2], c[3], 1)
-					record.color = c
-				end
+				style(record)
 				if not record.shown then f:Show() end
 				swing.active = swing.active + 1
 			elseif record.shown then
@@ -119,6 +159,7 @@ function swing.Scan()
 		if button and not ns.isSecret(button) then
 			local record = swing.buttons[button] or { button = button }
 			record.border = record.border or prepare(button)
+			style(record)
 			found[button] = record
 			if resolve(button) then candidates[#candidates + 1] = record
 			elseif record.border then record.border:Hide(); record.shown = false end

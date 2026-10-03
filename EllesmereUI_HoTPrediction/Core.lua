@@ -6,7 +6,7 @@
 local addonName, ns = ...
 
 ns.name = addonName
-ns.version = "0.5.0"
+ns.version = "0.5.2"
 ns.debugEnabled = false
 ns.inCombat = false
 ns.started = false
@@ -161,6 +161,9 @@ ns.DEFAULTS = {
 	minimapAngle = 225,
 	queuedSwingEnabled = true,
 	queuedSwingColor = { 0.0, 1.0, 1.0 }, -- distinct opaque next-swing border
+	queuedSwingThickness = 3,
+	queuedSwingPadding = 3,
+	queuedSwingAlpha = 1,
 	intervalOverrides = {},        -- [spellID] = seconds (user calibration only)
 	amountOverrides = {},          -- [spellID] = { [stacks] = exact tick total } (user calibration only)
 	extraSpells = {},              -- [spellID] = { name =, family = }

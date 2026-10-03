@@ -40,7 +40,7 @@ StatusBar of its own and secure-hooks native callbacks read-only.
 
 The installed folder is the deliverable; there is no separate zip/binary.
 
-### Updating (to v0.5.0)
+### Updating (to v0.5.2)
 
 Replace the `EllesmereUI_HoTPrediction/` folder in your AddOns directory with the
 new one, then `/reload` (or restart). SavedVariables
@@ -64,6 +64,16 @@ This feature does **not** require native healing prediction to be enabled.
   highlighted buttons and queue-readability status; full status/window includes it.
 * The existing options menu has a next-swing checkbox. `/euihot enable off`
   disables both features immediately and stops their background work.
+
+**Appearance GUI (v0.5.1):** open `/euihot options` (or left-click the minimap
+icon), then **Next-swing appearance...**. Edit border thickness (1–12 pixels),
+border size/spacing (−12 to 24 pixels per side), opacity (0–1), and RGB color
+(0–1 each), then click **Apply appearance**. Positive spacing enlarges the border
+around the button; negative spacing places it inside the icon. This does not
+resize the actual action button. **Restore defaults** restores the original
+3-pixel cyan border, 3-pixel spacing and full opacity. All values persist;
+invalid entries change nothing. Geometry edits during combat apply after combat,
+while color/opacity apply immediately. Appearance edits never fake a queued spell.
 
 Only exact known next-swing spell/rank IDs are eligible. Direct spell buttons use
 public `IsCurrentAction(liveSlot)` (or `IsCurrentSpell` if the action API is absent).
@@ -91,6 +101,14 @@ border, next swing/cancel → no border, insufficient-Rage failed press → no b
 and repeat with Cleave, Maul, forms/pages and any macros you use.
 
 ### Settings menu and minimap button (v0.4.0)
+
+**Implemented spells tab (v0.5.2):** open `/euihot options` and select
+**Implemented spells**. The scrollable catalog lists built-in healing families,
+exact rank IDs, manual/observation-only candidates, user-added/disabled IDs and
+next-swing queue abilities. It is built from the actual runtime spell registries
+when opened, not from your spellbook or active auras. Limitations and exclusions
+(including other players' HoTs) are shown explicitly. Browsing does not change
+settings, start a preview or add background work.
 
 * **Left-click the minimap icon** or use `/euihot options` (alias: `/euihot menu`).
   Also available under Blizzard's **Settings → AddOns → EllesmereUI HoT Prediction**

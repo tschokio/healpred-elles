@@ -2,7 +2,7 @@
 ## Title: |cff66f366EllesmereUI|r HoT Prediction
 ## Notes: Player self-cast HoT prediction for EllesmereUIUnitFrames and real queued next-swing ability borders for EllesmereUIActionBars.
 ## Author: ai-job
-## Version: 0.5.0
+## Version: 0.5.2
 ## SavedVariables: EllesmereUI_HoTPredictionDB
 ## Dependencies: EllesmereUIUnitFrames
 ## OptionalDeps: EllesmereUIActionBars
@@ -15,5 +15,6 @@ Learner.lua
 Model.lua
 Overlay.lua
 QueuedSwing.lua
+SpellCatalog.lua
 DebugWindow.lua
 Options.lua
