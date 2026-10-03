@@ -540,11 +540,15 @@ function overlay.RenderValue(value, reason)
 	end
 
 	local rangeOk, rangeDiag = overlay.ApplyRange(f, ab)
+	ns.session.lastRange = rangeDiag
 	if not rangeOk then
 		overlay.Hide(rangeDiag)
 		return false, rangeDiag
 	end
-	if f.SetValue then pcall(f.SetValue, f, v) end
+	if not f.SetValue or not pcall(f.SetValue, f, v) then
+		overlay.Hide("overlay value setter refused")
+		return false, "overlay value setter refused"
+	end
 	if f.Show then f:Show() end
 	ns.session.lastSuppress = nil
 	ns.session.lastRange = rangeDiag

@@ -4,8 +4,8 @@
 
 local unpack = unpack or table.unpack
 
-local function newEnv()
-	return Mocks.NewEnv()
+local function newEnv(opts)
+	return Mocks.NewEnv(opts)
 end
 
 -- seed learned session data for spell 774 (non-stacking)
@@ -1167,6 +1167,7 @@ end)
 
 T.register("integration: fake renders 20000 with restricted ranges, health and native incoming", function()
 	local env = newEnv({ noCLEU = true })
+	assert_false(env.ns.api.CombatLogAvailable(), "CLEU really absent in this test")
 	local secretMax = Mocks.MakeSecret()
 	Mocks.health = Mocks.MakeSecret()
 	Mocks.maxHealth = Mocks.MakeSecret()
@@ -1362,3 +1363,14 @@ T.register("integration: real manual HoT stays suppressed on secret incoming", f
 	assert_false(env.ns.overlay.state.frame:IsShown(), "real overlay hidden")
 end)
 
+T.register("integration: refused value setter cannot report a successful fake render", function()
+	local env = newEnv()
+	env.ns.overlay.Resolve()
+	local f = env.ns.overlay.state.frame
+	f.SetValue = function() error("value setter refused") end
+	env.ns.HandleCommand("test 20000")
+	runTimer()
+	assert_false(f:IsShown())
+	assert_false(env.ns.session.lastStatus.rendered)
+	assert_eq(env.ns.session.lastRenderReason, "overlay value setter refused")
+end)
