@@ -6,10 +6,16 @@
 local addonName, ns = ...
 
 ns.name = addonName
-ns.version = "0.2.0"
+ns.version = "0.2.1"
 ns.debugEnabled = false
 ns.inCombat = false
 ns.started = false
+
+-- Session-only CLEU override, set by `/euihot observe on|off`. It is NEVER
+-- written to SavedVariables: a restricted client must not resurrect a forbidden
+-- registration across a reload. nil = no override (use the engine gate default),
+-- true = request guarded registration, false = do not register (and unregister).
+ns.observeCLEU = nil
 
 ------------------------------------------------------------------------------
 -- small helpers
@@ -105,6 +111,11 @@ end
 
 -- Session-only state. Nothing here is written to SavedVariables, so a reload
 -- can never resurrect a fake test value or stale learned gear numbers.
+--
+-- Capability state is deliberately NOT reset here: registration/acceptance and
+-- the observed CLEU delivery count are facts about this client session, not
+-- "learning", and clearing them would erase the honest CLEU status the user
+-- needs. `ns.resetSession()` only clears learned data and the aura cache.
 function ns.resetSession()
 	ns.session = {
 		learned = {},      -- [spellID] = interval/totals + last tick phase
@@ -114,7 +125,23 @@ function ns.resetSession()
 		lastSuppress = nil,
 		lastStatus = nil,
 	}
-	ns.capabilities = { events = {}, cleu = nil, cleuError = nil }
+end
+
+-- Persistent-per-session capability record. Initialised once; not rebuilt by a
+-- reload or a `/reset` (only a full addon reload recreates it).
+function ns.initCapabilities()
+	if ns.capabilities then return ns.capabilities end
+	ns.capabilities = {
+		events = {},         -- [eventName] = accepted boolean
+		cleuFunction = false,-- is CombatLogGetCurrentEventInfo present?
+		cleuRequested = false, -- did we ask the client to register CLEU?
+		cleuAccepted = false,  -- did RegisterEvent report acceptance?
+		cleuDelivered = 0,     -- actual observed COMBAT_LOG_EVENT_UNFILTERED deliveries
+		cleuGateReason = nil,  -- why we did or did not request registration
+		cleuOverride = false,  -- was an explicit session override responsible?
+		cleuError = nil,       -- last adapter error reading the tuple
+	}
+	return ns.capabilities
 end
 
 ns.DEFAULTS = {
@@ -126,6 +153,7 @@ ns.DEFAULTS = {
 	amountMode = "total",          -- "total" (CLEU amount includes overheal) or "effective"
 	assumeApiExcludesHoTs = false, -- opt-in: user verified native already excludes HoTs
 	intervalOverrides = {},        -- [spellID] = seconds (user calibration only)
+	amountOverrides = {},          -- [spellID] = { [stacks] = exact tick total } (user calibration only)
 	extraSpells = {},              -- [spellID] = { name =, family = }
 	removedSpells = {},            -- [spellID] = true
 }
@@ -179,17 +207,28 @@ end
 
 -- Register an event and RECORD whether the client accepted it. A forbidden or
 -- missing event is a capability failure the user must be able to see.
+--
+-- "pcall returned true" is NOT proof: some clients make RegisterEvent a no-op
+-- that returns false for a forbidden event. We treat an explicit `false` return
+-- as rejection and everything else (nil/true) as accepted.
 function ns.register(event)
+	ns.initCapabilities()
 	local f = ensureEventFrame()
 	if not f or not f.RegisterEvent then
-		ns.capabilities = ns.capabilities or { events = {} }
 		ns.capabilities.events[event] = false
 		return false
 	end
-	local ok = pcall(f.RegisterEvent, f, event)
-	ns.capabilities = ns.capabilities or { events = {} }
-	ns.capabilities.events[event] = ok and true or false
-	return ok and true or false
+	local ok, ret = pcall(f.RegisterEvent, f, event)
+	local accepted = ok and (ret ~= false)
+	ns.capabilities.events[event] = accepted and true or false
+	return accepted and true or false
+end
+
+-- Record an event as unavailable WITHOUT ever attempting registration.
+function ns.markEventUnavailable(event)
+	ns.initCapabilities()
+	ns.capabilities.events[event] = false
+	return false
 end
 
 function ns.eventRegistered(event)
@@ -197,8 +236,101 @@ function ns.eventRegistered(event)
 end
 
 function ns.unregister(event)
+	ns.initCapabilities()
 	local f = ns.eventFrame
-	if f and f.UnregisterEvent then f:UnregisterEvent(event) end
+	if f and f.UnregisterEvent then pcall(f.UnregisterEvent, f, event) end
+	ns.capabilities.events[event] = false
+	return true
+end
+
+-----------------------------------------------------------------------------
+-- engine gate: known restricted (Midnight) engines forbid CLEU
+-----------------------------------------------------------------------------
+
+-- The supplied EllesmereUI source gate treats current retail (interface/toc
+-- >= 120000, i.e. 12.0.0 / 12.0.1) and "Forever" (interface 16000..19999) as
+-- Midnight engines. On those, automatic COMBAT_LOG_EVENT_UNFILTERED registration
+-- must never be ATTEMPTED unless the user explicitly opts in.
+-- Returns restricted(boolean), reason(string).
+function ns.RestrictedEngineReason()
+	local f = GetBuildInfo
+	if type(f) ~= "function" then
+		return false, "GetBuildInfo unavailable: cannot classify engine"
+	end
+	local ok, version, _build, _date, toc = pcall(f)
+	if not ok then
+		return false, "GetBuildInfo error: cannot classify engine"
+	end
+	local tocN = ns.toNumber(toc)
+	if tocN and tocN >= 120000 then
+		return true, string.format("retail interface %s is a restricted Midnight engine", tostring(tocN))
+	end
+	if tocN and tocN >= 16000 and tocN <= 19999 then
+		return true, string.format("Forever interface %s is a restricted engine", tostring(tocN))
+	end
+	-- Fall back to the version string when toc version is not usable.
+	if not tocN and type(version) == "string" then
+		local major = tonumber(version:match("^(%d+)"))
+		if major and major >= 12 then
+			return true, string.format("client version %s is a restricted Midnight engine", tostring(version))
+		end
+	end
+	return false, string.format("build %s interface %s not known-restricted", tostring(version), tostring(tocN or "?"))
+end
+
+-- Decide whether to request COMBAT_LOG_EVENT_UNFILTERED and do it (guarded).
+-- `force` is used by the explicit `/euihot observe on` override.
+-- Returns accepted(boolean).
+function ns.SetupCLEU(force)
+	ns.initCapabilities()
+	local cap = ns.capabilities
+	local EVENT = "COMBAT_LOG_EVENT_UNFILTERED"
+
+	cap.cleuFunction = ns.api and ns.api.CombatLogAvailable() or false
+	cap.cleuError = nil
+	cap.cleuOverride = force and true or false
+
+	-- 1. No API on this client: never register.
+	if not cap.cleuFunction then
+		cap.cleuRequested = false
+		cap.cleuAccepted = false
+		cap.cleuGateReason = "CombatLogGetCurrentEventInfo unavailable"
+		ns.markEventUnavailable(EVENT)
+		return false
+	end
+
+	-- 2. Engine gate.
+	local restricted, gateReason = ns.RestrictedEngineReason()
+	cap.cleuGateReason = gateReason
+
+	-- Default policy: auto-register only on clean (non-restricted) engines.
+	local want
+	if force then
+		want = true
+	elseif ns.observeCLEU == false then
+		want = false
+	else
+		want = not restricted
+	end
+
+	if not want then
+		cap.cleuRequested = false
+		cap.cleuAccepted = false
+		if not restricted and ns.observeCLEU == false then
+			cap.cleuGateReason = "disabled by /euihot observe off"
+		end
+		ns.markEventUnavailable(EVENT)
+		return false
+	end
+
+	-- 3. Request guarded registration. Acceptance is NOT delivery proof.
+	cap.cleuRequested = true
+	local accepted = ns.register(EVENT)
+	cap.cleuAccepted = accepted and true or false
+	if not accepted then
+		cap.cleuError = "RegisterEvent was refused by the client"
+	end
+	return accepted
 end
 
 ------------------------------------------------------------------------------
@@ -223,19 +355,17 @@ function ns.Startup()
 	ns.register("UNIT_MAXHEALTH")
 	ns.register("UNIT_HEAL_PREDICTION")
 	ns.register("UNIT_HEAL_ABSORB_AMOUNT_CHANGED")
-	ns.register("COMBAT_LOG_EVENT_UNFILTERED") -- may be forbidden; guarded downstream
 	ns.register("PLAYER_EQUIPMENT_CHANGED")
 	ns.register("ACTIVE_TALENT_GROUP_CHANGED")
 	ns.register("SPELLS_CHANGED")
 
-	ns.capabilities.cleu = ns.api and ns.api.CombatLogAvailable() or false
+	-- CLEU is gated: on known restricted engines the forbidden event is never
+	-- even attempted unless the user explicitly opts in with /euihot observe on.
+	ns.initCapabilities()
+	ns.SetupCLEU(false)
 
 	if ns.learner and ns.learner.Setup then ns.learner.Setup() end
 	if ns.overlay and ns.overlay.Setup then ns.overlay.Setup() end
-
-	if not ns.capabilities.cleu then
-		ns.capabilities.cleuError = "CombatLogGetCurrentEventInfo unavailable"
-	end
 
 	if ns.db and ns.db.debug then
 		ns.print("v" .. ns.version .. " loaded (debug). /euihot help for commands.")
@@ -315,7 +445,11 @@ local function parseNumber(s)
 	return tonumber(s)
 end
 
-local HELP = "commands: test <v> | test off | status | debug [on|off] | enable on|off | alpha <a> | color <r> <g> <b> | color overlay <r> <g> <b> | color native | interval <id> <s> | spell add|remove <id> [name] | amountmode total|effective | excludehots on|off | reset | help"
+local HELP = "commands: test <v> | test off | status | debug [on|off] | enable on|off | alpha <a> | color <r> <g> <b> | color overlay <r> <g> <b> | color native | interval <id> <s>|off | amount <id> <tickTotal> [stacks]|off [stacks] | observe on|off | spell add|remove <id> [name] | amountmode total|effective | excludehots on|off | reset | help"
+
+-- Bound for a manual tick-total calibration. It only has to be a sane upper
+-- limit on a single heal tick, not a game mechanic.
+ns.AMOUNT_OVERRIDE_MAX = 100000000
 
 function ns.HandleCommand(input)
 	local raw = (input or ""):gsub("^%s+", ""):gsub("%s+$", "")
@@ -409,13 +543,89 @@ function ns.HandleCommand(input)
 		return
 	elseif cmd == "interval" then
 		local id = parseNumber(args[1])
+		if ns.isPositiveInt(id) and args[2] and args[2]:lower() == "off" then
+			ns.db.intervalOverrides[id] = nil
+			if ns.overlay and ns.overlay.RequestPaint then ns.overlay.RequestPaint() end
+			ns.print(string.format("cleared manual interval for spell %s.", tostring(id)))
+			return
+		end
 		local secs = parseNumber(args[2])
 		if ns.isPositiveInt(id) and ns.isFinite(secs) and secs > 0 and secs <= 300 then
 			ns.db.intervalOverrides[id] = secs
 			if ns.overlay and ns.overlay.RequestPaint then ns.overlay.RequestPaint() end
-			ns.print(string.format("interval override spell %s = %.2fs", tostring(id), secs))
+			ns.print(string.format("manual interval spell %s = %.2fs (persisted; recalibrate after gear/spec change).", tostring(id), secs))
 		else
-			ns.print("usage: /euihot interval <positive spellID> <seconds 0..300>")
+			ns.print("usage: /euihot interval <positive spellID> <seconds 0..300> | interval <spellID> off")
+		end
+		return
+	elseif cmd == "amount" then
+		local id = parseNumber(args[1])
+		local meta = ns.isPositiveInt(id) and ns.spells.Meta(id) or nil
+		if not meta then
+			ns.print("usage: /euihot amount <positive spellID> <tickTotal> [stacks] | amount <spellID> off [stacks]  (spell must be a tracked candidate; /euihot spell add first)")
+			return
+		end
+		if args[2] and args[2]:lower() == "off" then
+			local stacks = parseNumber(args[3])
+			if ns.isPositiveInt(stacks) then
+				if ns.db.amountOverrides[id] then ns.db.amountOverrides[id][math.floor(stacks)] = nil end
+				ns.print(string.format("cleared manual amount for spell %s at stack %s.", tostring(id), tostring(math.floor(stacks))))
+			else
+				ns.db.amountOverrides[id] = nil
+				ns.print(string.format("cleared manual amount for spell %s.", tostring(id)))
+			end
+			if ns.overlay and ns.overlay.RequestPaint then ns.overlay.RequestPaint() end
+			return
+		end
+		-- Non-stacking families are calibrated as stack 1 by definition; only
+		-- stacking families (Lifebloom) accept a specific stack count.
+		local total = parseNumber(args[2])
+		local stacks = 1
+		if meta.stacksMatter then
+			stacks = parseNumber(args[3]) or 1
+		end
+		if not ns.isFinite(total) or total <= 0 or total > ns.AMOUNT_OVERRIDE_MAX then
+			ns.print("usage: /euihot amount <positive spellID> <tickTotal 0..100000000> [stacks] | amount <spellID> off [stacks]")
+			return
+		end
+		if not ns.isPositiveInt(stacks) then
+			ns.print("usage: /euihot amount <spellID> <tickTotal> [stacks]; stacks must be a positive integer")
+			return
+		end
+		stacks = math.floor(stacks)
+		ns.db.amountOverrides[id] = ns.db.amountOverrides[id] or {}
+		ns.db.amountOverrides[id][stacks] = total
+		if ns.overlay and ns.overlay.RequestPaint then ns.overlay.RequestPaint() end
+		ns.print(string.format("manual tick total spell %s = %s at %s stack(s) (persisted, user-authoritative; recalibrate after gear/rank change).",
+			tostring(id), tostring(total), tostring(stacks)))
+		return
+	elseif cmd == "observe" then
+		local v = (args[1] or ""):lower()
+		if v == "on" then
+			if not (ns.api and ns.api.CombatLogAvailable and ns.api.CombatLogAvailable()) then
+				ns.observeCLEU = true
+				ns.print("observe on: CLEU function unavailable on this client; no registration attempted.")
+				return
+			end
+			ns.observeCLEU = true
+			local accepted = ns.SetupCLEU(true)
+			if accepted then
+				ns.print("observe on: CLEU registration requested and accepted; delivery is unverified until a SPELL_PERIODIC_HEAL is actually seen (check /euihot status).")
+			else
+				ns.print("observe on: CLEU registration was refused by this client; automatic learning unavailable.")
+			end
+		elseif v == "off" then
+			ns.observeCLEU = false
+			if ns.capabilities then
+				ns.capabilities.cleuRequested = false
+				ns.capabilities.cleuAccepted = false
+				ns.capabilities.cleuOverride = false
+				ns.capabilities.cleuGateReason = "disabled by /euihot observe off"
+			end
+			ns.unregister("COMBAT_LOG_EVENT_UNFILTERED")
+			ns.print("observe off: CLEU unregistered; automatic learning off for this session.")
+		else
+			ns.print("usage: /euihot observe on|off")
 		end
 		return
 	elseif cmd == "spell" then
@@ -452,7 +662,7 @@ function ns.HandleCommand(input)
 		ns.resetSession()
 		if ns.api and ns.api.InvalidateAuraCache then ns.api.InvalidateAuraCache() end
 		if ns.overlay and ns.overlay.RequestPaint then ns.overlay.RequestPaint() end
-		ns.print("session learning reset.")
+		ns.print("session learning reset (CLEU registration/delivery capability preserved).")
 		return
 	end
 
@@ -507,13 +717,22 @@ function ns._EmitStatus()
 		tostring(ns.version), tostring(ns.db.enabled), tostring(ns.db.debug), tostring(ns.db.amountMode),
 		tostring(ns.db.assumeApiExcludesHoTs), tostring(ns.db.shareNativeStyle), ns.db.alpha or 0)
 
-	-- CLEU access / registration
-	local cleuFn = ns.api and ns.api.CombatLogAvailable() or false
+	-- CLEU access / registration: requested vs accepted vs actually DELIVERED.
+	-- "Accepted" is not proof the event is accessible; only an observed delivery
+	-- (counter > 0) verifies it.
+	local cap = ns.capabilities or {}
+	local cleuFn = ns.api and ns.api.CombatLogAvailable and ns.api.CombatLogAvailable() or false
 	local cleuReg = ns.eventRegistered("COMBAT_LOG_EVENT_UNFILTERED")
-	add("cleu function=%s registration=%s%s", tostring(cleuFn), tostring(cleuReg),
-		(ns.capabilities and ns.capabilities.cleuError) and (" (" .. tostring(ns.capabilities.cleuError) .. ")") or "")
+	local delivered = cap.cleuDelivered or 0
+	add("cleu function=%s requested=%s registration=%s delivered=%s%s",
+		tostring(cleuFn), tostring(cap.cleuRequested), tostring(cleuReg), tostring(delivered),
+		cap.cleuError and (" error=" .. tostring(cap.cleuError)) or "")
+	if cap.cleuGateReason then add("cleu gate: %s", tostring(cap.cleuGateReason)) end
+	local CAL = "/euihot interval <id> <seconds> and /euihot amount <id> <tickTotal> [stacks]"
 	if not cleuFn or not cleuReg then
-		add("  WARNING: automatic tick learning unavailable; intervals/amounts require /euihot interval or will be withheld")
+		add("automatic tick learning unavailable; calibrate manually: %s", CAL)
+	elseif delivered == 0 then
+		add("automatic tick learning unverified (no CLEU delivered yet: acceptance is not delivery); calibrate manually: %s", CAL)
 	end
 
 	-- overlay structure
@@ -550,18 +769,22 @@ function ns._EmitStatus()
 			tracked = tracked + 1
 			local data = ns.learner.GetSpellData(aura.spellID)
 			local ticks = ns.model.ComputeTicks(aura, data, now)
-			local learnedAmount
+			local amount, manual
 			if meta.stacksMatter then
-				learnedAmount = ns.learner.AmountForStack(aura.spellID, aura.stacks)
+				amount = ns.learner.AmountForStack(aura.spellID, aura.stacks)
+				manual = ns.spells.AmountOverride(aura.spellID, aura.stacks) ~= nil
 			else
-				learnedAmount = data.basePerStack
+				amount = data.basePerStack
+				manual = data.manualAmount and true or false
 			end
+			local tag = meta.approximate and " (approximate)" or ""
+			if manual then tag = tag .. " (manual)" end
+			if data.manualInterval then tag = tag .. " (manual interval)" end
 			add("  hot %s [%s] stacks=%s exp=%s dur=%s interval=%s ticksLeft=%s amount=%s%s",
 				tostring(aura.spellID), tostring(meta.name or meta.family), tostring(aura.stacks),
 				tostring(ns.round(aura.expirationTime, 1)), tostring(ns.round(aura.duration, 1)),
 				tostring(ns.round(data.interval, 2)), tostring(ticks),
-				tostring(learnedAmount and ns.round(learnedAmount, 1) or "?"),
-				meta.approximate and " (approximate)" or "")
+				tostring(amount and ns.round(amount, 1) or "?"), tag)
 		end
 	end
 	add("tracked active HoTs=%d", tracked)
@@ -605,6 +828,16 @@ function ns.EmitDebugDetails(lines)
 	add("policy=%s amountMode=%s",
 		ns.db.assumeApiExcludesHoTs and "excludes-HoT(opt-in)" or "conservative max(0,hot-native)",
 		tostring(ns.db.amountMode))
+	local cap = ns.capabilities or {}
+	add("cleu requested=%s accepted=%s delivered=%s override=%s gate=%s",
+		tostring(cap.cleuRequested), tostring(cap.cleuAccepted), tostring(cap.cleuDelivered),
+		tostring(cap.cleuOverride), tostring(cap.cleuGateReason))
+	local manualIntervals, manualAmounts = 0, 0
+	for _ in pairs(ns.db.intervalOverrides or {}) do manualIntervals = manualIntervals + 1 end
+	for _, ov in pairs(ns.db.amountOverrides or {}) do
+		if type(ov) == "table" then for _ in pairs(ov) do manualAmounts = manualAmounts + 1 end end
+	end
+	add("manual calibration intervals=%d amountEntries=%d (user-authoritative; not learned)", manualIntervals, manualAmounts)
 	local st = ns.overlay and ns.overlay.state or {}
 	local hp = st.hp
 	if hp then
@@ -642,6 +875,6 @@ end
 -- be received. Everything else is registered from Startup.
 ------------------------------------------------------------------------------
 ensureEventFrame()
-ns.capabilities = ns.capabilities or { events = {} }
+ns.initCapabilities()
 ns.register("ADDON_LOADED")
 ns.SetupSlash()

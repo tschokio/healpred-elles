@@ -303,6 +303,37 @@ function overlay.Resolve()
 	return true
 end
 
+-- Native callbacks are shared across units (player, target, focus, ...). Only
+-- the CURRENT player frame / absorb module may force a full structural resolve;
+-- a target/focus callback must be ignored instead of causing a player rescan.
+-- When the client (or a test) supplies no identifying argument we stay
+-- conservative and allow the deferred work.
+function overlay.HookArgIsCurrent(...)
+	local n = select("#", ...)
+	if n == 0 then return true end
+	local curAb, curPlayer, curHp
+	if ns.api and ns.api.GetAbsorbFrame then
+		curAb, curPlayer, curHp = ns.api.GetAbsorbFrame()
+	end
+	local sawIdentity = false
+	for i = 1, n do
+		local v = select(i, ...)
+		local t = type(v)
+		if t == "table" then
+			sawIdentity = true
+			if v == overlay.state.ab or v == overlay.state.player or v == overlay.state.hp
+				or v == overlay.state.module or v == overlay.state.parent
+				or v == curAb or v == curPlayer or v == curHp then
+				return true
+			end
+		elseif t == "string" then
+			sawIdentity = true
+			if v == "player" then return true end
+		end
+	end
+	return not sawIdentity
+end
+
 -- Secure hooks: only queue deferred own work. Never Resolve synchronously.
 function overlay.InstallHooks(module)
 	if not module then return end
@@ -312,9 +343,13 @@ function overlay.InstallHooks(module)
 	for _, name in ipairs({ "UF_HealPredApply", "UF_AnchorHealPred", "UF_HealPredLayout", "UF_HealPredMasks", "UF_PaintHealPred" }) do
 		if type(module[name]) == "function" then
 			local paintOnly = name == "UF_PaintHealPred"
-			local function queued()
-				if paintOnly then overlay.RequestPaint()
-				else overlay.InvalidateStructure() end
+			local function queued(...)
+				if paintOnly then
+					-- The native painter only ever needs a repaint of our bar.
+					overlay.RequestPaint()
+				elseif overlay.HookArgIsCurrent(...) then
+					overlay.InvalidateStructure()
+				end
 			end
 			local ok = pcall(hooksecurefunc, module, name, queued)
 			if ok then ns.debug("hook installed: " .. name) end

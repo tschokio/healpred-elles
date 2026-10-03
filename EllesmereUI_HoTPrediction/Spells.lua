@@ -59,6 +59,22 @@ function spells.IntervalOverride(id)
 	return nil
 end
 
+-- Explicit user amount calibration for an exact stack count. This is separate
+-- from (and authoritative over) learned magnitudes. Returns a positive number
+-- or nil. Non-stacking families are always keyed at stack 1.
+function spells.AmountOverride(id, stacks)
+	local db = ns.db
+	local ov = db and db.amountOverrides and db.amountOverrides[id]
+	if type(ov) ~= "table" then return nil end
+	local s = ns.toNumber(stacks)
+	if s == nil then s = 1 end
+	s = math.floor(s)
+	if s < 1 then s = 1 end
+	local v = ns.toNumber(ov[s])
+	if v and v > 0 then return v end
+	return nil
+end
+
 function spells.Describe(id)
 	local meta = spells.Meta(id)
 	if not meta then return nil end

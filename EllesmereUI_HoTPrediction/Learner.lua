@@ -52,7 +52,8 @@ function learner.Reset()
 	if ns.api and ns.api.InvalidateAuraCache then ns.api.InvalidateAuraCache() end
 end
 
--- Drop learned magnitudes (gear-dependent) but keep intervals (mechanical).
+-- Drop learned magnitudes (gear-dependent) but keep intervals (mechanical) and
+-- never touch persisted user amount/interval calibration (in ns.db).
 function learner.ResetAmounts()
 	for _, d in pairs(ns.session.learned or {}) do
 		d.totals = {}
@@ -130,8 +131,12 @@ function learner.ObserveBase(id, total, stacks, approximate)
 	end
 end
 
--- Learned total for an exact stack count, or nil when never observed there.
+-- Manual user calibration (persisted in the DB) is authoritative over learned
+-- values. It is intentionally stored separately from session learning, so a
+-- `/reset`, a gear change or a spec change never erases it.
 function learner.AmountForStack(id, stacks)
+	local manual = ns.spells.AmountOverride(id, stacks)
+	if manual then return manual end
 	local d = ns.session.learned and ns.session.learned[id]
 	if not d then return nil end
 	local s = ns.toNumber(stacks)
@@ -141,19 +146,25 @@ function learner.AmountForStack(id, stacks)
 	return bucket and bucket.value or nil
 end
 
--- Merge learned session data with an explicit user interval override.
+-- Merge learned session data with explicit user calibration. A manual interval
+-- and/or manual amount is labelled as such ("override"/"manual") so status never
+-- pretends it was learned.
 function learner.GetSpellData(id)
 	local d = ns.session.learned and ns.session.learned[id]
 	local override = ns.spells.IntervalOverride(id)
+	local manualBase = ns.spells.AmountOverride(id, 1)
+	local learnedBase = d and d.basePerStack or nil
 	local out = {
 		interval = override or (d and d.interval) or nil,
-		basePerStack = d and d.basePerStack or nil,
-		baseCount = d and d.baseCount or 0,
+		basePerStack = manualBase or learnedBase,
+		baseCount = (manualBase and 1) or (d and d.baseCount or 0),
 		totals = d and d.totals or nil,
 		stacksMatter = d and d.stacksMatter or false,
 		lastTick = d and d.lastTick or nil,
 		lastInstanceID = d and d.lastInstanceID or nil,
 		lastSig = d and d.lastSig or nil,
+		manualAmount = manualBase ~= nil,
+		manualInterval = override ~= nil,
 		confidence = "none",
 	}
 	if override then
@@ -163,6 +174,7 @@ function learner.GetSpellData(id)
 	elseif d and d.interval then
 		out.confidence = "low"
 	end
+	if manualBase and not d then out.confidence = "manual" end
 	return out
 end
 
@@ -185,7 +197,13 @@ end
 -- Register the combat-log handler and the learning-invalidation events.
 function learner.Setup()
 	learner.Reset()
+	-- Reset() clears learning only, never the CLEU capability facts.
 	ns.on("COMBAT_LOG_EVENT_UNFILTERED", function(_, ...)
+		-- Count actual deliveries: this is the only honest proof that the event
+		-- is accessible (a successful registration is not).
+		if ns.capabilities then
+			ns.capabilities.cleuDelivered = (ns.capabilities.cleuDelivered or 0) + 1
+		end
 		local count = select("#", ...)
 		if count > 0 then
 			-- Deliberate legacy path: this client delivers explicit varargs.
