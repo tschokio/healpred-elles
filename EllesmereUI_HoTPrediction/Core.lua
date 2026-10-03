@@ -222,7 +222,7 @@ function ns.Startup()
 	ns.register("UNIT_HEALTH")
 	ns.register("UNIT_MAXHEALTH")
 	ns.register("UNIT_HEAL_PREDICTION")
-	ns.register("UNIT_HEAL_ABSORB")
+	ns.register("UNIT_HEAL_ABSORB_AMOUNT_CHANGED")
 	ns.register("COMBAT_LOG_EVENT_UNFILTERED") -- may be forbidden; guarded downstream
 	ns.register("PLAYER_EQUIPMENT_CHANGED")
 	ns.register("ACTIVE_TALENT_GROUP_CHANGED")
@@ -305,7 +305,7 @@ end
 ns.on("UNIT_HEALTH", function(_, unit) requestPaintForUnit(unit) end)
 ns.on("UNIT_MAXHEALTH", function(_, unit) requestPaintForUnit(unit) end)
 ns.on("UNIT_HEAL_PREDICTION", function(_, unit) requestPaintForUnit(unit) end)
-ns.on("UNIT_HEAL_ABSORB", function(_, unit) requestPaintForUnit(unit) end)
+ns.on("UNIT_HEAL_ABSORB_AMOUNT_CHANGED", function(_, unit) requestPaintForUnit(unit) end)
 
 ------------------------------------------------------------------------------
 -- slash commands
@@ -599,7 +599,7 @@ function ns.EmitDebugDetails(lines)
 		tostring(type(issecretvalue) == "function"),
 		tostring(type(hooksecurefunc) == "function"),
 		tostring(type(GetBuildInfo) == "function"))
-	for _, event in ipairs({ "COMBAT_LOG_EVENT_UNFILTERED", "UNIT_AURA", "UNIT_HEALTH", "UNIT_HEAL_PREDICTION", "UNIT_HEAL_ABSORB" }) do
+	for _, event in ipairs({ "COMBAT_LOG_EVENT_UNFILTERED", "UNIT_AURA", "UNIT_HEALTH", "UNIT_HEAL_PREDICTION", "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" }) do
 		add("event %s registered=%s", event, tostring(ns.eventRegistered(event)))
 	end
 	add("policy=%s amountMode=%s",

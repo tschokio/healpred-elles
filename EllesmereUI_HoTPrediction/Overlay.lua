@@ -150,6 +150,14 @@ local function copyMasks(ab, hp, f)
 	if ab and ab._blizzMaskOn and blizzMask then desired[#desired + 1] = blizzMask end
 
 	local old = overlay.state.masks or {}
+	if overlay.state.maskTexture ~= ourTex then
+		local previous = overlay.state.maskTexture
+		if previous and previous.RemoveMaskTexture then
+			for mask in pairs(old) do pcall(previous.RemoveMaskTexture, previous, mask) end
+		end
+		old = {}
+		overlay.state.maskTexture = ourTex
+	end
 	local next = {}
 	for i = 1, #desired do
 		local m = desired[i]
@@ -170,8 +178,9 @@ end
 local function applyStyle(ab, player, hp, f)
 	local info = ns.api.GetBarInfo(ab and ab._predMy)
 	-- Copy the texture PATH (string) so we keep our own texture object.
-	if info and info.texture and f.SetStatusBarTexture then
+	if info and info.texture and f.SetStatusBarTexture and overlay.state.texturePath ~= info.texture then
 		pcall(f.SetStatusBarTexture, f, info.texture)
+		overlay.state.texturePath = info.texture
 	end
 
 	local r, g, b, baseAlpha
@@ -242,7 +251,7 @@ function overlay.Resolve()
 
 	local f = overlay.state.frame
 	local structuralChange = (overlay.state.ab ~= ab) or (overlay.state.player ~= player)
-		or (overlay.state.hp ~= hp) or (f == nil)
+		or (overlay.state.hp ~= hp) or (overlay.state.parent ~= ab._missClip) or (f == nil)
 
 	if overlay.IsCombat() then
 		if structuralChange then
@@ -284,6 +293,9 @@ function overlay.Resolve()
 	-- Chain AFTER the last shown native bar (native shows both when both exist).
 	local ref = chain[#chain] or ab._predMy or hp
 	anchorTo(ref, hp, f, vertical, reversed)
+	overlay.state.nativeMy = ab._predMy
+	overlay.state.nativeOther = ab._predOther
+	overlay.state.nativeFill = getStatusBarTexture(ref)
 
 	applyStyle(ab, player, hp, f)
 	overlay.state.structureDirty = false
@@ -294,14 +306,16 @@ end
 -- Secure hooks: only queue deferred own work. Never Resolve synchronously.
 function overlay.InstallHooks(module)
 	if not module then return end
+	if overlay.IsCombat() then return end
 	if overlay.state.hooksInstalled and overlay.state.module == module then return end
 	if type(hooksecurefunc) ~= "function" then return end
-	local function queued()
-		overlay.RequestPaint()
-		overlay.state.styleDirty = true
-	end
-	for _, name in ipairs({ "UF_HealPredApply", "UF_AnchorHealPred", "UF_HealPredLayout", "UF_PaintHealPred" }) do
+	for _, name in ipairs({ "UF_HealPredApply", "UF_AnchorHealPred", "UF_HealPredLayout", "UF_HealPredMasks", "UF_PaintHealPred" }) do
 		if type(module[name]) == "function" then
+			local paintOnly = name == "UF_PaintHealPred"
+			local function queued()
+				if paintOnly then overlay.RequestPaint()
+				else overlay.InvalidateStructure() end
+			end
 			local ok = pcall(hooksecurefunc, module, name, queued)
 			if ok then ns.debug("hook installed: " .. name) end
 		end
@@ -317,6 +331,10 @@ function overlay.StructureChanged()
 	if overlay.state.ab ~= ab or overlay.state.player ~= player or overlay.state.hp ~= hp then return true end
 	if not ab._missClip or not ab._predMy or not ab._predOther then return true end
 	if overlay.state.parent ~= ab._missClip then return true end
+	if overlay.state.module ~= ns.api.GetEUF() then return true end
+	if overlay.state.nativeMy ~= ab._predMy or overlay.state.nativeOther ~= ab._predOther then return true end
+	local chain = ns.api.GetNativeChain(ab)
+	if overlay.state.nativeFill ~= getStatusBarTexture(chain[#chain]) then return true end
 	return false
 end
 
@@ -343,8 +361,7 @@ function overlay.HideHard(reason)
 	if f and f.Hide then f:Hide() end
 	overlay.state.ab = nil
 	overlay.state.parent = nil
-	overlay.state.masks = {}
-	overlay.state.maskCount = 0
+	-- Retain mask ownership so the next attachment can remove old masks.
 	if reason then ns.session.lastSuppress = reason end
 end
 

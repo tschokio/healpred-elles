@@ -196,9 +196,7 @@ function learner.Setup()
 		end
 	end)
 	-- Gear changes invalidate magnitudes only; spec change invalidates all.
-	ns.on("PLAYER_EQUIPMENT_CHANGED", function(_, unit)
-		if unit == nil or unit == "player" then learner.ResetAmounts() end
-	end)
+	ns.on("PLAYER_EQUIPMENT_CHANGED", function() learner.ResetAmounts() end)
 	ns.on("SPELLS_CHANGED", function() learner.ResetAmounts() end)
 	ns.on("ACTIVE_TALENT_GROUP_CHANGED", function() learner.Reset() end)
 end
@@ -232,6 +230,8 @@ function learner.HandleCLEU(args)
 		end
 	end
 	if not aura then return end -- absent / unknown ownership: never learned
+	local now = ns.now()
+	if aura.expirationTime and aura.expirationTime <= now then return end
 
 	local instanceID = aura.instanceID
 	local sig = aura.expirationTime -- application/expiration signature
@@ -246,7 +246,6 @@ function learner.HandleCLEU(args)
 		end
 	end
 
-	local now = ns.now()
 	local d = learnedFor(spellID)
 	d.stacksMatter = meta.stacksMatter and true or false
 
@@ -260,6 +259,7 @@ function learner.HandleCLEU(args)
 	d.lastTick = now
 	d.lastInstanceID = instanceID or d.lastInstanceID
 	d.lastSig = sig
+	if ns.overlay then ns.overlay.RequestPaint() end
 
 	-- Magnitude is learned ONLY from readable, valid, non-crit, non-absorbed ticks.
 	local critical, absorbed = args[18], args[17]

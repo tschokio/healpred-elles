@@ -64,9 +64,11 @@ function api.GetFrameUnit(playerFrame)
 	if not playerFrame then return nil, "no player frame" end
 	local unit
 	local ok, v = pcall(function() return playerFrame._euiUnit end)
+	if ok and ns.isSecret(v) then return nil, "frame unit secret" end
 	if ok and v ~= nil then unit = v end
 	if unit == nil and type(playerFrame.GetAttribute) == "function" then
 		local ok2, v2 = pcall(playerFrame.GetAttribute, playerFrame, "unit")
+		if ok2 and ns.isSecret(v2) then return nil, "frame unit secret" end
 		if ok2 and v2 ~= nil then unit = v2 end
 	end
 	if ns.isSecret(unit) then return nil, "frame unit secret" end
@@ -107,7 +109,12 @@ function api._ScanPlayerAuras()
 		while i < 200 do
 			local ok, data = pcall(fn, unit, i, filter)
 			if i == 1 then okFirst = ok end
-			if not ok or data == nil then break end
+			if not ok then break end
+			if ns.isSecret(data) then
+				ns.session.lastSuppress = "aura container secret"
+				break
+			end
+			if data == nil then break end
 			local rec = api._AuraFromModern(data)
 			if rec then
 				localList[#localList + 1] = rec
@@ -263,12 +270,13 @@ function api.GetBarInfo(bar)
 		if ok then info.reversed = v and true or false end
 	end
 	if bar.GetStatusBarColor then
-		local ok, r, g, b = pcall(bar.GetStatusBarColor, bar)
+		local ok, r, g, b, a = pcall(bar.GetStatusBarColor, bar)
 		if ok and ns.toNumber(r) and ns.toNumber(g) and ns.toNumber(b) then
 			info.color = { r, g, b }
+			info.colorAlpha = ns.toNumber(a)
 		end
 	end
-	if bar.GetStatusBarAlpha then
+	if not info.colorAlpha and bar.GetStatusBarAlpha then
 		local ok, v = pcall(bar.GetStatusBarAlpha, bar)
 		info.colorAlpha = ok and ns.toNumber(v) or nil
 	end
@@ -289,6 +297,7 @@ function api.GetNativeChain(ab)
 	local chain = {}
 	if not ab then return chain end
 	local my, other = ab._predMy, ab._predOther
+	if my then chain[#chain + 1] = my end
 	if other then
 		local shown = true
 		if other.IsShown then
@@ -297,7 +306,6 @@ function api.GetNativeChain(ab)
 		end
 		if shown then chain[#chain + 1] = other end
 	end
-	if my then chain[#chain + 1] = my end
 	return chain
 end
 
@@ -311,7 +319,11 @@ function api.GetCLEU()
 	local f = CombatLogGetCurrentEventInfo
 	if type(f) ~= "function" then return nil end
 	local p = ns.pack(pcall(f))
-	if not p[1] then return nil end
+	if not p[1] then
+		ns.capabilities.cleuError = "CombatLogGetCurrentEventInfo call failed"
+		return nil
+	end
+	ns.capabilities.cleuError = nil
 	local out = { n = p.n - 1 }
 	for i = 2, p.n do
 		out[i - 1] = p[i]
