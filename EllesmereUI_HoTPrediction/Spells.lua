@@ -3,8 +3,8 @@
 -- *candidates only*: presence in the client is decided at runtime by observed
 -- auras / combat log, never inferred from this catalog.
 --
--- Absolutely no tick magnitudes or intervals are invented here. Intervals come
--- from observation or from an explicit user "/euihot interval" override only.
+-- No tick constants are stored here. Conservative mode uses observation/manual
+-- data; Estimates.lua owns opt-in tooltip and cadence assumptions.
 
 local addonName, ns = ...
 local spells = {}

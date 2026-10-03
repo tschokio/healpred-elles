@@ -97,6 +97,7 @@ end
 -- consumers (Model/Learner/status) so unknown or foreign casters can be
 -- reported as reasons rather than silently dropped.
 function api._ScanPlayerAuras()
+	api.auraScans = (api.auraScans or 0) + 1
 	local list = {}
 	local unit = "player"
 	local fn = C_UnitAuras and C_UnitAuras.GetAuraDataByIndex
@@ -293,19 +294,23 @@ end
 
 -- Ordered list of the native incoming bars we may chain after. _predMy is
 -- always included as a stable anchor; _predOther only when actually shown.
+function api.GetNativeTail(ab)
+	if not ab then return nil end
+	local other = ab._predOther
+	if other then
+		if not other.IsShown then return other end
+		local ok, shown = pcall(other.IsShown, other)
+		if ok and not ns.isSecret(shown) and shown then return other end
+	end
+	return ab._predMy
+end
+
 function api.GetNativeChain(ab)
 	local chain = {}
 	if not ab then return chain end
 	local my, other = ab._predMy, ab._predOther
 	if my then chain[#chain + 1] = my end
-	if other then
-		local shown = true
-		if other.IsShown then
-			local ok, v = pcall(other.IsShown, other)
-			shown = ok and v and true or false
-		end
-		if shown then chain[#chain + 1] = other end
-	end
+	if other and api.GetNativeTail(ab) == other then chain[#chain + 1] = other end
 	return chain
 end
 

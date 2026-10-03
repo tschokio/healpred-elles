@@ -210,6 +210,11 @@ function FrameMT:RegisterEvent(e)
 	end
 end
 function FrameMT:UnregisterEvent(e) self._events[e] = nil end
+function FrameMT:RegisterUnitEvent(e, unit)
+	self:RegisterEvent(e)
+	self._unitEvents = self._unitEvents or {}
+	self._unitEvents[e] = unit
+end
 function FrameMT:SetScript(name, fn) self._scripts[name] = fn end
 function FrameMT:GetScript(name) return self._scripts[name] end
 function FrameMT:HookScript(name, fn)
@@ -336,6 +341,8 @@ function Mocks.Reset()
 	Mocks.powerCalls = 0
 	Mocks.healAbsorbApiPresent = true
 	Mocks.rejectSecretRange = false
+	Mocks.healingPower = 0
+	Mocks.descriptions = {}
 
 	_G.EllesmereUI_HoTPredictionDB = nil
 
@@ -359,6 +366,10 @@ function Mocks.Reset()
 	_G.UnitHealth = function() return Mocks.health end
 	_G.UnitHealthMax = function() return Mocks.maxHealth end
 	_G.UnitPower = function() Mocks.powerCalls = Mocks.powerCalls + 1; return 100000 end
+	_G.GetSpellBonusHealing = function() return Mocks.healingPower end
+	_G.GetLocale = function() return "enUS" end
+	_G.C_Spell = { GetSpellDescription = function(id) return Mocks.descriptions[id] end }
+	_G.C_TooltipInfo = nil
 	_G.UnitGetTotalHealAbsorbs = function()
 		if not Mocks.healAbsorbApiPresent then error("missing heal absorb API") end
 		return Mocks.healAbsorb
@@ -374,7 +385,12 @@ function Mocks.Reset()
 		Mocks.hooks[#Mocks.hooks + 1] = { tbl = tbl, name = name, fn = fn }
 		return true
 	end
-	_G.C_Timer = { NewTicker = function(interval, fn) Mocks.tickers[#Mocks.tickers + 1] = { interval = interval, fn = fn }; return { Cancel = function() end } end }
+	_G.C_Timer = { NewTicker = function(interval, fn)
+		local ticker = { interval = interval, fn = fn, cancelled = false }
+		function ticker:Cancel() self.cancelled = true end
+		Mocks.tickers[#Mocks.tickers + 1] = ticker
+		return ticker
+	end }
 	_G.C_UnitAuras = {
 		GetAuraDataByIndex = function(unit, i, filter)
 			Mocks.auraCalls = Mocks.auraCalls + 1
@@ -529,6 +545,8 @@ function Mocks.NewEnv(opts)
 	if opts and opts.noCLEU then
 		_G.CombatLogGetCurrentEventInfo = nil
 	end
+	if opts and opts.disabled then _G.EllesmereUI_HoTPredictionDB = { enabled = false } end
+	if opts and opts.noTimer then _G.C_Timer = nil end
 	local euf = Mocks.BuildEUF()
 	local ns = Mocks.LoadAddon()
 	Mocks.Fire("ADDON_LOADED", "EllesmereUI_HoTPrediction")

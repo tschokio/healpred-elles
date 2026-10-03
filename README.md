@@ -7,9 +7,13 @@ player self-cast HoT (heal-over-time) prediction segment** on top of the native
 It can learn tick intervals and per-tick amounts from the combat log at runtime
 **when the client actually exposes CLEU**, schedules the remaining ticks through
 expiry, and appends only the part of that estimate that the native incoming
-number does **not** already explain. On modern restricted clients the combat log
-event is not accessible, so the supported path is explicit, persisted **manual
-calibration** (`/euihot interval` + `/euihot amount`). It never modifies
+number does **not** already explain. Manual calibration (`/euihot interval` +
+`/euihot amount`) can replace combat-log learning, **but cannot replace readable
+aura timing/ownership or native incoming-heal values**. On the user's restricted
+client, the fake overlay has been confirmed working; conservative HoT prediction
+is blocked by missing combat-log access and secret native values. Version 0.3.0
+adds an **opt-in rough estimate** from public tooltips or manual
+amounts, ignoring heal absorbs and accepting unverified native overlap. It never modifies
 EllesmereUI files, frames, textures or functions — it creates one small
 StatusBar of its own and secure-hooks native callbacks read-only.
 
@@ -36,7 +40,7 @@ StatusBar of its own and secure-hooks native callbacks read-only.
 
 The installed folder is the deliverable; there is no separate zip/binary.
 
-### Updating (to v0.2.3)
+### Updating (to v0.3.0)
 
 Replace the `EllesmereUI_HoTPrediction/` folder in your AddOns directory with the
 new one, then `/reload` (or restart). SavedVariables
@@ -52,10 +56,12 @@ teststatus` or the copyable `/euihot window`.
 2. While injured, verify rendering with `/euihot test 1000` (a fake `+1000`
    segment) and `/euihot teststatus` (one concise line). `/euihot test off`
    clears it. `/euihot status` reports what the addon actually sees.
-3. Automatic prediction needs combat-log access. If `/euihot status` shows
-   `delivered=0` (unverified) or `automatic tick learning unavailable`, this
-   client does not expose CLEU. Calibrate by hand from numbers **you observe in
-   the game** for the exact spell and stack count:
+3. Automatic learning needs combat-log access. `delivered=0` alone means
+   **unverified**, not necessarily unavailable. If access is unavailable, manual
+   calibration is only useful when aura timing/ownership and native incoming
+   values are readable. Secret native values still block real prediction, even
+   with calibration. Otherwise calibrate from numbers **you observe in the game**
+   for the exact spell and stack count:
 
    ```
    /euihot interval <actualSpellID> <seconds>
@@ -71,9 +77,60 @@ teststatus` or the copyable `/euihot window`.
 5. Recalibrate `/euihot amount` after any gear or spell-rank change — manual
    values are user-authoritative and are **not** re-derived for you.
 
-Automatic estimation may be unavailable on the supplied modern client. Static
-calibration only works when the aura's duration/source and the native incoming
+Automatic estimation may be unavailable on the supplied modern client. In
+conservative mode, static calibration only works when aura duration/source and native incoming
 figures are readable; it cannot bypass secret-value restrictions.
+
+## Rough prediction on Forever (v0.3.0)
+
+After installing the updated addon and `/reload`, run:
+
+```text
+/euihot enable on
+/euihot test off
+/euihot approximate on
+```
+
+This is a real-aura estimate, **not a fake test**. Cast Rejuvenation/Regrowth on
+yourself while injured. Remaining ticks are counted from their readable duration
+and expiration; the overlay shrinks as ticks pass and disappears at expiry.
+Only self-cast auras count, with exact active spell IDs (ranks are not mixed).
+The mode is persisted and defaults off. `/euihot approximate off` restores all
+conservative gates.
+
+* Public active-aura tooltip text is tried first, then
+  `C_Spell.GetSpellDescription(actualSpellID)`. Only supported English/German
+  periodic-healing clauses are parsed. Unknown/ambiguous/restricted text is
+  withheld, never interpreted as zero. Regrowth's initial heal is excluded.
+* On Forever, Rejuvenation and Regrowth use an **assumed 3-second cadence** unless
+  an observed/manual interval or explicit per-tick tooltip provides another.
+  A total of 48 over 12 seconds therefore estimates four 12-point ticks. Other
+  spell families still need manual/observed interval and amount data.
+* Tooltip amounts are cached for five seconds and refreshed for new applications,
+  gear/spec changes, or reset. Unavailable descriptions retry at that cadence,
+  not every paint. Status includes the amount/interval source and parsing errors.
+* Tooltip values are used **as displayed**. The user confirmed their tooltips
+  already include healing power. No additional healing-power/coefficient bonus
+  is added, so it is not double-counted and Classic coefficients are not assumed.
+* Healing absorbs are ignored even when present. If native incoming values are
+  secret, the whole estimated remainder is appended after the native chain:
+  **overlap is unverified and may double-count**. Readable native values still use
+  the selected overlap policy. Secret health is handled by native missing-health
+  clipping, not Lua arithmetic. Actual visible healing can be smaller than the
+  requested amount. Critical ticks, talents, haste, and tick phase can differ.
+
+If parsing fails, use your actual active ID from `/euihot window`. For example,
+**only if spell 1058 really ticks for 12 on your character**:
+
+```text
+/euihot amount 1058 12
+/euihot interval 1058 3
+```
+
+The previously reported aura was **1058**, not 774. A manual amount is the final
+per-tick heal and wins over observed/tooltip amounts; recalibrate after upgrades.
+
+This new mode is mock-tested, **not yet verified in the user's live client**.
 
 ## Commands
 
@@ -87,8 +144,9 @@ All commands are `/euihot ...` (alias `/hotpred ...`).
 | `status` | One concise report: settings, honest CLEU capability (`function`/`requested`/`registration`/`delivered`/gate), overlay structure, tracked HoTs (manual/approximate labels), prediction. |
 | `window` | Open the copyable debug snapshot window (alias `debug window`). Lazy-created on first use; a titled, movable, clamped dialog with a selectable scrollable text box and Refresh / Select All / Close. |
 | `debug window` | Same as `window`. |
-| `debug [on\|off]` | Toggle on-demand diagnostics (prints status when turned on). Debug lines are emitted on change, not per tick. |
-| `enable on\|off` | Enable/disable the overlay. |
+| `approximate on\|off` | Opt into public tooltip/manual rough prediction; ignores absorbs and accepts unverified secret-native overlap. Default off. |
+| `debug [on\|off]` | Toggle diagnostics (prints status when turned on). Automatic tick lines are change-detected and limited to one per second. |
+| `enable on\|off` | Enable/disable the helper. Off immediately hides the overlay, clears fake tests, cancels the timer, and unregisters gameplay events. |
 | `alpha <0..1>` | Overlay opacity (composited with the inherited native alpha). |
 | `color <r> <g> <b>` | Set the custom overlay colour (0..1) and stop inheriting native style. |
 | `color overlay <r> <g> <b>` | Same as above (explicit spelling). |
@@ -109,6 +167,37 @@ never erased by `/reset` or gear/spec events. A fake test value is **never**
 persisted; a reload always starts with no fake active. `observe` is session-only
 so a restricted client can never resurrect a forbidden registration.
 
+### Performance and lag troubleshooting
+
+There is no network traffic or continuous debug-window refresh. While enabled,
+one 150ms timer coalesces player updates. Visible real estimates recalculate on
+that timer; idle/blocked predictions only evaluate after owning events or
+structure changes. A stationary fake is not repainted every tick. Frame identity
+is checked every second while idle, and every tick while visible. Missing-frame
+attachment retries are limited to once per second. Aura scans use an
+event-invalidated cache, unit subscriptions are player-only where supported,
+and native hooks ignore other frames. Pathological tick schedules exceeding
+10,000 iterations are withheld rather than running an unbounded loop.
+
+`/euihot enable off` now cancels the ticker (or removes the fallback OnUpdate),
+unregisters gameplay/CLEU events, and makes existing secure hooks return before
+reading frames. Secure hooks cannot be removed until reload. Enabling again
+refreshes auras and clears learned samples that may have become stale while
+disabled; persisted manual settings remain. Status/window commands remain usable
+as explicit snapshots while paused.
+
+To isolate reported lag, disable **only this helper** in the AddOns list and
+`/reload`, then compare the same location/activity. This also works with older
+versions whose slash disable did not stop the timer. Improvement is evidence of
+a helper-related issue, not proof of which code path caused it. No live CPU/FPS
+measurement was available during development, so the changes are not a claim
+that the reported severe lag has been reproduced or eliminated.
+
+v0.2.4's `/euihot window` includes session work counters for timer callbacks,
+model evaluations, attachment resolves, render calls, and aura scans. Open or
+Refresh twice several seconds apart to compare them; they are **not CPU timings**.
+Snapshot collection itself can perform a one-off aura scan after invalidation.
+
 ---
 
 ## How it works
@@ -118,6 +207,7 @@ diagnostics), `Api.lua` (defensive client/EllesmereUI adapters + aura cache),
 `Spells.lua` (candidate IDs), `Learner.lua` (combat-log learning), `Model.lua`
 (tick math + overlap), `Overlay.lua` (our bar, anchoring, combat deferral),
 `DebugWindow.lua` (lazy copyable snapshot window; no timers or frame scans).
+`Estimates.lua` supplies the optional public-tooltip estimates.
 
 ### CLEU (combat log) access and the engine gate
 Modern clients deliver **no varargs** to `COMBAT_LOG_EVENT_UNFILTERED`; the

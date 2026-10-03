@@ -6,7 +6,7 @@
 local addonName, ns = ...
 
 ns.name = addonName
-ns.version = "0.2.3"
+ns.version = "0.3.0"
 ns.debugEnabled = false
 ns.inCombat = false
 ns.started = false
@@ -156,6 +156,7 @@ ns.DEFAULTS = {
 	overlayColor = { 1.0, 0.82, 0.0 },
 	amountMode = "total",          -- "total" (CLEU amount includes overheal) or "effective"
 	assumeApiExcludesHoTs = false, -- opt-in: user verified native already excludes HoTs
+	approximatePrediction = false, -- opt-in: public tooltip/manual estimate, ignores heal absorbs
 	intervalOverrides = {},        -- [spellID] = seconds (user calibration only)
 	amountOverrides = {},          -- [spellID] = { [stacks] = exact tick total } (user calibration only)
 	extraSpells = {},              -- [spellID] = { name =, family = }
@@ -188,6 +189,7 @@ function ns.on(event, fn)
 end
 
 function ns.dispatch(event, ...)
+	if ns.db and not ns.db.enabled and event ~= "ADDON_LOADED" then return end
 	local list = ns.eventHandlers[event]
 	if not list then return end
 	for i = 1, #list do
@@ -222,7 +224,12 @@ function ns.register(event)
 		ns.capabilities.events[event] = false
 		return false
 	end
-	local ok, ret = pcall(f.RegisterEvent, f, event)
+	local ok, ret
+	if event:match("^UNIT_") and type(f.RegisterUnitEvent) == "function" then
+		ok, ret = pcall(f.RegisterUnitEvent, f, event, "player")
+	else
+		ok, ret = pcall(f.RegisterEvent, f, event)
+	end
 	local accepted = ok and (ret ~= false)
 	ns.capabilities.events[event] = accepted and true or false
 	return accepted and true or false
@@ -293,6 +300,12 @@ function ns.SetupCLEU(force)
 	cap.cleuFunction = ns.api and ns.api.CombatLogAvailable() or false
 	cap.cleuError = nil
 	cap.cleuOverride = force and true or false
+	if ns.db and not ns.db.enabled then
+		cap.cleuRequested, cap.cleuAccepted = false, false
+		cap.cleuGateReason = "addon disabled"
+		ns.unregister(EVENT)
+		return false
+	end
 
 	-- 1. No API on this client: never register.
 	if not cap.cleuFunction then
@@ -341,6 +354,35 @@ end
 -- startup
 ------------------------------------------------------------------------------
 
+local RUNTIME_EVENTS = {
+	"PLAYER_LOGIN", "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
+	"UNIT_AURA", "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_HEAL_PREDICTION",
+	"UNIT_HEAL_ABSORB_AMOUNT_CHANGED", "PLAYER_EQUIPMENT_CHANGED",
+	"ACTIVE_TALENT_GROUP_CHANGED", "SPELLS_CHANGED",
+}
+
+-- Disabling stops the timer and unregisters gameplay events. Secure hooks cannot
+-- be removed, so their callbacks have a disabled guard before doing any work.
+function ns.SetRuntimeEnabled(enabled)
+	enabled = enabled and true or false
+	ns.db.enabled = enabled
+	if ns.runtimeEnabled == enabled then return end
+	ns.runtimeEnabled = enabled
+	for _, event in ipairs(RUNTIME_EVENTS) do
+		if enabled then ns.register(event) else ns.unregister(event) end
+	end
+	if enabled then
+		ns.inCombat = ns.api.InCombat()
+		-- Gear, talents and applications may have changed while unsubscribed.
+		if ns.learner then ns.learner.Reset() end
+		ns.SetupCLEU(ns.observeCLEU == true)
+	else
+		ns.session.fake = nil
+		ns.SetupCLEU(false)
+	end
+	if ns.overlay and ns.overlay.SetEnabled then ns.overlay.SetEnabled(enabled) end
+end
+
 -- Called once after the matching ADDON_LOADED. Attempts a real init and, only
 -- if everything the overlay depends on is absent, prints a single useful line.
 function ns.Startup()
@@ -350,26 +392,10 @@ function ns.Startup()
 	ns.resetSession()
 	ns.InitDatabase()
 
-	ns.register("PLAYER_LOGIN")
-	ns.register("PLAYER_ENTERING_WORLD")
-	ns.register("PLAYER_REGEN_DISABLED")
-	ns.register("PLAYER_REGEN_ENABLED")
-	ns.register("UNIT_AURA")
-	ns.register("UNIT_HEALTH")
-	ns.register("UNIT_MAXHEALTH")
-	ns.register("UNIT_HEAL_PREDICTION")
-	ns.register("UNIT_HEAL_ABSORB_AMOUNT_CHANGED")
-	ns.register("PLAYER_EQUIPMENT_CHANGED")
-	ns.register("ACTIVE_TALENT_GROUP_CHANGED")
-	ns.register("SPELLS_CHANGED")
-
-	-- CLEU is gated: on known restricted engines the forbidden event is never
-	-- even attempted unless the user explicitly opts in with /euihot observe on.
 	ns.initCapabilities()
-	ns.SetupCLEU(false)
-
 	if ns.learner and ns.learner.Setup then ns.learner.Setup() end
-	if ns.overlay and ns.overlay.Setup then ns.overlay.Setup() end
+	ns.SetRuntimeEnabled(ns.db.enabled)
+	ns.unregister("ADDON_LOADED")
 
 	if ns.db and ns.db.debug then
 		ns.print("v" .. ns.version .. " loaded (debug). /euihot help for commands.")
@@ -449,7 +475,7 @@ local function parseNumber(s)
 	return tonumber(s)
 end
 
-local HELP = "commands: test <v> | test off | teststatus | status | window | debug [on|off] | debug window | enable on|off | alpha <a> | color <r> <g> <b> | color overlay <r> <g> <b> | color native | interval <id> <s>|off | amount <id> <tickTotal> [stacks]|off [stacks] | observe on|off | spell add|remove <id> [name] | amountmode total|effective | excludehots on|off | reset | help"
+local HELP = "commands: test <v> | test off | teststatus | status | window | approximate on|off | debug [on|off] | debug window | enable on|off | alpha <a> | color <r> <g> <b> | color overlay <r> <g> <b> | color native | interval <id> <s>|off | amount <id> <tickTotal> [stacks]|off [stacks] | observe on|off | spell add|remove <id> [name] | amountmode total|effective | excludehots on|off | reset | help"
 
 -- Bound for a manual tick-total calibration. It only has to be a sane upper
 -- limit on a single heal tick, not a game mechanic.
@@ -478,9 +504,19 @@ function ns.HandleCommand(input)
 				ns.print("usage: /euihot test <nonnegative number> | test off")
 			end
 		end
+		if ns.overlay then ns.overlay.RequestPaint() end
 		return
 	elseif cmd == "status" then
 		ns.EmitStatus()
+		return
+	elseif cmd == "approximate" then
+		local v = (args[1] or ""):lower()
+		if v ~= "on" and v ~= "off" then ns.print("usage: /euihot approximate on|off"); return end
+		ns.db.approximatePrediction = v == "on"
+		if ns.estimates then ns.estimates.Invalidate() end
+		if ns.overlay then ns.overlay.RequestPaint() end
+		ns.print(v == "on" and "approximate prediction ON: public tooltip/manual amounts; heal absorbs ignored; restricted native overlap unverified (may double-count). /euihot test off to use real auras."
+			or "approximate prediction OFF: conservative restrictions restored.")
 		return
 	elseif cmd == "teststatus" then
 		ns.EmitTestStatus()
@@ -525,14 +561,14 @@ function ns.HandleCommand(input)
 			ns.print("usage: /euihot enable on|off")
 			return
 		end
-		if ns.overlay and ns.overlay.RequestPaint then ns.overlay.RequestPaint() end
+		ns.SetRuntimeEnabled(ns.db.enabled)
 		ns.print("overlay " .. (ns.db.enabled and "enabled" or "disabled") .. ".")
 		return
 	elseif cmd == "alpha" then
 		local a = parseNumber(args[1])
 		if a and a >= 0 and a <= 1 and ns.isFinite(a) then
 			ns.db.alpha = a
-			if ns.overlay and ns.overlay.RequestPaint then ns.overlay.RequestPaint() end
+			if ns.overlay then ns.overlay.RequestStyle() end
 			ns.print("alpha = " .. tostring(a))
 		else
 			ns.print("usage: /euihot alpha <0..1>")
@@ -542,7 +578,7 @@ function ns.HandleCommand(input)
 		local first = (args[1] or ""):lower()
 		if first == "native" then
 			ns.db.shareNativeStyle = true
-			if ns.overlay and ns.overlay.RequestPaint then ns.overlay.RequestPaint() end
+			if ns.overlay then ns.overlay.RequestStyle() end
 			ns.print("color restored to native inherited style.")
 			return
 		end
@@ -556,7 +592,7 @@ function ns.HandleCommand(input)
 		if ns.isFinite(r) and ns.isFinite(g) and ns.isFinite(b) and r <= 1 and g <= 1 and b <= 1 then
 			ns.db.overlayColor = { r, g, b }
 			ns.db.shareNativeStyle = false
-			if ns.overlay and ns.overlay.RequestPaint then ns.overlay.RequestPaint() end
+			if ns.overlay then ns.overlay.RequestStyle() end
 			ns.print(string.format("overlay color = %s,%s,%s (native inheritance off). Use /euihot color native to restore.",
 				tostring(r), tostring(g), tostring(b)))
 		else
@@ -624,6 +660,11 @@ function ns.HandleCommand(input)
 	elseif cmd == "observe" then
 		local v = (args[1] or ""):lower()
 		if v == "on" then
+			if not ns.db.enabled then
+				ns.observeCLEU = true
+				ns.print("observe on saved for this session; learning remains paused while addon disabled.")
+				return
+			end
 			if not (ns.api and ns.api.CombatLogAvailable and ns.api.CombatLogAvailable()) then
 				ns.observeCLEU = true
 				ns.print("observe on: CLEU function unavailable on this client; no registration attempted.")
@@ -656,9 +697,11 @@ function ns.HandleCommand(input)
 		if ns.isPositiveInt(id) and op == "add" then
 			ns.db.extraSpells[id] = { name = args[3] or ("spell " .. id), family = "custom" }
 			ns.db.removedSpells[id] = nil
+			if ns.overlay then ns.overlay.RequestPaint() end
 			ns.print("registered spell " .. id .. ".")
 		elseif ns.isPositiveInt(id) and op == "remove" then
 			ns.db.removedSpells[id] = true
+			if ns.overlay then ns.overlay.RequestPaint() end
 			ns.print("removed spell " .. id .. ".")
 		else
 			ns.print("usage: /euihot spell add|remove <positive spellID> [name]")
@@ -670,6 +713,7 @@ function ns.HandleCommand(input)
 			ns.db.amountMode = m
 			if ns.learner and ns.learner.ResetAmounts then ns.learner.ResetAmounts() end
 			if ns.api and ns.api.InvalidateAuraCache then ns.api.InvalidateAuraCache() end
+			if ns.overlay then ns.overlay.RequestPaint() end
 			ns.print("amount mode = " .. m .. "; learned magnitudes reset.")
 		else
 			ns.print("usage: /euihot amountmode total|effective")
@@ -678,6 +722,7 @@ function ns.HandleCommand(input)
 	elseif cmd == "excludehots" then
 		local v = (args[1] or ""):lower()
 		ns.db.assumeApiExcludesHoTs = (v == "on" or v == "true" or v == "1")
+		if ns.overlay then ns.overlay.RequestPaint() end
 		ns.print("assume API excludes HoTs = " .. tostring(ns.db.assumeApiExcludesHoTs))
 		return
 	elseif cmd == "reset" then
@@ -784,6 +829,10 @@ function ns._BuildStatusReport(includeDebug)
 	add("addon v%s enabled=%s debug=%s mode=%s excludeHoTs=%s shareNativeStyle=%s alpha=%.2f",
 		tostring(ns.version), tostring(ns.db.enabled), tostring(ns.db.debug), tostring(ns.db.amountMode),
 		tostring(ns.db.assumeApiExcludesHoTs), tostring(ns.db.shareNativeStyle), ns.db.alpha or 0)
+	add("approximate prediction=%s", tostring(ns.db.approximatePrediction))
+	if ns.db.approximatePrediction then
+		add("ROUGH ESTIMATE: healing absorbs ignored; restricted native overlap unverified; tooltip bonuses/tick phase may differ from actual healing.")
+	end
 
 	-- CLEU access / registration: requested vs accepted vs actually DELIVERED.
 	-- "Accepted" is not proof the event is accessible; only an observed delivery
@@ -798,13 +847,20 @@ function ns._BuildStatusReport(includeDebug)
 	if cap.cleuGateReason then add("cleu gate: %s", tostring(cap.cleuGateReason)) end
 	local CAL = "/euihot interval <id> <seconds> and /euihot amount <id> <tickTotal> [stacks]"
 	if not cleuFn or not cleuReg then
-		add("automatic tick learning unavailable; calibrate manually: %s", CAL)
+		add("automatic tick learning unavailable; %s", ns.db.approximatePrediction
+			and "approximate mode uses public tooltips or manual calibration (not observed ticks)."
+			or ("calibrate manually: " .. CAL .. " (cannot bypass restricted native values in conservative mode)"))
 	elseif delivered == 0 then
 		add("automatic tick learning unverified (no CLEU delivered yet: acceptance is not delivery); calibrate manually: %s", CAL)
 	end
 
 	-- overlay structure
 	local st = ns.overlay and ns.overlay.state or {}
+	local counts = st.counts or {}
+	add("work counters (session totals, not CPU): timer=%s ticks=%s model=%s resolve=%s render=%s auraScans=%s",
+		tostring(st.ticker ~= nil or (st.timerFrame and st.timerFrame:GetScript("OnUpdate") ~= nil) or false),
+		tostring(counts.ticks or 0), tostring(counts.model or 0), tostring(counts.resolve or 0),
+		tostring(counts.render or 0), tostring(ns.api.auraScans or 0))
 	local f = st.frame
 	local frameName = nil
 	if f and f.GetName then
@@ -841,7 +897,7 @@ function ns._BuildStatusReport(includeDebug)
 			local meta = ns.spells.Meta(aura.spellID)
 			if meta and aura.sourceUnit == "player" then
 				tracked = tracked + 1
-				local data = ns.learner.GetSpellData(aura.spellID)
+				local data = ns.learner.GetSpellData(aura.spellID, aura)
 				local ticks = ns.model.ComputeTicks(aura, data, now)
 				local amount, manual
 				if meta.stacksMatter then
@@ -854,6 +910,9 @@ function ns._BuildStatusReport(includeDebug)
 				local tag = meta.approximate and " (approximate)" or ""
 				if manual then tag = tag .. " (manual)" end
 				if data.manualInterval then tag = tag .. " (manual interval)" end
+				if data.amountSource then tag = tag .. " amountSource=" .. data.amountSource end
+				if data.intervalSource then tag = tag .. " intervalSource=" .. data.intervalSource end
+				if data.estimateError then tag = tag .. " tooltip=" .. data.estimateError end
 				add("  hot %s [%s] stacks=%s exp=%s dur=%s interval=%s ticksLeft=%s amount=%s%s",
 					tostring(aura.spellID), tostring(meta.name or meta.family), tostring(aura.stacks),
 					tostring(ns.round(aura.expirationTime, 1)), tostring(ns.round(aura.duration, 1)),
@@ -877,6 +936,9 @@ function ns._BuildStatusReport(includeDebug)
 			tostring(ns.session.lastRange or "n/a"))
 		add("fake visible amount unknown (engine-clipped; native clip may hide it, health may be restricted)")
 		add("fake render reason=%s", tostring(res.renderReason or res.reason or "n/a"))
+	elseif res and res.approximate then
+		add("approximate HoT total=%s requested=%s visible=unknown (engine-clipped) reason=%s render=%s",
+			tostring(res.hotEstimate), tostring(res.added), tostring(res.reason), tostring(res.renderReason or "n/a"))
 	elseif res then
 		local visible = res.added
 		add("prediction total=%s visible=%s native=%s reason=%s render=%s",
@@ -968,7 +1030,8 @@ function ns.EmitDebugDetails(lines)
 		add("event %s registered=%s", event, tostring(ns.eventRegistered(event)))
 	end
 	add("policy=%s amountMode=%s",
-		ns.db.assumeApiExcludesHoTs and "excludes-HoT(opt-in)" or "conservative max(0,hot-native)",
+		ns.db.approximatePrediction and "approximate(opt-in; absorbs ignored; secret overlap unverified)"
+			or (ns.db.assumeApiExcludesHoTs and "excludes-HoT(opt-in)" or "conservative max(0,hot-native)"),
 		tostring(ns.db.amountMode))
 	local cap = ns.capabilities or {}
 	add("cleu requested=%s accepted=%s delivered=%s override=%s gate=%s",

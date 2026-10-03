@@ -36,6 +36,7 @@ overlay.state = {
 	maskCount = 0,
 	lastDebugKey = nil,
 	lastTickError = nil,
+	counts = { ticks = 0, model = 0, resolve = 0, render = 0 },
 }
 
 local function safeCall(fn, ...)
@@ -66,6 +67,7 @@ function overlay.InvalidateStructure()
 end
 
 function overlay.RequestPaint()
+	if not ns.db or not ns.db.enabled then return end
 	overlay.state.paintRequested = true
 end
 
@@ -229,6 +231,8 @@ end
 -- re-parent/re-anchor our own frame. Deferred entirely while in combat when the
 -- structure is missing or has been replaced.
 function overlay.Resolve()
+	if not ns.db or not ns.db.enabled then return false end
+	overlay.state.counts.resolve = overlay.state.counts.resolve + 1
 	local ab, player, hp = ns.api.GetAbsorbFrame()
 	if not ab or not player or not hp then
 		overlay.HideHard("native prediction structure missing")
@@ -267,6 +271,8 @@ function overlay.Resolve()
 	end
 
 	overlay.state.ab, overlay.state.player, overlay.state.hp = ab, player, hp
+	overlay.state.frameUnit = unit
+	overlay.state.predOn = ab._predOn
 
 	if not f then
 		f = overlay.EnsureFrame()
@@ -348,10 +354,12 @@ function overlay.InstallHooks(module)
 		if type(module[name]) == "function" then
 			local paintOnly = name == "UF_PaintHealPred"
 			local function queued(...)
+				if not ns.db or not ns.db.enabled then return end
+				if not overlay.HookArgIsCurrent(...) then return end
 				if paintOnly then
 					-- The native painter only ever needs a repaint of our bar.
 					overlay.RequestPaint()
-				elseif overlay.HookArgIsCurrent(...) then
+				else
 					overlay.InvalidateStructure()
 				end
 			end
@@ -371,13 +379,15 @@ function overlay.StructureChanged()
 	if not ab._missClip or not ab._predMy or not ab._predOther then return true end
 	if overlay.state.parent ~= ab._missClip then return true end
 	if overlay.state.module ~= ns.api.GetEUF() then return true end
+	if ns.api.GetFrameUnit(player) ~= overlay.state.frameUnit then return true end
+	if ab._predOn ~= overlay.state.predOn then return true end
 	if overlay.state.nativeMy ~= ab._predMy or overlay.state.nativeOther ~= ab._predOther then return true end
-	local chain = ns.api.GetNativeChain(ab)
-	if overlay.state.nativeFill ~= getStatusBarTexture(chain[#chain]) then return true end
+	if overlay.state.nativeFill ~= getStatusBarTexture(ns.api.GetNativeTail(ab)) then return true end
 	return false
 end
 
 function overlay.ApplyPending()
+	if not ns.db or not ns.db.enabled then return end
 	if overlay.state.pending then
 		overlay.InvalidateStructure()
 		overlay.Resolve()
@@ -390,7 +400,7 @@ end
 
 function overlay.Hide(reason)
 	local f = overlay.state.frame
-	if f and f.Hide then f:Hide() end
+	if f and f.Hide and (not f.IsShown or f:IsShown()) then f:Hide() end
 	if reason then
 		ns.session.lastSuppress = reason
 		ns.session.lastRenderReason = reason
@@ -549,6 +559,7 @@ function overlay.RenderValue(value, reason)
 		overlay.Hide("overlay value setter refused")
 		return false, "overlay value setter refused"
 	end
+	overlay.state.counts.render = overlay.state.counts.render + 1
 	if f.Show then f:Show() end
 	ns.session.lastSuppress = nil
 	ns.session.lastRange = rangeDiag
@@ -616,7 +627,10 @@ end
 local function debugChange(key, fmt, ...)
 	if not (ns.db and ns.db.debug) then return end
 	if key == overlay.state.lastDebugKey then return end
+	local now = ns.now()
+	if overlay.state.lastDebugAt and now - overlay.state.lastDebugAt < 1 then return end
 	overlay.state.lastDebugKey = key
+	overlay.state.lastDebugAt = now
 	ns.debug(string.format(fmt, ...))
 end
 
@@ -625,29 +639,30 @@ function overlay.Tick(force)
 		overlay.Hide("addon disabled")
 		return
 	end
+	overlay.state.counts.ticks = overlay.state.counts.ticks + 1
 	local now = ns.now()
 
 	-- Cheap identity probe; if the vendor structure changed, resolve (deferred
 	-- in combat) rather than painting stale handles.
-	if overlay.StructureChanged() then
-		overlay.state.structureDirty = true
+	local probe = now - (overlay.state.lastIdleProbe or -1) >= IDLE_PROBE_INTERVAL
+	if probe or force or overlay.state.paintRequested or overlay.state.active then
+		if overlay.StructureChanged() then overlay.state.structureDirty = true end
 	end
 
 	local fake = ns.session.fake
 	local needPaint = force or overlay.state.paintRequested or overlay.state.structureDirty
-		or fake ~= nil or overlay.state.active
+		or (overlay.state.active and fake == nil)
+		or (fake == nil and overlay.state.nextEstimateRetry and now >= overlay.state.nextEstimateRetry)
+	-- Missing native frames must not retry full attachment every 150ms forever.
+	if not overlay.state.ab and not force and not probe then return end
 
 	if not needPaint then
 		-- Idle: throttle. A ~1s cheap probe keeps attachment current without a
 		-- full rescan or any aura API calls.
-		if now - (overlay.state.lastIdleProbe or -1) >= IDLE_PROBE_INTERVAL then
-			overlay.state.lastIdleProbe = now
-			if overlay.state.structureDirty or not overlay.state.ab then
-				overlay.Resolve()
-			end
-		end
+		if probe then overlay.state.lastIdleProbe = now end
 		return
 	end
+	if probe then overlay.state.lastIdleProbe = now end
 
 	overlay.state.paintRequested = false
 
@@ -685,14 +700,17 @@ function overlay.Tick(force)
 		res.rendered = rendered and true or false
 		res.renderReason = renderReason
 		ns.session.lastStatus = res
-		debugChange("fake|" .. tostring(fake.value) .. "|" .. tostring(rendered) .. "|" .. tostring(renderReason),
-			"fake requested=%s shown=%s render=%s range=%s", tostring(fake.value),
-			tostring(rendered), tostring(renderReason), tostring(ns.session.lastRange))
+		if ns.db.debug then
+			debugChange("fake|" .. tostring(fake.value) .. "|" .. tostring(rendered) .. "|" .. tostring(renderReason),
+				"fake requested=%s shown=%s render=%s range=%s", tostring(fake.value),
+				tostring(rendered), tostring(renderReason), tostring(ns.session.lastRange))
+		end
 		return
 	end
 
+	overlay.state.counts.model = overlay.state.counts.model + 1
 	local res = ns.model.Evaluate(now, { ab = overlay.state.ab })
-	overlay.state.active = (res.hotEstimate and res.hotEstimate > 0) and true or false
+	overlay.state.nextEstimateRetry = res.nextEstimateRetry
 	local rendered, renderReason
 	if res.added and res.added > 0 then
 		rendered, renderReason = overlay.RenderValue(res.added, res.reason)
@@ -702,15 +720,38 @@ function overlay.Tick(force)
 	end
 	res.rendered = rendered and true or false
 	res.renderReason = renderReason
+	-- A blocked or fully clipped estimate cannot change just by ticking. Owning
+	-- aura/health/native events will retry it, without continuous model work.
+	overlay.state.active = res.rendered and res.added and res.added > 0 or false
 	ns.session.lastStatus = res
-	debugChange(tostring(res.added) .. "|" .. tostring(res.reason) .. "|" .. tostring(res.hotEstimate),
-		"tick hot=%s native=%s added=%s reason=%s render=%s", tostring(res.hotEstimate),
-		tostring(res.native and res.native.total), tostring(res.added), tostring(res.reason),
-		tostring(renderReason))
+	if ns.db.debug then
+		debugChange(tostring(res.added) .. "|" .. tostring(res.reason) .. "|" .. tostring(res.hotEstimate),
+			"tick hot=%s native=%s added=%s reason=%s render=%s", tostring(res.hotEstimate),
+			tostring(res.native and res.native.total), tostring(res.added), tostring(res.reason),
+			tostring(renderReason))
+	end
 end
 
 function overlay.Setup()
+	overlay.SetEnabled(ns.db and ns.db.enabled)
+end
+
+function overlay.SetEnabled(enabled)
+	if not enabled then
+		if overlay.state.ticker then
+			overlay.state.ticker:Cancel()
+			overlay.state.ticker = nil
+		end
+		if overlay.state.timerFrame then overlay.state.timerFrame:SetScript("OnUpdate", nil) end
+		overlay.state.active = false
+		overlay.state.nextEstimateRetry = nil
+		overlay.state.paintRequested = false
+		overlay.Hide("addon disabled")
+		return
+	end
+	if overlay.state.ticker or (overlay.state.timerFrame and overlay.state.timerFrame:GetScript("OnUpdate")) then return end
 	overlay.InvalidateStructure()
+	overlay.state.lastIdleProbe = -1
 	overlay.RequestPaint()
 	local function safeTick()
 		local ok, err = pcall(overlay.Tick)
@@ -723,9 +764,10 @@ function overlay.Setup()
 		end
 	end
 	if C_Timer and C_Timer.NewTicker then
-		C_Timer.NewTicker(TICK_INTERVAL, safeTick)
+		overlay.state.ticker = C_Timer.NewTicker(TICK_INTERVAL, safeTick)
 	elseif type(CreateFrame) == "function" then
-		local t = CreateFrame("Frame")
+		local t = overlay.state.timerFrame or CreateFrame("Frame")
+		overlay.state.timerFrame = t
 		local elapsed = 0
 		t:SetScript("OnUpdate", function(_, dt)
 			elapsed = elapsed + (dt or 0)

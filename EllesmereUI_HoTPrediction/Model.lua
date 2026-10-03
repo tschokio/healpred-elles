@@ -52,6 +52,10 @@ function model.ComputeTicks(aura, data, now, eps)
 
 	local times = {}
 	local maxK = math.floor(D / I) + 3
+	-- Defensive work bound, not a spell-mechanics assumption. Bad calibration or
+	-- malformed aura durations must never cause millions of iterations per paint
+	-- (or while building a copyable status report).
+	if maxK > 10000 then return nil, "tick schedule exceeds safety limit" end
 	for k = 1, maxK do
 		local t = anchor + k * I
 		if t > E + eps then break end
@@ -109,7 +113,10 @@ function model.CollectPlayerHoTs(now)
 				out.reasons[#out.reasons + 1] = string.format("%s: %s caster",
 					tostring(aura.spellID), aura.sourceUnit and tostring(aura.sourceUnit) or "unknown")
 			else
-				local data = ns.learner.GetSpellData(aura.spellID)
+				local data = ns.learner.GetSpellData(aura.spellID, aura)
+				if data.nextEstimateRetry then
+					out.nextEstimateRetry = math.min(out.nextEstimateRetry or data.nextEstimateRetry, data.nextEstimateRetry)
+				end
 				local res, err = model.ComputeAuraEstimate(aura, meta, data, now)
 				if res then
 					if res.amount > 0 then
@@ -229,9 +236,31 @@ function model.Evaluate(now, opts)
 	out.hotEstimate = hot.total
 	out.details = hot.details
 	out.auraReasons = hot.reasons
+	out.nextEstimateRetry = hot.nextEstimateRetry
 
 	local native = ns.api.GetNativeIncoming(ab)
 	out.native = native
+
+	-- Explicitly authorized rough mode. It never interprets restricted native or
+	-- absorb values as zero: instead the status says overlap is UNVERIFIED. Engine
+	-- clipping bounds the appended public estimate when health is restricted.
+	if db.approximatePrediction then
+		out.approximate = true
+		if not hot.total or hot.total <= 0 then
+			out.added = 0
+			out.reason = #hot.reasons > 0 and ("withheld: " .. hot.reasons[1]) or "no active self HoT estimate"
+			return out
+		end
+		if native.reason then
+			out.added = hot.total
+			out.reason = "approximate full HoT estimate; native overlap unverified; heal absorbs ignored; engine-clipped"
+		else
+			local health = ns.api.GetHealthNumbers()
+			out.added, out.reason = model.ComputeAdded(hot.total, native, health, { excludes = db.assumeApiExcludesHoTs })
+			out.reason = "approximate; heal absorbs ignored; " .. tostring(out.reason)
+		end
+		return out
+	end
 
 	-- Positive OR unknown heal absorb suppresses the real overlay. Fake bypasses.
 	if not opts.fake and ns.api and ns.api.GetHealAbsorb then

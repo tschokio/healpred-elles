@@ -55,7 +55,7 @@ end
 -- Drive the addon's real periodic timer callback (not a manual state setup).
 local function runTimer()
 	for i = #Mocks.tickers, 1, -1 do
-		if Mocks.tickers[i].interval == 0.15 then
+		if Mocks.tickers[i].interval == 0.15 and not Mocks.tickers[i].cancelled then
 			Mocks.tickers[i].fn()
 			return true
 		end
@@ -1157,8 +1157,236 @@ T.register("integration: native hooks ignore target/focus and only mark the play
 	env.ns.overlay.state.structureDirty = false
 	env.ns.overlay.state.paintRequested = false
 	module.UF_PaintHealPred(targetFrame)
-	assert_true(env.ns.overlay.state.paintRequested, "painter only requests a paint")
+	assert_false(env.ns.overlay.state.paintRequested, "target painter is ignored")
+	module.UF_PaintHealPred(env.player, "player")
+	assert_true(env.ns.overlay.state.paintRequested, "player painter requests a paint")
 	assert_false(env.ns.overlay.state.structureDirty, "painter never resolves")
+end)
+
+T.register("performance: disabling cancels work and hooks become no-ops", function()
+	local env = newEnv()
+	local ns = env.ns
+	ns.HandleCommand("test 2000")
+	runTimer()
+	local st = ns.overlay.state
+	assert_true(st.frame:IsShown())
+	local ticker = st.ticker
+	local module = ns.api.GetEUF()
+	ns.HandleCommand("enable off")
+	assert_true(ticker.cancelled)
+	assert_nil(st.ticker)
+	assert_nil(ns.session.fake)
+	assert_false(st.frame:IsShown())
+	assert_nil(next(ns.eventFrame._events), "no gameplay or startup events remain")
+	st.structureDirty = false
+	local counts = { st.counts.ticks, st.counts.model, st.counts.resolve, st.counts.render }
+	local scans = ns.api.auraScans
+	local reads = 0
+	local original = ns.api.GetAbsorbFrame
+	ns.api.GetAbsorbFrame = function(...) reads = reads + 1; return original(...) end
+	for i = 1, 100 do
+		Mocks.now = Mocks.now + 0.15
+		ticker.fn() -- even an already queued cancelled callback is harmless
+		module.UF_PaintHealPred(env.player, "player")
+		module.UF_HealPredApply(env.player)
+		Mocks.Fire("UNIT_AURA", "player")
+		Mocks.Fire("PLAYER_REGEN_ENABLED")
+	end
+	assert_eq(reads, 0)
+	assert_false(st.paintRequested)
+	assert_false(st.structureDirty)
+	assert_eq(st.counts.ticks, counts[1])
+	assert_eq(st.counts.model, counts[2])
+	assert_eq(st.counts.resolve, counts[3])
+	assert_eq(st.counts.render, counts[4])
+	assert_eq(ns.api.auraScans, scans)
+	ns.HandleCommand("observe on")
+	assert_false(ns.eventRegistered("COMBAT_LOG_EVENT_UNFILTERED"))
+	ns.HandleCommand("enable on")
+	assert_not_nil(st.ticker)
+	assert_true(ns.eventRegistered("UNIT_AURA"))
+	assert_true(ns.eventRegistered("COMBAT_LOG_EVENT_UNFILTERED"))
+	local total = #Mocks.tickers
+	ns.HandleCommand("enable on")
+	assert_eq(#Mocks.tickers, total, "repeat enable cannot create extra timers")
+	ns.HandleCommand("test 2000")
+	assert_true(runTimer())
+	assert_true(st.frame:IsShown(), "re-enabled renderer works")
+end)
+
+T.register("performance: persisted disabled starts with no timer hooks or gameplay events", function()
+	local env = newEnv({ disabled = true })
+	assert_eq(#Mocks.tickers, 0)
+	assert_eq(#Mocks.hooks, 0)
+	assert_nil(env.ns.overlay.state.frame)
+	assert_nil(next(env.ns.eventFrame._events))
+	assert_false(env.ns.eventRegistered("COMBAT_LOG_EVENT_UNFILTERED"))
+	assert_eq(Mocks.auraCalls, 0)
+	env.ns.HandleCommand("enable on")
+	assert_true(runTimer())
+	assert_not_nil(env.ns.overlay.state.frame)
+end)
+
+T.register("performance: OnUpdate fallback stops and reuses one timer frame", function()
+	local env = newEnv({ noTimer = true })
+	local st = env.ns.overlay.state
+	local frame = st.timerFrame
+	assert_not_nil(frame:GetScript("OnUpdate"))
+	frame:GetScript("OnUpdate")(frame, 0.2)
+	env.ns.HandleCommand("enable off")
+	assert_nil(frame:GetScript("OnUpdate"))
+	env.ns.HandleCommand("enable on")
+	assert_eq(st.timerFrame, frame)
+	frame:GetScript("OnUpdate")(frame, 0.2)
+	assert_not_nil(st.frame)
+end)
+
+T.register("performance: player-only unit subscriptions and unrelated painter burst is idle", function()
+	local env = newEnv()
+	runTimer()
+	assert_eq(env.ns.eventFrame._unitEvents.UNIT_AURA, "player")
+	assert_eq(env.ns.eventFrame._unitEvents.UNIT_HEAL_PREDICTION, "player")
+	local module = env.ns.api.GetEUF()
+	local other = CreateFrame("Frame")
+	local st = env.ns.overlay.state
+	local calls = st.counts.model
+	for i = 1, 100 do module.UF_PaintHealPred(other, "target") end
+	assert_false(st.paintRequested)
+	runTimer()
+	assert_eq(st.counts.model, calls)
+end)
+
+T.register("performance: stationary fake is not rewritten every timer tick", function()
+	local env = newEnv({ noCLEU = true })
+	env.ns.HandleCommand("test 2000")
+	runTimer()
+	local st = env.ns.overlay.state
+	local renders = st.counts.render
+	local probes = 0
+	local original = env.ns.overlay.StructureChanged
+	env.ns.overlay.StructureChanged = function() probes = probes + 1; return original() end
+	for i = 1, 40 do Mocks.now = Mocks.now + 0.15; runTimer() end
+	assert_eq(st.counts.render, renders)
+	assert_eq(st.counts.model, 0)
+	assert_eq(probes, 40, "visible fake still watches for frame replacement")
+	Mocks.Fire("UNIT_MAXHEALTH", "player")
+	runTimer()
+	assert_eq(st.counts.render, renders + 1, "range updates on owning event")
+	env.ns.HandleCommand("test off")
+	runTimer()
+	assert_false(st.frame:IsShown())
+end)
+
+T.register("performance: stationary fake still hides immediately for vehicle or native-off", function()
+	local env = newEnv()
+	env.ns.HandleCommand("test 2000")
+	runTimer()
+	local frame = env.ns.overlay.state.frame
+	assert_true(frame:IsShown())
+	env.player._euiUnit = "vehicle"
+	Mocks.now = Mocks.now + 0.15
+	runTimer()
+	assert_false(frame:IsShown())
+	env.player._euiUnit = "player"
+	Mocks.now = Mocks.now + 1.1
+	runTimer()
+	assert_true(frame:IsShown())
+	env.ab._predOn = false
+	Mocks.now = Mocks.now + 0.15
+	runTimer()
+	assert_false(frame:IsShown())
+	env.ab._predOn = true
+	Mocks.now = Mocks.now + 1.1
+	runTimer()
+	assert_true(frame:IsShown())
+end)
+
+T.register("performance: style commands update an event-driven fake without structural work", function()
+	local env = newEnv()
+	env.ns.HandleCommand("test 2000")
+	runTimer()
+	local st = env.ns.overlay.state
+	local resolves = st.counts.resolve
+	env.ns.HandleCommand("alpha 0.25")
+	runTimer()
+	assert_near(st.frame:GetAlpha(), 0.25, 1e-9)
+	env.ns.HandleCommand("color 1 0 0")
+	runTimer()
+	assert_eq(select(1, st.frame:GetStatusBarColor()), 1)
+	assert_eq(select(2, st.frame:GetStatusBarColor()), 0)
+	assert_eq(st.counts.resolve, resolves)
+end)
+
+T.register("performance: disabled diagnostics are copyable and correctly report a stopped timer", function()
+	local env = newEnv()
+	env.ns.HandleCommand("test 2000")
+	runTimer()
+	env.ns.HandleCommand("enable off")
+	local report = env.ns.BuildSnapshotReport()
+	assert_true(report:match("work counters %(session totals, not CPU%): timer=false") ~= nil)
+	assert_true(report:match("enabled=false") ~= nil)
+	assert_true(report:match("cleu gate: addon disabled") ~= nil)
+end)
+
+T.register("performance: secret-blocked real prediction is event-driven not continuously evaluated", function()
+	local env = newEnv({ noCLEU = true })
+	seed(env, { interval = 3, basePerStack = 200 })
+	liveAura(env, { expirationTime = Mocks.now + 12 })
+	env.ab._predMy:SetValue(Mocks.MakeSecret())
+	env.ab._predOther:SetValue(Mocks.MakeSecret())
+	runTimer()
+	local st = env.ns.overlay.state
+	assert_true(env.ns.session.lastStatus.hotEstimate > 0)
+	assert_false(st.active)
+	local calls = st.counts.model
+	for i = 1, 40 do Mocks.now = Mocks.now + 0.15; runTimer() end
+	assert_eq(st.counts.model, calls)
+	assert_false(st.frame:IsShown())
+	Mocks.Fire("UNIT_HEAL_PREDICTION", "player")
+	runTimer()
+	assert_eq(st.counts.model, calls + 1)
+end)
+
+T.register("performance: missing frame attachment retries are bounded to the idle probe", function()
+	local env = newEnv()
+	_G.EllesmereUI = nil
+	runTimer()
+	local counts = env.ns.overlay.state.counts
+	local calls = counts.resolve
+	for i = 1, 5 do Mocks.now = Mocks.now + 0.15; runTimer() end
+	assert_eq(counts.resolve, calls)
+	Mocks.now = Mocks.now + 0.4
+	runTimer()
+	assert_eq(counts.resolve, calls + 1)
+	local fresh = Mocks.BuildEUF()
+	Mocks.now = Mocks.now + 1.1
+	runTimer()
+	assert_eq(env.ns.overlay.state.ab, fresh.ab)
+end)
+
+T.register("performance: debug output is rate-limited even for rapidly changing amounts", function()
+	local env = newEnv()
+	env.ns.overlay.Resolve()
+	env.ns.db.debug = true
+	local before = #Mocks.chat
+	for i = 1, 20 do
+		Mocks.now = 100 + i * 0.1
+		env.ns.HandleCommand("test " .. i)
+		local chat = #Mocks.chat
+		runTimer()
+		if i == 1 then assert_eq(#Mocks.chat, chat + 1) end
+	end
+	-- Each slash command deliberately acknowledges once; automatic tick output
+	-- adds at most two lines across this burst (one per second).
+	assert_true(#Mocks.chat - before <= 22)
+end)
+
+T.register("performance: unreasonable manual tick schedule is withheld without a huge loop", function()
+	local env = newEnv()
+	local count, why = env.ns.model.ComputeTicks(
+		{ expirationTime = 112, duration = 12 }, { interval = 0.0000000001 }, 100)
+	assert_nil(count)
+	assert_eq(why, "tick schedule exceeds safety limit")
 end)
 
 -----------------------------------------------------------------------------

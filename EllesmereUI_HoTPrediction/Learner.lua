@@ -47,6 +47,7 @@ local function learnedFor(id)
 end
 
 function learner.Reset()
+	if ns.estimates then ns.estimates.Invalidate() end
 	ns.session.learned = {}
 	ns.session.lastTicksAt = {}
 	if ns.api and ns.api.InvalidateAuraCache then ns.api.InvalidateAuraCache() end
@@ -55,6 +56,7 @@ end
 -- Drop learned magnitudes (gear-dependent) but keep intervals (mechanical) and
 -- never touch persisted user amount/interval calibration (in ns.db).
 function learner.ResetAmounts()
+	if ns.estimates then ns.estimates.Invalidate() end
 	for _, d in pairs(ns.session.learned or {}) do
 		d.totals = {}
 		d.basePerStack = nil
@@ -149,7 +151,7 @@ end
 -- Merge learned session data with explicit user calibration. A manual interval
 -- and/or manual amount is labelled as such ("override"/"manual") so status never
 -- pretends it was learned.
-function learner.GetSpellData(id)
+function learner.GetSpellData(id, aura)
 	local d = ns.session.learned and ns.session.learned[id]
 	local override = ns.spells.IntervalOverride(id)
 	local manualBase = ns.spells.AmountOverride(id, 1)
@@ -175,6 +177,7 @@ function learner.GetSpellData(id)
 		out.confidence = "low"
 	end
 	if manualBase and not d then out.confidence = "manual" end
+	if ns.db.approximatePrediction and ns.estimates then ns.estimates.Fill(out, id, aura) end
 	return out
 end
 
