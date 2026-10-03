@@ -315,20 +315,24 @@ function overlay.HookArgIsCurrent(...)
 	if ns.api and ns.api.GetAbsorbFrame then
 		curAb, curPlayer, curHp = ns.api.GetAbsorbFrame()
 	end
+	local module = overlay.state.module
 	local sawIdentity = false
 	for i = 1, n do
 		local v = select(i, ...)
-		local t = type(v)
-		if t == "table" then
-			sawIdentity = true
-			if v == overlay.state.ab or v == overlay.state.player or v == overlay.state.hp
-				or v == overlay.state.module or v == overlay.state.parent
-				or v == curAb or v == curPlayer or v == curHp then
-				return true
+		-- A method-self module argument identifies the engine, not the unit, so
+		-- it must never make a target/focus call look like the player.
+		if v ~= module then
+			local t = type(v)
+			if t == "table" then
+				sawIdentity = true
+				if v == overlay.state.ab or v == overlay.state.player or v == overlay.state.hp
+					or v == overlay.state.parent or v == curAb or v == curPlayer or v == curHp then
+					return true
+				end
+			elseif t == "string" then
+				sawIdentity = true
+				if v == "player" then return true end
 			end
-		elseif t == "string" then
-			sawIdentity = true
-			if v == "player" then return true end
 		end
 	end
 	return not sawIdentity

@@ -1142,6 +1142,8 @@ T.register("integration: native hooks ignore target/focus and only mark the play
 	local targetFrame = CreateFrame("Frame", "EUF_Target")
 	module.UF_HealPredApply(targetFrame)
 	assert_false(env.ns.overlay.state.structureDirty, "target callback does not force a player resolve")
+	module.UF_HealPredApply(module, targetFrame)
+	assert_false(env.ns.overlay.state.structureDirty, "method-self + target is still ignored")
 	module.UF_HealPredApply("target")
 	assert_false(env.ns.overlay.state.structureDirty, "target unit string ignored")
 	module.UF_HealPredApply()
@@ -1149,6 +1151,9 @@ T.register("integration: native hooks ignore target/focus and only mark the play
 	env.ns.overlay.state.structureDirty = false
 	module.UF_HealPredApply(env.player)
 	assert_true(env.ns.overlay.state.structureDirty, "player frame callback marks structure")
+	env.ns.overlay.state.structureDirty = false
+	module.UF_HealPredApply(module, env.player)
+	assert_true(env.ns.overlay.state.structureDirty, "method-self + player marks structure")
 	env.ns.overlay.state.structureDirty = false
 	env.ns.overlay.state.paintRequested = false
 	module.UF_PaintHealPred(targetFrame)
