@@ -16,6 +16,96 @@ local function label(parent, text, x, y, width)
 	return l
 end
 
+local WHITE = "Interface\\Buttons\\WHITE8X8"
+local function panel(parent, x, y, width, height)
+	local p = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+	p:SetSize(width, height)
+	p:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+	p:SetBackdrop({ bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 })
+	p:SetBackdropColor(0.055, 0.075, 0.095, 1)
+	p:SetBackdropBorderColor(0.12, 0.18, 0.22, 1)
+	return p
+end
+
+local function windowStyle(f, title, subtitle, width)
+	f:SetBackdrop({ bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 })
+	f:SetBackdropColor(0.025, 0.035, 0.048, 0.99)
+	f:SetBackdropBorderColor(0.18, 0.38, 0.4, 1)
+	local heading = label(f, title, 24, -18, width - 48)
+	heading:SetFont("Fonts\\FRIZQT__.TTF", 18, "")
+	heading:SetTextColor(0.8, 1, 0.96, 1)
+	local hint = label(f, subtitle, 24, -44, width - 48)
+	hint:SetTextColor(0.55, 0.66, 0.72, 1)
+end
+
+local function flatButton(b)
+	-- Addon-owned, non-secure widget; keep its template's keyboard/click behavior.
+	if b.SetNormalTexture then b:SetNormalTexture(WHITE); b:GetNormalTexture():SetVertexColor(0.1, 0.19, 0.23, 1) end
+	if b.SetPushedTexture then b:SetPushedTexture(WHITE); b:GetPushedTexture():SetVertexColor(0.08, 0.32, 0.34, 1) end
+	b:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+end
+
+local function queuePreview(parent, x, y, width, height)
+	local p = panel(parent, x, y, width, height)
+	label(p, "ACTION BUTTON PREVIEW", 16, -18, width - 32):SetTextColor(0.35, 0.88, 0.8, 1)
+	label(p, "Click the icon to queue / release the sample.", 16, -44, width - 32)
+	local b = CreateFrame("Button", nil, p, "BackdropTemplate")
+	b:SetSize(48, 48)
+	b:SetPoint("TOP", p, "TOP", 0, -118)
+	b:SetBackdrop({ bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 })
+	b:SetBackdropColor(0.015, 0.02, 0.025, 1)
+	b:SetBackdropBorderColor(0.3, 0.36, 0.4, 1)
+	local icon = b:CreateTexture(nil, "ARTWORK")
+	icon:SetTexture("Interface\\Icons\\Ability_Druid_Maul")
+	safe(icon, "SetAllPoints", b)
+	safe(icon, "SetTexCoord", 0.08, 0.92, 0.08, 0.92)
+	b:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+	local border = CreateFrame("Frame", nil, b, "BackdropTemplate")
+	border:EnableMouse(false)
+	border:SetFrameLevel(b:GetFrameLevel() + 10)
+	local state = label(p, "", 16, -205, width - 32)
+	local details = label(p, "", 16, -238, width - 32)
+	label(p, "Sample only. No real casts or queues.\n48px icon; actual size follows EllesmereUI.", 16, -278, width - 32):SetTextColor(0.55, 0.66, 0.72, 1)
+	p.button, p.border, p.queued = b, border, true
+	p.abilities = {}
+	for i, ability in ipairs({
+		{ "Maul", "Ability_Druid_Maul" },
+		{ "Strike", "Ability_Rogue_Ambush" },
+		{ "Cleave", "Ability_Warrior_Cleave" },
+	}) do
+		local select = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
+		local size = (width - 32) / 3
+		select:SetSize(size - 4, 22)
+		select:SetPoint("TOPLEFT", p, "TOPLEFT", 16 + (i - 1) * size, -78)
+		select:SetText(ability[1])
+		flatButton(select)
+		select:SetScript("OnClick", function() icon:SetTexture("Interface\\Icons\\" .. ability[2]) end)
+		p.abilities[i] = select
+	end
+	function p.Update(thickness, padding, alpha, r, g, blue)
+		if not ns.queuedSwing.ValidAppearance(thickness, padding, alpha, r, g, blue) then return false end
+		ns.queuedSwing.LayoutBorder(border, b, thickness, padding)
+		border:SetBackdropBorderColor(r, g, blue, alpha)
+		border:SetShown(p.queued)
+		state:SetText(p.queued and "QUEUED - border active" or "IDLE - border hidden")
+		state:SetTextColor(p.queued and 0.35 or 0.55, p.queued and 0.88 or 0.66, 0.8, 1)
+		details:SetText(string.format("Thickness: %gpx\nSpacing: %gpx | Opacity: %d%%", thickness, padding, math.floor(alpha * 100 + 0.5)))
+		return true
+	end
+	function p.Saved()
+		local d, c = ns.db, ns.db.queuedSwingColor
+		p.Update(d.queuedSwingThickness, d.queuedSwingPadding, d.queuedSwingAlpha, c[1], c[2], c[3])
+	end
+	b:SetScript("OnClick", function()
+		p.queued = not p.queued
+		border:SetShown(p.queued)
+		state:SetText(p.queued and "QUEUED - border active" or "IDLE - border hidden")
+		state:SetTextColor(p.queued and 0.35 or 0.55, p.queued and 0.88 or 0.66, 0.8, 1)
+	end)
+	p.Saved()
+	return p
+end
+
 function ns.UpdateMinimapButton()
 	local b = ns.minimapButton
 	if not b then return end
@@ -116,7 +206,7 @@ function ns.OpenQueueAppearance()
 		if not CreateFrame then ns.print("settings unavailable: this client cannot create frames."); return end
 		f = CreateFrame("Frame", "EllesmereUI_HoTPredictionQueueAppearance", UIParent, "BackdropTemplate")
 		ns.queueAppearanceWindow = f
-		f:SetSize(510, 360)
+		f:SetSize(770, 420)
 		f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
 		f:SetFrameStrata("DIALOG")
 		f:SetClampedToScreen(true)
@@ -125,13 +215,20 @@ function ns.OpenQueueAppearance()
 		f:RegisterForDrag("LeftButton")
 		f:SetScript("OnDragStart", function(self) self:StartMoving() end)
 		f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
-		f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-			edgeSize = 16, insets = { left = 4, right = 4, top = 4, bottom = 4 } })
-		f:SetBackdropColor(0.04, 0.05, 0.06, 0.97)
-		f:SetBackdropBorderColor(0.25, 0.65, 0.4, 1)
-		label(f, "Next-swing border appearance", 20, -18, 470)
-		label(f, "Changes the highlight only, not the action button or queue detection.", 20, -42, 470)
+		windowStyle(f, "Next-swing appearance", "Style your queued attack highlight. Preview edits before saving.", 770)
+		panel(f, 12, -66, 484, 274)
+		f.preview = queuePreview(f, 510, -66, 244, 338)
 		f.controls = {}
+		local refreshing = false
+		local draft = label(f, "Editing is preview-only until you click Apply.", 24, -304, 460)
+		draft:SetTextColor(0.55, 0.66, 0.72, 1)
+		function f.UpdatePreview()
+			if refreshing then return end
+			local c = f.controls
+			local valid = f.preview.Update(tonumber(c.thickness:GetText()), tonumber(c.padding:GetText()),
+				tonumber(c.alpha:GetText()), tonumber(c.red:GetText()), tonumber(c.green:GetText()), tonumber(c.blue:GetText()))
+			draft:SetText(valid and "Preview only. Click Apply to save these values." or "Invalid draft - showing the last valid preview.")
+		end
 		local function field(key, title, y)
 			label(f, title, 24, y - 5, 335)
 			local e = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
@@ -160,9 +257,10 @@ function ns.OpenQueueAppearance()
 		local function button(key, text, x, width, action)
 			local b = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
 			b:SetSize(width, 24)
-			b:SetPoint("TOPLEFT", f, "TOPLEFT", x, -310)
+			b:SetPoint("TOPLEFT", f, "TOPLEFT", x, -366)
 			b:SetText(text)
 			b:SetScript("OnClick", action)
+			flatButton(b)
 			f.controls[key] = b
 		end
 		local function clearFocus()
@@ -171,17 +269,21 @@ function ns.OpenQueueAppearance()
 			end
 		end
 		f.Refresh = function()
+			refreshing = true
 			local c, db = f.controls, ns.db
 			c.thickness:SetText(tostring(db.queuedSwingThickness))
 			c.padding:SetText(tostring(db.queuedSwingPadding))
 			c.alpha:SetText(tostring(db.queuedSwingAlpha))
 			for i, key in ipairs({ "red", "green", "blue" }) do c[key]:SetText(tostring(db.queuedSwingColor[i])) end
+			refreshing = false
+			f.UpdatePreview()
 		end
 		button("apply", "Apply appearance", 24, 160, function()
 			local c = f.controls
 			local success = ns.queuedSwing.SetAppearance(tonumber(c.thickness:GetText()), tonumber(c.padding:GetText()),
 				tonumber(c.alpha:GetText()), tonumber(c.red:GetText()), tonumber(c.green:GetText()), tonumber(c.blue:GetText()))
 			if not success then message:SetText("Enter numbers within the listed ranges; nothing changed."); return end
+			if ns.optionsWindow then ns.optionsWindow.preview.Saved() end
 			clearFocus()
 			message:SetText(ns.api.InCombat() and "Saved. Size/thickness will apply after combat." or "Appearance saved.")
 			f.Refresh()
@@ -190,11 +292,15 @@ function ns.OpenQueueAppearance()
 			local d = ns.DEFAULTS
 			ns.queuedSwing.SetAppearance(d.queuedSwingThickness, d.queuedSwingPadding, d.queuedSwingAlpha,
 				d.queuedSwingColor[1], d.queuedSwingColor[2], d.queuedSwingColor[3])
+			if ns.optionsWindow then ns.optionsWindow.preview.Saved() end
 			clearFocus()
 			f.Refresh()
 			message:SetText(ns.api.InCombat() and "Defaults saved. Size applies after combat." or "Default cyan border restored.")
 		end)
 		button("close", "Close", 370, 110, function() f:Hide() end)
+		for _, key in ipairs({ "thickness", "padding", "alpha", "red", "green", "blue" }) do
+			f.controls[key]:SetScript("OnTextChanged", f.UpdatePreview)
+		end
 		f:SetScript("OnHide", clearFocus)
 		f:SetScript("OnShow", function() f.Refresh(); message:SetText("") end)
 		if type(UISpecialFrames) == "table" then UISpecialFrames[#UISpecialFrames + 1] = f:GetName() end
@@ -210,7 +316,7 @@ local function ensureWindow()
 	if not CreateFrame then return nil end
 	local f = CreateFrame("Frame", WINDOW, UIParent, "BackdropTemplate")
 	ns.optionsWindow = f
-	f:SetSize(540, 650)
+	f:SetSize(800, 650)
 	f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
 	f:SetFrameStrata("DIALOG")
 	f:SetClampedToScreen(true)
@@ -219,20 +325,18 @@ local function ensureWindow()
 	f:RegisterForDrag("LeftButton")
 	f:SetScript("OnDragStart", function(self) self:StartMoving() end)
 	f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
-	f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-		edgeSize = 16, insets = { left = 4, right = 4, top = 4, bottom = 4 } })
-	f:SetBackdropColor(0.04, 0.05, 0.06, 0.97)
-	f:SetBackdropBorderColor(0.25, 0.65, 0.4, 1)
-	label(f, "EllesmereUI HoT Prediction", 18, -16)
-	label(f, "Player only. Requires EllesmereUIUnitFrames native heal prediction.", 18, -38)
+	windowStyle(f, "EllesmereUI helper", "Healing predictions & queued attacks - your controls, in one place.", 800)
+	f.preview = queuePreview(f, 552, -100, 224, 486)
 	local page = CreateFrame("Frame", nil, f)
 	page:SetSize(540, 610)
 	page:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -34)
 	f.settingsPage = page
+	panel(page, 12, -54, 516, 510)
 	local catalog = CreateFrame("Frame", nil, f)
 	catalog:SetSize(510, 492)
 	catalog:SetPoint("TOPLEFT", f, "TOPLEFT", 15, -100)
 	f.spellsPage = catalog
+	panel(catalog, -3, 4, 516, 492)
 	local scroll = CreateFrame("ScrollFrame", nil, catalog, "UIPanelScrollFrameTemplate")
 	scroll:SetSize(476, 486)
 	scroll:SetPoint("TOPLEFT", catalog, "TOPLEFT", 0, 0)
@@ -314,6 +418,7 @@ local function ensureWindow()
 		b:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
 		b:SetText(title)
 		b:SetScript("OnClick", action)
+		flatButton(b)
 		f.controls[key] = b
 	end
 	button("apply", "Apply appearance", 24, -246, 160, function()
@@ -353,6 +458,7 @@ local function ensureWindow()
 		local rgb = ns.db.overlayColor
 		for i, key in ipairs({"red", "green", "blue"}) do f.controls[key]:SetText(tostring(rgb[i])) end
 		status:SetText("v" .. ns.version .. (ns.session.fake and " | PREVIEW ACTIVE (not real healing)" or " | Real healing mode"))
+		f.preview.Saved()
 		refreshing = false
 	end
 	f:SetScript("OnShow", function() f.Refresh(); f.SelectTab(f.selectedTab or "settings") end)

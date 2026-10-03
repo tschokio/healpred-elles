@@ -40,7 +40,7 @@ StatusBar of its own and secure-hooks native callbacks read-only.
 
 The installed folder is the deliverable; there is no separate zip/binary.
 
-### Updating (to v0.5.2)
+### Updating (to v0.5.3)
 
 Replace the `EllesmereUI_HoTPrediction/` folder in your AddOns directory with the
 new one, then `/reload` (or restart). SavedVariables
@@ -101,6 +101,17 @@ border, next swing/cancel → no border, insufficient-Rage failed press → no b
 and repeat with Cleave, Maul, forms/pages and any macros you use.
 
 ### Settings menu and minimap button (v0.4.0)
+
+**Redesigned GUI and button preview (v0.5.3):** the dark-panel settings window
+and next-swing appearance editor now include an isolated sample action button.
+Choose Maul, Strike or Cleave and click the sample to toggle its queued border.
+The appearance editor previews valid size/thickness/opacity/RGB drafts as you type;
+only **Apply appearance** saves them. Invalid drafts retain the last valid sample,
+and closing/reopening reloads your saved values. The preview shares the real border's
+geometry routine, but uses a 48px example icon rather than copying vendor frames.
+It never casts spells, changes real queued state, or starts a fake healing preview.
+No preview timers or animation loops are added. Live-game visual verification is
+still needed; the GUI and preview interactions are mock-tested.
 
 **Implemented spells tab (v0.5.2):** open `/euihot options` and select
 **Implemented spells**. The scrollable catalog lists built-in healing families,

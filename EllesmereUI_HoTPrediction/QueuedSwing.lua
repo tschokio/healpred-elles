@@ -87,22 +87,23 @@ local function prepare(button)
 	return ok and border or nil
 end
 
+-- Shared geometry for real decorations and the GUI's isolated sample buttons.
+function swing.LayoutBorder(f, button, thickness, padding)
+	f:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = thickness })
+	f:ClearAllPoints()
+	f:SetPoint("TOPLEFT", button, "TOPLEFT", -padding, padding)
+	f:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", padding, -padding)
+end
+
 local function style(record)
 	local f, db = record.border, ns.db
 	if not f then return end
 	-- Reconfigure only our decoration, never resize the actual action button.
 	-- Geometry edits wait for regen; color/opacity can change immediately.
 	if not ns.api.InCombat() then
-		if record.thickness ~= db.queuedSwingThickness then
-			f:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = db.queuedSwingThickness })
-			record.thickness, record.color = db.queuedSwingThickness, nil
-		end
-		if record.padding ~= db.queuedSwingPadding then
-			local p = db.queuedSwingPadding
-			f:ClearAllPoints()
-			f:SetPoint("TOPLEFT", record.button, "TOPLEFT", -p, p)
-			f:SetPoint("BOTTOMRIGHT", record.button, "BOTTOMRIGHT", p, -p)
-			record.padding = p
+		if record.thickness ~= db.queuedSwingThickness or record.padding ~= db.queuedSwingPadding then
+			swing.LayoutBorder(f, record.button, db.queuedSwingThickness, db.queuedSwingPadding)
+			record.thickness, record.padding, record.color = db.queuedSwingThickness, db.queuedSwingPadding, nil
 		end
 	end
 	local c = db.queuedSwingColor
@@ -113,11 +114,16 @@ local function style(record)
 end
 
 -- One atomic, validated appearance update shared by the GUI and renderer.
-function swing.SetAppearance(thickness, padding, alpha, r, g, b)
+function swing.ValidAppearance(thickness, padding, alpha, r, g, b)
 	if not ns.toNumber(thickness) or not ns.toNumber(padding) or not ns.toNumber(alpha)
 		or not ns.toNumber(r) or not ns.toNumber(g) or not ns.toNumber(b)
 		or thickness < 1 or thickness > 12 or padding < -12 or padding > 24
 		or alpha < 0 or alpha > 1 or r < 0 or r > 1 or g < 0 or g > 1 or b < 0 or b > 1 then return false end
+	return true
+end
+
+function swing.SetAppearance(thickness, padding, alpha, r, g, b)
+	if not swing.ValidAppearance(thickness, padding, alpha, r, g, b) then return false end
 	ns.db.queuedSwingThickness, ns.db.queuedSwingPadding, ns.db.queuedSwingAlpha = thickness, padding, alpha
 	ns.db.queuedSwingColor = { r, g, b }
 	for _, record in pairs(swing.buttons) do style(record) end
