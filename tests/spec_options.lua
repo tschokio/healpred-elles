@@ -209,6 +209,7 @@ T.register("layering mock: opaque higher-level frame occludes a parent label", f
 	local parent = CreateFrame("Frame", nil, UIParent)
 	parent:SetSize(300, 200)
 	parent:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, 0)
+	parent:SetFrameStrata("DIALOG")
 	local l = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 	l:SetPoint("TOPLEFT", parent, "TOPLEFT", 10, -10)
 	l:SetWidth(100)
@@ -219,6 +220,7 @@ T.register("layering mock: opaque higher-level frame occludes a parent label", f
 	cover:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
 	cover:SetBackdrop({ bgFile = "x" })
 	assert_eq(cover:GetFrameLevel(), parent:GetFrameLevel() + 1, "child frames inherit parent level + 1")
+	assert_eq(cover:GetFrameStrata(), "DIALOG", "child frames inherit parent strata")
 	assert_false(Mocks.IsRegionVisible(l), "opaque child panel must hide the parent's label")
 	-- A BACKGROUND texture on the parent must not hide its own OVERLAY text.
 	cover:Hide()
@@ -226,4 +228,6 @@ T.register("layering mock: opaque higher-level frame occludes a parent label", f
 	t:SetSize(200, 100)
 	t:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
 	assert_true(Mocks.IsRegionVisible(l), "same-frame background textures render below labels")
+	parent:Hide()
+	assert_false(Mocks.IsRegionVisible(l), "hidden pages are not visible")
 end)

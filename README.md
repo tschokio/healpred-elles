@@ -40,7 +40,7 @@ StatusBar of its own and secure-hooks native callbacks read-only.
 
 The installed folder is the deliverable; there is no separate zip/binary.
 
-### Updating (to v0.5.3)
+### Updating (to v0.5.4)
 
 Replace the `EllesmereUI_HoTPrediction/` folder in your AddOns directory with the
 new one, then `/reload` (or restart). SavedVariables
@@ -101,6 +101,13 @@ border, next swing/cancel → no border, insufficient-Rage failed press → no b
 and repeat with Cleave, Maul, forms/pages and any macros you use.
 
 ### Settings menu and minimap button (v0.4.0)
+
+**GUI label visibility fix (v0.5.4):** decorative backgrounds now use the parent
+frame's BACKGROUND textures instead of opaque child frames. This restores labels,
+help text and status messages hidden by v0.5.3's redesign in the settings and
+appearance views, and keeps the spell catalog readable. Buttons, preview behavior,
+saved settings and real queue detection are unchanged. Regression tests cover
+frame/draw-layer ordering; live in-game visual confirmation is still needed.
 
 **Redesigned GUI and button preview (v0.5.3):** the dark-panel settings window
 and next-swing appearance editor now include an isolated sample action button.

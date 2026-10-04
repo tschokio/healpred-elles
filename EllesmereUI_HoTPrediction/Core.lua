@@ -6,7 +6,7 @@
 local addonName, ns = ...
 
 ns.name = addonName
-ns.version = "0.5.3"
+ns.version = "0.5.4"
 ns.debugEnabled = false
 ns.inCombat = false
 ns.started = false

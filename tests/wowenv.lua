@@ -109,7 +109,8 @@ local function newFrame(frameType, name, parent, template)
 		-- parent (parentless roots start at 0). This is what makes an opaque
 		-- child panel cover its parent's own FontStrings until the panel is
 		-- replaced with same-frame BACKGROUND draw-layer textures.
-		_level = parent and ((parent._level or 0) + 1) or 0, _strata = "MEDIUM",
+		_level = parent and ((parent._level or 0) + 1) or 0,
+		_strata = parent and parent._strata or "MEDIUM",
 		_scripts = {}, _events = {}, _children = {},
 		_text = "", _selStart = 0, _selEnd = 0, _focus = false,
 		_seq = frameSeq,
@@ -469,13 +470,15 @@ end
 -- True when a region would actually be drawn: no shown opaque frame that stacks
 -- above the region's owner covers the same rectangle.
 function Mocks.IsRegionVisible(region)
-	if not region or region._shown == false then return true end
+	if not region or region._shown == false then return false end
 	local owner = region._owner
-	if not owner or not effectivelyShown(owner) then return true end
+	if not owner or not effectivelyShown(owner) then return false end
 	local l, b, rr, t = regionAbsRect(region)
 	local osr = STRATA_RANK[owner._strata] or STRATA_RANK.MEDIUM
 	for _, f in ipairs(Mocks.frames) do
-		if f ~= owner and f._backdrop ~= nil and effectivelyShown(f) and not isAncestor(f, owner) then
+		if f ~= owner and f._backdrop and f._backdrop.bgFile
+			and (not f._backdropColor or (f._backdropColor[4] or 1) > 0)
+			and effectivelyShown(f) and not isAncestor(f, owner) then
 			local sr = STRATA_RANK[f._strata] or STRATA_RANK.MEDIUM
 			local above
 			if sr ~= osr then above = sr > osr
