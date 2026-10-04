@@ -968,43 +968,17 @@ local function safe(obj, method, ...)
 end
 
 local function label(parent, text, x, y, width)
-	local l = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-	l:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
-	l:SetWidth(width or 400)
-	l:SetJustifyH("LEFT")
-	l:SetText(text)
-	return l
+	return ns.ui.Label(parent, text, x, y, width or 400)
 end
 
 -- Decorative background painted into the parent's own BACKGROUND draw layer so
 -- it can never cover the parent's OVERLAY labels (same trick as Options.lua).
 local function background(parent, x, y, width, height)
-	local border = parent:CreateTexture(nil, "BACKGROUND")
-	border:SetTexture(WHITE)
-	border:SetVertexColor(0.12, 0.18, 0.22, 1)
-	border:SetPoint("TOPLEFT", parent, "TOPLEFT", x - 1, y + 1)
-	border:SetSize(width + 2, height + 2)
-	local fill = parent:CreateTexture(nil, "BACKGROUND")
-	fill:SetTexture(WHITE)
-	fill:SetVertexColor(0.055, 0.075, 0.095, 1)
-	fill:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
-	fill:SetSize(width, height)
-	parent.background = fill
-	return fill
+	return ns.ui.Background(parent, x, y, width, height)
 end
 
 local function flatButton(b)
-	if b.SetNormalTexture then
-		b:SetNormalTexture(WHITE)
-		local t = b.GetNormalTexture and b:GetNormalTexture()
-		if t then t:SetVertexColor(0.1, 0.19, 0.23, 1) end
-	end
-	if b.SetPushedTexture then
-		b:SetPushedTexture(WHITE)
-		local t = b.GetPushedTexture and b:GetPushedTexture()
-		if t then t:SetVertexColor(0.08, 0.32, 0.34, 1) end
-	end
-	b:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+	ns.ui.Button(b)
 end
 
 local PAGE_WIDTH = 770
@@ -1014,11 +988,12 @@ local TRAINERS_PER_ROW = 5
 local function newBlock(content)
 	local block = CreateFrame("Frame", nil, content)
 	block:SetSize(CONTENT_WIDTH, 60)
-	block.label = label(block, "", 0, -2, CONTENT_WIDTH - 4)
+	block.uiFill, block.uiOutline = background(block, 0, 0, CONTENT_WIDTH, 60)
+	block.label = label(block, "", 12, -10, CONTENT_WIDTH - 24)
 	block.buttons = {}
 	for i = 1, TRAINERS_PER_ROW do
 		local b = CreateFrame("Button", nil, block, "UIPanelButtonTemplate")
-		b:SetSize(145, 24)
+		b:SetSize(140, 24)
 		b:SetText("")
 		flatButton(b)
 		b:SetScript("OnClick", function(self)
@@ -1035,12 +1010,12 @@ function WT.BuildOptionsUI(f)
 
 	local page = CreateFrame("Frame", nil, f)
 	page:SetSize(PAGE_WIDTH, 492)
-	page:SetPoint("TOPLEFT", f, "TOPLEFT", 15, -100)
+	page:SetPoint("TOPLEFT", f, "TOPLEFT", f.contentX or 15, f.contentY or -100)
 	f.weaponPage = page
 	background(page, -3, 4, PAGE_WIDTH + 6, 492)
 
-	local heading = label(page, "Weapon training | DoHelper reference | " .. WT.SOURCE_NOTE, 8, -5, PAGE_WIDTH - 16)
-	heading:SetTextColor(0.55, 0.75, 0.78, 1)
+	local heading = label(page, WT.SOURCE_NOTE, 8, -5, PAGE_WIDTH - 16)
+	ns.ui.Text(heading, "muted")
 	page.heading = heading
 
 	-- Race selector (cycling buttons; all 10 races reachable)
@@ -1144,7 +1119,7 @@ function WT.BuildOptionsUI(f)
 					b.trainerId = t.id
 					b:SetText(t.name)
 					b:ClearAllPoints()
-					b:SetPoint("TOPLEFT", block, "TOPLEFT", 2 + (shown - 1) * 149, -(lh + 4))
+					b:SetPoint("TOPLEFT", block, "TOPLEFT", 12 + (shown - 1) * 145, -(lh + 18))
 					b:Show()
 					page2.visibleTrainerButtons[#page2.visibleTrainerButtons + 1] = b
 				end
@@ -1153,11 +1128,13 @@ function WT.BuildOptionsUI(f)
 				block.buttons[j]:Hide()
 				block.buttons[j].trainerId = nil
 			end
-			local height = lh + (shown > 0 and 30 or 0) + 8
+			local height = lh + (shown > 0 and 32 or 0) + 24
 			block:SetHeight(height)
+			block.uiFill:SetHeight(height)
+			block.uiOutline:SetHeight(height + 2)
 			block:ClearAllPoints()
 			block:SetPoint("TOPLEFT", page2.content, "TOPLEFT", 0, -y)
-			y = y + height
+			y = y + height + 8
 		end
 		for i = used + 1, #page2.blocks do page2.blocks[i]:Hide() end
 		page2.content:SetHeight(math.max(376, y + 4))
@@ -1253,13 +1230,10 @@ function WT.EnsureDetail()
 	f:RegisterForDrag("LeftButton")
 	f:SetScript("OnDragStart", function(self) safe(self, "StartMoving") end)
 	f:SetScript("OnDragStop", function(self) safe(self, "StopMovingOrSizing") end)
-	f:SetBackdrop({ bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 })
-	f:SetBackdropColor(0.025, 0.035, 0.048, 0.99)
-	f:SetBackdropBorderColor(0.18, 0.38, 0.4, 1)
+	ns.ui.Window(f)
 
 	local title = label(f, "Weapon trainer", 16, -14, DETAIL_WIDTH - 32)
-	title:SetFont("Fonts\\FRIZQT__.TTF", 16, "")
-	title:SetTextColor(0.8, 1, 0.96, 1)
+	ns.ui.Text(title, "heading")
 	f.titleLabel = title
 
 	-- Scrollable body: a wrapped FontString inside a clipped scroll child, so a
@@ -1325,6 +1299,7 @@ function WT.EnsureDetail()
 		setStatus(ok and "Waypoint: " or "Waypoint not set: ", msg)
 	end)
 	f.closeButton = button("Close", 288, 120, function() f:Hide() end)
+	ns.ui.Button(f.waypointButton, "primary")
 
 	if type(UISpecialFrames) == "table" then
 		local present = false
@@ -1348,6 +1323,7 @@ function WT.OpenTrainer(id)
 	f.titleLabel:SetText(t.name)
 	f.SetDetailBody(detailText(t))
 	f.status:SetText("")
+	ns.ui.FitWindow(f)
 	f:Show()
 	return f
 end

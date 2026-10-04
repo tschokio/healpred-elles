@@ -177,7 +177,9 @@ T.register("options: descriptive labels render above the page background", funct
 	assert_not_nil(Mocks.FindTexture(page, "BACKGROUND"), "page background must be a texture")
 	assert_true(Mocks.LayerRank("BACKGROUND") < Mocks.LayerRank("OVERLAY"),
 		"backgrounds must draw below OVERLAY text")
-	assert_eq(#Mocks.OpaqueChildFrames(page), 0, "no opaque child panel may cover page labels")
+	for _, child in ipairs(Mocks.OpaqueChildFrames(page)) do
+		assert_eq(child._type, "EditBox", "only real input fields have child backdrops; decoration stays on the page")
+	end
 	-- Controls are child frames one level above the page and stay clickable.
 	assert_not_nil(f.controls.enabled)
 	local ctrlLevel = f.controls.enabled:GetFrameLevel()

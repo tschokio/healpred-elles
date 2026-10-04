@@ -50,9 +50,9 @@ behaviour.
 
 The installed folder is the deliverable; there is no separate zip/binary.
 
-### Updating (to v0.10.0)
+### Updating (to v0.12.0)
 
-This release renames the AddOn folder to `DoHelper/` (and the TOC to
+Since v0.10.0 the AddOn folder is `DoHelper/` (and the TOC is
 `DoHelper.toc`). Replace the old `EllesmereUI_HoTPrediction/` folder with
 `DoHelper/`, then `/reload` (or restart).
 
@@ -118,6 +118,37 @@ border, next swing/cancel → no border, insufficient-Rage failed press → no b
 and repeat with Cleave, Maul, forms/pages and any macros you use.
 
 ### Settings menu and minimap button (v0.4.0)
+
+The v0.12.0 interface uses a dark slate theme with teal accents, consistent
+sans-serif text, flat hover/selection states and matching input fields. Open
+`/dohelper options`, then choose a page in the left sidebar. The right column
+shows action/healing previews on Settings and Implemented spells, and relevant
+help on Notes, Combat text and Sounds. Weapon training uses the full content
+width. Manage spells and Diagnostics remain accessible in the sidebar.
+
+Settings and dialogs fit smaller screens when opened. Escape and Close release
+input focus. The UI adds no animations or idle timers and never styles vendor
+frames. Your existing settings, custom notes/combat colors and the compact
+`Do ^` notes toggle are preserved. No reinstall or settings reset is required.
+
+### Crit sounds (v0.11.0)
+
+Open `/dohelper options` → **Sounds** to enable a sound for your damage and/or
+healing crits. Set a cooldown to avoid overlapping sounds from multi-target hits.
+Blank sound path uses the built-in raid warning. **Apply + Test sound** previews
+playback even while automatic sounds are disabled.
+
+For your own “bam” clip, place an `.ogg` or `.mp3` file in `DoHelper/Sounds/`
+before launching WoW and enter `Interface\AddOns\DoHelper\Sounds\bam.ogg`.
+Use a clip you have permission to use; no Bruce Lee audio is bundled or downloaded.
+External URLs and files outside the game folders cannot be played.
+
+Automatic playback uses only readable, player-sourced critical combat-log events
+(including periodic damage/heals, excluding pets). It respects the existing
+restricted Forever/Midnight combat-log gate and the helper enable setting.
+Enabling sounds does **not** bypass that gate. Registration is not proof of
+delivery; if the client hides crit data, Test can work while automatic playback
+remains unavailable. Master and SFX channels still obey the game's sound settings.
 
 ### Notes with topics (v0.7.0, topics in v0.10.0)
 

@@ -6,7 +6,7 @@
 local addonName, ns = ...
 
 ns.name = addonName
-ns.version = "0.10.0"
+ns.version = "0.12.0"
 ns.debugEnabled = false
 ns.inCombat = false
 ns.started = false
@@ -162,6 +162,7 @@ ns.DEFAULTS = {
 	approximatePrediction = false, -- opt-in: public tooltip/manual estimate, ignores heal absorbs
 	minimapHidden = false,
 	minimapAngle = 225,
+	critSounds = { enabled = false, damage = true, healing = true, path = "", channel = "Master", cooldown = 0.5 },
 	queuedSwingEnabled = true,
 	queuedSwingColor = { 0.0, 1.0, 1.0 }, -- distinct opaque next-swing border
 	queuedSwingThickness = 3,
@@ -450,6 +451,7 @@ function ns.Startup()
 	if ns.learner and ns.learner.Setup then ns.learner.Setup() end
 	if ns.notes and ns.notes.Setup then ns.notes.Setup() end
 	if ns.combatText and ns.combatText.Setup then ns.combatText.Setup() end
+	if ns.critSounds and ns.critSounds.Setup then ns.critSounds.Setup() end
 	ns.SetRuntimeEnabled(ns.db.enabled)
 	ns.unregister("ADDON_LOADED")
 

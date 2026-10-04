@@ -11,7 +11,7 @@ local _, ns = ...
 local notes = {}
 ns.notes = notes
 
-local FONT = "Fonts\\FRIZQT__.TTF"
+local FONT = ns.ui.FONT
 local TITLE_HEIGHT = 22
 local SITE_ROW = 24
 local COLLAPSED_WIDTH = 60
@@ -313,10 +313,13 @@ function notes.RefreshEditable()
 	for _, e in ipairs(notes.Editors()) do
 		if not editable then safe(e, "ClearFocus") end
 		safe(e, "SetEnabled", editable)
+		if e.uiInput then ns.ui.InputState(e) end
 	end
 	for _, w in ipairs(notes.lockables) do
 		if not editable then safe(w, "ClearFocus") end
 		safe(w, "SetEnabled", editable)
+		if w.uiFill then ns.ui.PaintButton(w) end
+		if w.uiInput then ns.ui.InputState(w) end
 	end
 	-- The floating hint stays short so it cannot grow into the editor; the tab
 	-- has room for the longer explanation.
@@ -389,8 +392,8 @@ function notes.ApplyStyle()
 		f:SetSize(collapsed and COLLAPSED_WIDTH or s.width, collapsed and COLLAPSED_HEIGHT or s.height)
 		if f.edit then f.edit:SetSize(s.width - 16, notes.EditorHeight(s)) end
 		if f.siteTitle then f.siteTitle:SetSize(math.max(60, s.width - 112), 20) end
-		if f.title then safe(f.title, "SetFont", FONT, s.fontSize + 2, "") end
-		if f.siteTitle then safe(f.siteTitle, "SetFont", FONT, math.max(8, s.fontSize - 2), "") end
+		if f.title then safe(f.title, "SetFont", FONT, 12, "") end
+		if f.siteTitle then safe(f.siteTitle, "SetFont", FONT, 12, "") end
 	end
 	if notes.tabEditor then safe(notes.tabEditor, "SetFont", FONT, s.fontSize, "") end
 	for _, e in ipairs(notes.Editors()) do
@@ -470,10 +473,12 @@ function notes.EnsureWindow()
 	end)
 	-- Hiding a focused editor must release focus so it cannot swallow keys while
 	-- the window is closed (Close, Escape or a reload).
-	f:SetScript("OnHide", function() if f.edit then safe(f.edit, "ClearFocus") end end)
+	f:SetScript("OnHide", function()
+		if f.edit then safe(f.edit, "ClearFocus") end
+		if f.siteTitle then safe(f.siteTitle, "ClearFocus") end
+	end)
 	f:SetSize(s.width, s.height)
-	f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
-	f:SetBackdropBorderColor(0.18, 0.38, 0.4, 0.9)
+	ns.ui.Surface(f)
 
 	-- Header: the compact "Do" label with its collapse arrow right next to it.
 	local title = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -481,6 +486,7 @@ function notes.EnsureWindow()
 	title:SetWidth(40)
 	title:SetJustifyH("LEFT")
 	title:SetText("Do")
+	ns.ui.Text(title, "section")
 	f.title = title
 
 	local collapse = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
@@ -489,6 +495,7 @@ function notes.EnsureWindow()
 	collapse:SetText(notes.IsCollapsed() and "^" or "v")
 	collapse:SetScript("OnClick", function() notes.SetCollapsed(not notes.IsCollapsed()) end)
 	f.collapse = collapse
+	ns.ui.Button(collapse)
 
 	local close = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
 	close:SetSize(18, 18)
@@ -496,6 +503,7 @@ function notes.EnsureWindow()
 	close:SetText("X")
 	close:SetScript("OnClick", function() notes.Close() end)
 	f.close = close
+	ns.ui.Button(close)
 
 	-- Topic row: previous / next cycle topics, an editable title and add/delete.
 	local siteY = -TITLE_HEIGHT - 2
@@ -506,14 +514,16 @@ function notes.EnsureWindow()
 		else b:SetPoint("TOPLEFT", f, "TOPLEFT", x, siteY) end
 		b:SetText(text)
 		b:SetScript("OnClick", action)
+		ns.ui.Button(b)
 		return b
 	end
 	f.sitePrev = siteButton("<", 8, 20, false, function() notes.CycleSite(-1) end)
 	f.siteNext = siteButton(">", -52, 20, true, function() notes.CycleSite(1) end)
 	f.siteAdd = siteButton("+", -30, 20, true, function() notes.AddSite() end)
 	f.siteDel = siteButton("-", -8, 20, true, function() notes.RemoveSite(notes.ActiveId()) end)
+	ns.ui.Button(f.siteDel, "danger")
 
-	local titleBox = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
+	local titleBox = CreateFrame("EditBox", nil, f, "BackdropTemplate")
 	titleBox:SetAutoFocus(false)
 	titleBox:SetMaxLetters(MAX_TITLE)
 	titleBox:SetPoint("TOPLEFT", f, "TOPLEFT", 32, siteY)
@@ -524,6 +534,7 @@ function notes.EnsureWindow()
 	end)
 	titleBox:SetScript("OnEditFocusLost", function(self) notes.RenameSite(notes.ActiveId(), self:GetText()) end)
 	titleBox:SetScript("OnEscapePressed", function(self) notes.RefreshSites(); self:ClearFocus() end)
+	ns.ui.Input(titleBox)
 	f.siteTitle = titleBox
 
 	local edit = CreateFrame("EditBox", nil, f, "BackdropTemplate")
@@ -536,6 +547,7 @@ function notes.EnsureWindow()
 	edit:SetBackdropBorderColor(0.2, 0.3, 0.34, 0.8)
 	edit:SetScript("OnTextChanged", function(self) notes.OnEditorChanged(self) end)
 	edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+	ns.ui.Input(edit, true)
 	f.edit = edit
 
 	local hint = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
@@ -543,6 +555,7 @@ function notes.EnsureWindow()
 	hint:SetWidth(s.width - 20)
 	hint:SetJustifyH("LEFT")
 	hint:SetText("")
+	ns.ui.Text(hint, "muted")
 	f.hint = hint
 
 	-- Topic management mutates saved notes, so it locks with the editors.
