@@ -205,6 +205,48 @@ T.register("combat text: outline and unlock checkboxes reflect state and apply i
 	assert_false(e.ns.combatText.window:IsShown())
 end)
 
+T.register("combat text: an unlocked line is click-through during combat and draggable after", function()
+	local e = Mocks.NewEnv()
+	local ct = e.ns.combatText
+	ct.SetUnlocked(true)
+	local f = ct.EnsureFrame()
+	assert_true(f._mouseEnabled)
+	Mocks.inCombat = true
+	ct.eventFrame:GetScript("OnEvent")(ct.eventFrame, "PLAYER_REGEN_DISABLED")
+	assert_true(f:IsShown())
+	assert_false(f._mouseEnabled, "combat forces click-through even while unlocked")
+	Mocks.inCombat = false
+	ct.eventFrame:GetScript("OnEvent")(ct.eventFrame, "PLAYER_REGEN_ENABLED")
+	assert_true(f._mouseEnabled, "drag is restored after combat while still unlocked")
+end)
+
+T.register("combat text: reset style re-checks the outline box", function()
+	local e = Mocks.NewEnv()
+	local f = e.ns.OpenOptions()
+	click(f.controls.combatTab)
+	local outline = f.controls.combatOutline
+	outline:SetChecked(false); click(outline)
+	assert_false(e.ns.db.combatText.outline)
+	click(f.controls.combatResetStyle)
+	assert_true(e.ns.db.combatText.outline)
+	assert_true(outline:GetChecked(), "reset style must re-check the outline box")
+end)
+
+T.register("combat text: corrupted nested colours cannot raise or retain secrets", function()
+	local e = Mocks.NewEnv()
+	local ct = e.ns.combatText
+	e.ns.db.combatText.color = { Mocks.MakeSecret(), 0.5, 0.5 }
+	e.ns.db.combatText.background = { 0.1, Mocks.MakeSecret(), 0.2, 0.3 }
+	local s = ct.Style()
+	assert_eq(s.color[1], 1, "a secret colour component falls back to its default")
+	assert_eq(s.color[2], 0.5)
+	assert_eq(s.background[2], 0)
+	assert_eq(s.background[4], 0.3)
+	local f = ct.EnsureFrame()
+	ct.Show("enter")
+	assert_true(f:IsShown())
+end)
+
 T.register("combat text: status and test commands report and preview", function()
 	local e = Mocks.NewEnv()
 	e.ns.HandleCommand("combattext status")

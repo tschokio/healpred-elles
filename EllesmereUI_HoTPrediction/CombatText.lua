@@ -27,6 +27,14 @@ local function clamp(n, lo, hi)
 	return n
 end
 
+-- A secret or non-numeric colour component falls back to its default instead of
+-- reaching a comparison (ns.toNumber refuses secrets before any arithmetic).
+local function component(t, i, default)
+	local v = type(t) == "table" and ns.toNumber(t[i]) or nil
+	if v == nil then return default end
+	return clamp(v, 0, 1)
+end
+
 local function data()
 	if not ns.db then return nil end
 	if type(ns.db.combatText) ~= "table" then ns.db.combatText = {} end
@@ -70,9 +78,8 @@ function combat.Style()
 		fade = clamp(fade, LIMITS.fade[1], LIMITS.fade[2]),
 		opacity = clamp(opacity, 0, 1),
 		outline = d.outline and true or false,
-		color = { clamp(color[1] or 1, 0, 1), clamp(color[2] or 0.9, 0, 1), clamp(color[3] or 0.3, 0, 1) },
-		background = { clamp(background[1] or 0, 0, 1), clamp(background[2] or 0, 0, 1),
-			clamp(background[3] or 0, 0, 1), clamp(background[4] or 0, 0, 1) },
+		color = { component(color, 1, 1), component(color, 2, 0.9), component(color, 3, 0.3) },
+		background = { component(background, 1, 0), component(background, 2, 0), component(background, 3, 0), component(background, 4, 0) },
 	}
 end
 
@@ -250,6 +257,15 @@ function combat.Hide()
 	f:Hide()
 end
 
+-- The line is click-through unless the user has unlocked it for dragging, and it
+-- is ALWAYS click-through during combat so it can never eat a combat click even
+-- if it was left unlocked.
+local function applyMouse(f)
+	if not f then return end
+	local locked = ns.api and ns.api.InCombat and ns.api.InCombat()
+	f:EnableMouse(combat.unlocked and not locked)
+end
+
 -- Session-only positioning aid: while unlocked the line is visible and mouse
 -- enabled so it can be dragged; locking hides it and restores click-through.
 function combat.SetUnlocked(value)
@@ -257,7 +273,7 @@ function combat.SetUnlocked(value)
 	if not combat.unlocked then
 		local existing = combat.window
 		if not existing then return end
-		existing:EnableMouse(false)
+		applyMouse(existing)
 		existing:SetScript("OnDragStart", nil)
 		existing:SetScript("OnDragStop", nil)
 		combat.Hide()
@@ -265,7 +281,7 @@ function combat.SetUnlocked(value)
 	end
 	local f = combat.EnsureFrame()
 	if not f then return end
-	f:EnableMouse(true)
+	applyMouse(f)
 	safe(f, "RegisterForDrag", "LeftButton")
 	f:SetScript("OnDragStart", function(self) safe(self, "StartMoving") end)
 	f:SetScript("OnDragStop", function(self)
@@ -286,8 +302,13 @@ function combat.Refresh()
 end
 
 function combat.HandleEvent(event)
-	if event == "PLAYER_REGEN_DISABLED" then combat.Show("enter")
-	elseif event == "PLAYER_REGEN_ENABLED" then combat.Show("leave") end
+	if event == "PLAYER_REGEN_DISABLED" then
+		combat.Show("enter")
+		applyMouse(combat.window) -- force click-through during combat
+	elseif event == "PLAYER_REGEN_ENABLED" then
+		combat.Show("leave")
+		applyMouse(combat.window) -- restore drag if the user left it unlocked
+	end
 end
 
 function combat.Setup()

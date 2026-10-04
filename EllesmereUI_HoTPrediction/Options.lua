@@ -753,7 +753,7 @@ local function ensureWindow()
 			opacity = s.opacity, duration = s.duration, fade = s.fade, outline = s.outline,
 			color = s.color, background = s.background, x = 0, y = 0 })
 		combatMessage:SetText("Combat text position reset to screen centre.")
-		f.RefreshCombat()
+		f.Refresh()
 	end)
 	combatButton("combatApply", "Apply style", 10, -284, 110, function()
 		local c = f.controls
@@ -786,7 +786,7 @@ local function ensureWindow()
 			background = { d.background[1], d.background[2], d.background[3], d.background[4] },
 			x = d.x, y = d.y })
 		combatMessage:SetText("Default combat text style restored.")
-		f.RefreshCombat()
+		f.Refresh() -- re-check the outline box too, not just the numeric fields
 	end)
 	combatButton("combatPreviewEnter", "Preview +", 252, -284, 110, function()
 		ns.combatText.Preview("enter")
