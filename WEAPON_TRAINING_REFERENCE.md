@@ -1,7 +1,7 @@
 # DoHelper — Weapon training reference data
 
 This file documents the **data and provenance** behind the `Weapon training`
-tab in `EllesmereUI_HoTPrediction/WeaponTraining.lua`. The data is a static,
+tab in `DoHelper/WeaponTraining.lua`. The data is a static,
 code-embedded translation of the user-supplied WoW Forever reference.
 
 > **Provenance:** every value below is **user-supplied** and **not live

@@ -993,7 +993,7 @@ end)
 
 T.register("weapon training: DoHelper branding, aliases and legacy settings compatibility", function()
 	local e = Mocks.NewEnv()
-	assert_eq(e.ns.version, "0.9.0")
+	assert_eq(e.ns.version, "0.10.0")
 	assert_eq(SLASH_DOHELPER1, "/dohelper")
 	assert_eq(SLASH_DOHELPER2, "/dh")
 	assert_true(type(SlashCmdList["DOHELPER"]) == "function")
@@ -1027,10 +1027,10 @@ T.register("weapon training: DoHelper branding, aliases and legacy settings comp
 	Settings = nil
 
 	-- TOC keeps the historical SavedVariables name and ships the new module.
-	local toc = ReadFile((_G.__HOT_ROOT or ".") .. "/EllesmereUI_HoTPrediction/EllesmereUI_HoTPrediction.toc")
+	local toc = ReadFile((_G.__HOT_ROOT or ".") .. "/DoHelper/DoHelper.toc")
 	assert_true(contains(toc, "## Title: DoHelper"))
 	assert_true(not contains(toc, "HoTPrediction:") and not contains(toc, "HoT Prediction"), "TOC title is simply DoHelper")
-	assert_true(contains(toc, "Version: 0.9.0"))
+	assert_true(contains(toc, "Version: 0.10.0"))
 	assert_true(contains(toc, "SavedVariables: EllesmereUI_HoTPredictionDB"))
 	assert_true(contains(toc, "WeaponTraining.lua"))
 
@@ -1051,15 +1051,17 @@ T.register("weapon training: legacy settings register once and saved data is pre
 	assert_eq(added, 1, "legacy Interface Options category registers exactly once")
 	InterfaceOptions_AddCategory = nil
 
-	-- SavedVariables keep their historical name and survive a reload merge.
+	-- SavedVariables keep their historical name; a pre-topics `text` is migrated
+	-- into the first topic and survives a reload merge.
 	EllesmereUI_HoTPredictionDB = { notes = { text = "legacy note" }, alpha = 0.42, enabled = true }
 	e.ns.InitDatabase()
-	assert_eq(e.ns.db.notes.text, "legacy note")
 	assert_eq(e.ns.db.alpha, 0.42)
-	assert_true(EllesmereUI_HoTPredictionDB.notes.text == "legacy note", "no rename or migration")
+	assert_eq(e.ns.notes.SiteText(e.ns.notes.ActiveId()), "legacy note")
+	assert_eq(e.ns.notes.ActiveSite().title, "General")
+	assert_true(EllesmereUI_HoTPredictionDB.notes.sites ~= nil, "the text is migrated into a topic")
 
-	-- Re-merging the same SavedVariables (a reload) preserves the values.
+	-- Re-merging the same SavedVariables (a reload) preserves the migrated value.
 	e.ns.InitDatabase()
-	assert_eq(e.ns.db.notes.text, "legacy note")
+	assert_eq(e.ns.notes.SiteText(e.ns.notes.ActiveId()), "legacy note")
 	assert_eq(e.ns.db.alpha, 0.42)
 end)

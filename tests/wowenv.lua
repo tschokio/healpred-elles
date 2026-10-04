@@ -767,7 +767,7 @@ end
 -- addon loader
 ------------------------------------------------------------------------------
 
-local TOC_FILE = "EllesmereUI_HoTPrediction/EllesmereUI_HoTPrediction.toc"
+local TOC_FILE = "DoHelper/DoHelper.toc"
 
 local function parseTOC(src)
 	local files = {}
@@ -783,7 +783,7 @@ local function parseTOC(src)
 end
 
 function Mocks.LoadAddon(addonName)
-	addonName = addonName or "EllesmereUI_HoTPrediction"
+	addonName = addonName or "DoHelper"
 	local root = _G.__HOT_ROOT or "."
 	local toc = readSource(root .. "/" .. TOC_FILE)
 	if not toc then error("cannot read TOC " .. TOC_FILE) end
@@ -792,7 +792,7 @@ function Mocks.LoadAddon(addonName)
 	local ns = {}
 	Mocks._ns = ns
 	for _, file in ipairs(files) do
-		local path = root .. "/EllesmereUI_HoTPrediction/" .. file
+		local path = root .. "/DoHelper/" .. file
 		local src = readSource(path)
 		if not src then error("cannot read addon file " .. path) end
 		local chunk = assert(load(src, "@" .. path))
@@ -813,7 +813,7 @@ function Mocks.NewEnv(opts)
 	if opts and opts.noTimer then _G.C_Timer = nil end
 	local euf = Mocks.BuildEUF()
 	local ns = Mocks.LoadAddon()
-	Mocks.Fire("ADDON_LOADED", "EllesmereUI_HoTPrediction")
+	Mocks.Fire("ADDON_LOADED", "DoHelper")
 	Mocks.Fire("PLAYER_LOGIN")
 	return { ns = ns, mocks = Mocks, euf = euf, player = euf.player, hp = euf.hp, ab = euf.ab }
 end

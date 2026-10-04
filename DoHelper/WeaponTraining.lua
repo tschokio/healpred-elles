@@ -1,4 +1,4 @@
--- EllesmereUI_HoTPrediction / WeaponTraining.lua
+-- DoHelper / WeaponTraining.lua
 -- DoHelper weapon training reference.
 --
 -- This module is deliberately split in three:

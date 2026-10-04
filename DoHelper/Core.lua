@@ -1,4 +1,4 @@
--- EllesmereUI_HoTPrediction / Core.lua
+-- DoHelper / Core.lua
 -- Namespace, settings, event plumbing, startup, slash commands.
 -- Keep this file free of anything that assumes a live WoW client: it must be
 -- loadable and testable under a plain Lua interpreter with mocked globals.
@@ -6,7 +6,7 @@
 local addonName, ns = ...
 
 ns.name = addonName
-ns.version = "0.9.0"
+ns.version = "0.10.0"
 ns.debugEnabled = false
 ns.inCombat = false
 ns.started = false
@@ -173,12 +173,15 @@ ns.DEFAULTS = {
 	amountOverrides = {},          -- [spellID] = { [stacks] = exact tick total } (user calibration only)
 	extraSpells = {},              -- [spellID] = { name =, family = }
 	removedSpells = {},            -- [spellID] = true
-	-- Simple notes: persisted text plus an optional floating window. Editing is
+	-- Notes with several named topics ("sites"): each keeps its own text while
+	-- the presentation below is shared. The pre-topics single `text` value is
+	-- migrated into the first topic by Notes.lua, never discarded. Editing is
 	-- out-of-combat only; the window can be moved, collapsed, closed and styled.
 	notes = {
-		text = "",
+		sites = {},                -- ordered list of { id, title, text }
+		nextSiteId = 1,
 		shown = false,             -- reopen the floating window after a reload
-		collapsed = false,         -- rolled up to the title bar
+		collapsed = false,         -- rolled up to the compact "Do ^" pill
 		width = 320,
 		height = 240,
 		fontSize = 14,
@@ -545,7 +548,7 @@ local function parseNumber(s)
 	return tonumber(s)
 end
 
-local HELP = "commands: test <v> | test off | teststatus | status | window | approximate on|off | debug [on|off] | debug window | enable on|off | alpha <a> | color <r> <g> <b> | color overlay <r> <g> <b> | color native | interval <id> <s>|off | amount <id> <tickTotal> [stacks]|off [stacks] | observe on|off | spell add|remove <id> [name] | amountmode total|effective | excludehots on|off | notes [show|hide|toggle|collapse|expand] | combattext [on|off|test [enter|leave]|status] | weapons | reset | help"
+local HELP = "commands: test <v> | test off | teststatus | status | window | approximate on|off | debug [on|off] | debug window | enable on|off | alpha <a> | color <r> <g> <b> | color overlay <r> <g> <b> | color native | interval <id> <s>|off | amount <id> <tickTotal> [stacks]|off [stacks] | observe on|off | spell add|remove <id> [name] | amountmode total|effective | excludehots on|off | notes [show|hide|toggle|collapse|expand|list|new [title]|delete|next|prev|site <n\\|title>] | combattext [on|off|test [enter|leave]|status] | weapons | reset | help"
 
 -- Bound for a manual tick-total calibration. It only has to be a sane upper
 -- limit on a single heal tick, not a game mechanic.
@@ -562,7 +565,7 @@ function ns.HandleCommand(input)
 		ns.print(HELP)
 		ns.print("settings: /euihot options (or menu), /dohelper options; minimap left-click settings, right-click diagnostics, drag to move.")
 		ns.print("next-swing borders: /euihot queue on|off | queue color <r> <g> <b> | queue add|remove|reset <id> [name] | queue status")
-		ns.print("notes: /euihot notes [show|hide|toggle|collapse|expand]; open the Notes tab to write and style them.")
+		ns.print("notes: /euihot notes [show|hide|toggle|collapse|expand|list|new [title]|delete|next|prev|site <n|title>]; topics keep separate notes.")
 		ns.print("combat text: /euihot combattext on|off | combattext test [enter|leave] | combattext status; style it in the Combat text tab.")
 		ns.print("weapon training: /dohelper weapons (or /euihot weapons) opens the Weapon training tab; reference only, no proficiency is learned by clicking.")
 		return
@@ -595,7 +598,43 @@ function ns.HandleCommand(input)
 		elseif op == "toggle" then ns.notes.Toggle()
 		elseif op == "collapse" then ns.notes.SetCollapsed(true)
 		elseif op == "expand" then ns.notes.SetCollapsed(false)
-		else ns.print("usage: /euihot notes [show|hide|toggle|collapse|expand]") end
+		elseif op == "list" then
+			local sites, active = ns.notes.Sites(), ns.notes.ActiveId()
+			if #sites == 0 then ns.print("no note topics."); return end
+			for i, site in ipairs(sites) do
+				ns.print(string.format("%s%d. %s", site.id == active and "*" or " ", i, tostring(site.title)))
+			end
+		elseif op == "new" or op == "add" then
+			local title = (#args > 1) and table.concat(args, " ", 2) or nil
+			local site, message = ns.notes.AddSite(title)
+			ns.print(site and ("note topic added: " .. tostring(site.title)) or (message or "could not add topic."))
+		elseif op == "delete" or op == "remove" then
+			local ok, message = ns.notes.RemoveSite(ns.notes.ActiveId())
+			ns.print(message or (ok and "note topic deleted." or "could not delete topic."))
+		elseif op == "next" then ns.notes.CycleSite(1)
+		elseif op == "prev" or op == "previous" then ns.notes.CycleSite(-1)
+		elseif op == "site" or op == "topic" then
+			local target = args[2]
+			local sites = ns.notes.Sites()
+			local chosen
+			local index = tonumber(target)
+			if index and index >= 1 and index <= #sites then
+				chosen = sites[math.floor(index)]
+			elseif target then
+				local want = target:lower()
+				for _, site in ipairs(sites) do
+					if tostring(site.title):lower() == want then chosen = site; break end
+				end
+				if not chosen then
+					for _, site in ipairs(sites) do
+						if tostring(site.title):lower():find(want, 1, true) then chosen = site; break end
+					end
+				end
+			end
+			if not chosen then ns.print("usage: /euihot notes site <number|title> (see /euihot notes list)"); return end
+			ns.notes.SetActive(chosen.id)
+			ns.print("note topic: " .. tostring(chosen.title))
+		else ns.print("usage: /euihot notes [show|hide|toggle|collapse|expand|list|new [title]|delete|next|prev|site <number|title>]") end
 		return
 	elseif cmd == "queue" then
 		local op = (args[1] or "status"):lower()
@@ -982,7 +1021,7 @@ function ns._BuildStatusReport(includeDebug)
 		end
 	end
 
-	add("DoHelper (EllesmereUI_HoTPrediction) v%s enabled=%s debug=%s mode=%s excludeHoTs=%s shareNativeStyle=%s alpha=%.2f",
+	add("DoHelper v%s enabled=%s debug=%s mode=%s excludeHoTs=%s shareNativeStyle=%s alpha=%.2f",
 		tostring(ns.version), tostring(ns.db.enabled), tostring(ns.db.debug), tostring(ns.db.amountMode),
 		tostring(ns.db.assumeApiExcludesHoTs), tostring(ns.db.shareNativeStyle), ns.db.alpha or 0)
 	add("approximate prediction=%s", tostring(ns.db.approximatePrediction))

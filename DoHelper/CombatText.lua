@@ -1,4 +1,4 @@
--- EllesmereUI_HoTPrediction / CombatText.lua
+-- DoHelper / CombatText.lua
 -- A small, centered "+ combat" / "- combat" info line shown on the combat
 -- transitions, with persisted styling. It is independent of the healing helper:
 -- its own event frame drives it, so it keeps working when prediction is off.

@@ -1,4 +1,4 @@
--- EllesmereUI_HoTPrediction / Model.lua
+-- DoHelper / Model.lua
 -- Pure(ish) prediction math: tick scheduling, per-stack-count amount, and the
 -- conservative overlap policy. Inputs are plain Lua numbers; secret values are
 -- refused before they reach any arithmetic.

@@ -582,11 +582,52 @@ local function ensureWindow()
 	background(notesPage, -3, 4, 516, 492)
 	local notesHeading = label(notesPage, "Notes | saved as you type | editable out of combat", 8, -5, 482)
 	notesHeading:SetTextColor(0.55, 0.75, 0.78, 1)
+	local notesMessage = label(notesPage, "", 10, -400, 486)
+
+	-- Topic row: every note keeps its own topic ("site"). Prev/next cycle the
+	-- list, the middle field renames the active topic, + / - add and delete.
+	local function notesTopicButton(key, title, x, width, action)
+		local b = CreateFrame("Button", nil, notesPage, "UIPanelButtonTemplate")
+		b:SetSize(width, 20)
+		b:SetPoint("TOPLEFT", notesPage, "TOPLEFT", x, -28)
+		b:SetText(title)
+		b:SetScript("OnClick", action)
+		flatButton(b)
+		f.controls[key] = b
+		return b
+	end
+	notesTopicButton("notesPrev", "<", 10, 22, function() ns.notes.CycleSite(-1) end)
+	notesTopicButton("notesNext", ">", 36, 22, function() ns.notes.CycleSite(1) end)
+	local notesTitle = CreateFrame("EditBox", nil, notesPage, "InputBoxTemplate")
+	notesTitle:SetSize(246, 20)
+	notesTitle:SetPoint("TOPLEFT", notesPage, "TOPLEFT", 64, -28)
+	notesTitle:SetAutoFocus(false)
+	notesTitle:SetMaxLetters(ns.notes.MAX_TITLE or 60)
+	notesTitle:SetScript("OnEnterPressed", function(self)
+		ns.notes.RenameSite(ns.notes.ActiveId(), self:GetText())
+		self:ClearFocus()
+	end)
+	notesTitle:SetScript("OnEditFocusLost", function(self) ns.notes.RenameSite(ns.notes.ActiveId(), self:GetText()) end)
+	notesTitle:SetScript("OnEscapePressed", function(self) f.RefreshNotes(); self:ClearFocus() end)
+	f.controls.notesTitle = notesTitle
+	notesTopicButton("notesNew", "New topic", 316, 78, function()
+		local site = ns.notes.AddSite()
+		notesMessage:SetText(site and ("Added topic: " .. tostring(site.title)) or "Topic not added.")
+	end)
+	notesTopicButton("notesDelete", "Delete", 398, 72, function()
+		local ok, message = ns.notes.RemoveSite(ns.notes.ActiveId())
+		notesMessage:SetText(message or (ok and "Topic deleted." or "Topic not deleted."))
+	end)
+	-- Topic controls mutate saved data, so they lock with the text editors.
+	ns.notes.lockables[#ns.notes.lockables + 1] = notesTitle
+	ns.notes.lockables[#ns.notes.lockables + 1] = f.controls.notesNew
+	ns.notes.lockables[#ns.notes.lockables + 1] = f.controls.notesDelete
+
 	local notesEditor = CreateFrame("EditBox", nil, notesPage, "BackdropTemplate")
 	notesEditor:SetMultiLine(true)
 	notesEditor:SetAutoFocus(false)
-	notesEditor:SetSize(486, 186)
-	notesEditor:SetPoint("TOPLEFT", notesPage, "TOPLEFT", 10, -30)
+	notesEditor:SetSize(486, 158)
+	notesEditor:SetPoint("TOPLEFT", notesPage, "TOPLEFT", 10, -58)
 	notesEditor:SetTextInsets(8, 8, 8, 8)
 	notesEditor:SetBackdrop({ bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 })
 	notesEditor:SetBackdropColor(0.02, 0.03, 0.04, 1)
@@ -623,7 +664,6 @@ local function ensureWindow()
 	noteField("notesBgG", 312, -309, 46)
 	noteField("notesBgB", 364, -309, 46)
 	noteField("notesBgA", 416, -309, 46)
-	local notesMessage = label(notesPage, "", 10, -400, 486)
 	local function notesButton(key, title, x, y, width, action)
 		local b = CreateFrame("Button", nil, notesPage, "UIPanelButtonTemplate")
 		b:SetSize(width, 24)
@@ -674,10 +714,13 @@ local function ensureWindow()
 		c.notesWidth:SetText(tostring(s.width)); c.notesHeight:SetText(tostring(s.height)); c.notesFont:SetText(tostring(s.fontSize))
 		for i, key in ipairs({ "notesTextR", "notesTextG", "notesTextB" }) do c[key]:SetText(tostring(s.textColor[i])) end
 		for i, key in ipairs({ "notesBgR", "notesBgG", "notesBgB", "notesBgA" }) do c[key]:SetText(tostring(s.background[i])) end
+		c.notesTitle:SetText(ns.notes.SiteTitle(ns.notes.ActiveId()))
 		ns.notes.ApplyStyle() -- keep the tab editor's font/colour in sync with saved style
 		ns.notes.RefreshText()
 		ns.notes.RefreshEditable()
 	end
+	-- Any topic change from anywhere (window, slash, tab) refreshes these controls.
+	ns.notes.onChanged = function() f.RefreshNotes() end
 
 	local combatPage = CreateFrame("Frame", nil, f)
 	combatPage:SetSize(510, 492)

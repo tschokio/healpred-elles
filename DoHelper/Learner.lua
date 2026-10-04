@@ -1,4 +1,4 @@
--- EllesmereUI_HoTPrediction / Learner.lua
+-- DoHelper / Learner.lua
 -- Observes SPELL_PERIODIC_HEAL from the combat log to learn two things per
 -- spell, session only:
 --   * the tick interval (from consecutive same-instance / same-application ticks)

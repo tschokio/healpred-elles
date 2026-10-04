@@ -1,4 +1,4 @@
--- EllesmereUI_HoTPrediction / Api.lua
+-- DoHelper / Api.lua
 -- Thin, defensive adapters over the live client and the EllesmereUIUnitFrames
 -- namespace. Every call into foreign code is pcall-wrapped; nothing here ever
 -- performs arithmetic on a value that may be secret.

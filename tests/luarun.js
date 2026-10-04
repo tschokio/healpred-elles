@@ -43,7 +43,7 @@ function walk(dir, out) {
 }
 const files = [];
 walk(path.join(root, "tests"), files);
-walk(path.join(root, "EllesmereUI_HoTPrediction"), files);
+walk(path.join(root, "DoHelper"), files);
 
 const L = lauxlib.luaL_newstate();
 lualib.luaL_openlibs(L);

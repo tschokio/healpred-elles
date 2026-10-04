@@ -1,4 +1,4 @@
--- EllesmereUI_HoTPrediction / Spells.lua
+-- DoHelper / Spells.lua
 -- Candidate spell/rank database. The verified Forever preset IDs below are
 -- *candidates only*: presence in the client is decided at runtime by observed
 -- auras / combat log, never inferred from this catalog.

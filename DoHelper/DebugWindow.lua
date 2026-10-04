@@ -1,4 +1,4 @@
--- EllesmereUI_HoTPrediction / DebugWindow.lua
+-- DoHelper / DebugWindow.lua
 -- A lazy, copyable in-game diagnostic snapshot window.
 --
 -- Design constraints (see README):
@@ -54,7 +54,7 @@ function ns._BuildSnapshotReport()
 	local t = ns.toNumber(GetTime and GetTime() or nil)
 	local tlabel = t and string.format("%.2f", t) or "unknown"
 	local lines = {
-		string.format("DoHelper (EllesmereUI_HoTPrediction) v%s - diagnostic snapshot", tostring(ns.version)),
+		string.format("DoHelper v%s - diagnostic snapshot", tostring(ns.version)),
 		string.format("captured t=%s (public GetTime seconds; a snapshot, not a live log)", tlabel),
 		"copy: click Select All, then Ctrl+C (the operating system owns the clipboard).",
 		"--- teststatus ---",

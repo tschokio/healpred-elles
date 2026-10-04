@@ -874,7 +874,7 @@ T.register("integration: missing EUF does not error", function()
 	_G.EllesmereUI = nil
 	local ns = Mocks.LoadAddon()
 	local ok = pcall(function()
-		Mocks.Fire("ADDON_LOADED", "EllesmereUI_HoTPrediction")
+		Mocks.Fire("ADDON_LOADED", "DoHelper")
 		Mocks.Fire("PLAYER_LOGIN")
 		ns.overlay.Tick()
 	end)

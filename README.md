@@ -1,4 +1,4 @@
-# DoHelper (EllesmereUI_HoTPrediction)
+# DoHelper
 
 A lightweight, standalone World of Warcraft addon that adds a **conservative
 player self-cast HoT (heal-over-time) prediction segment** on top of the native
@@ -22,23 +22,23 @@ StatusBar of its own and secure-hooks native callbacks read-only.
 > behavior described as the implementation's intent; verify in game. There is no
 > guarantee it is correct for every client/era.
 
-**About the name.** `DoHelper` is the public name. The AddOn **folder**
-(`EllesmereUI_HoTPrediction/`), the **SavedVariables** name
-(`EllesmereUI_HoTPredictionDB`), the global frame IDs (`EllesmereUI_HoTPrediction*`)
-and the historical global binding functions all stay exactly as before: they are
-compatibility identifiers, not branding. Renaming any of them would relocate
-saved settings or lose data, so the rename is display-only. The Blizzard
-settings category is shown as **DoHelper**. Both command styles work:
+**About the name.** `DoHelper` is the addon name: the AddOn **folder** is
+`DoHelper/` with `DoHelper.toc`. The **SavedVariables** name
+(`EllesmereUI_HoTPredictionDB`), the global frame IDs
+(`EllesmereUI_HoTPrediction*`) and the historical binding functions are kept as
+compatibility identifiers. The SavedVariables name is what stores your notes and
+settings, so it is deliberately unchanged — changing it would lose data. The
+Blizzard settings category is shown as **DoHelper**. Both command styles work:
 `/dohelper` (and `/dh`) as well as the historical `/euihot` and `/hotpred`.
-Adding the Weapon training tab does not change any existing behaviour.
+Adding the Weapon training tab and note topics does not change any existing
+behaviour.
 
 ---
 
 ## Install
 
-1. Copy the folder `EllesmereUI_HoTPrediction/` into your client's AddOns
-   directory, e.g.
-   `World of Warcraft/_retail_/Interface/AddOns/EllesmereUI_HoTPrediction/`.
+1. Copy the folder `DoHelper/` into your client's AddOns directory, e.g.
+   `World of Warcraft/_retail_/Interface/AddOns/DoHelper/`.
 2. `EllesmereUIUnitFrames` must be installed and enabled — it is a hard TOC
    dependency.
 3. **Native heal prediction must be enabled** for the player frame. Without it
@@ -50,14 +50,21 @@ Adding the Weapon training tab does not change any existing behaviour.
 
 The installed folder is the deliverable; there is no separate zip/binary.
 
-### Updating (to v0.9.0)
+### Updating (to v0.10.0)
 
-Replace the `EllesmereUI_HoTPrediction/` folder in your AddOns directory with the
-new one, then `/reload` (or restart). SavedVariables
-(`EllesmereUI_HoTPredictionDB`) carry over; only the code changes. The fake test
-value is never persisted, so update with no fake active. Verify with
-`/euihot status` (version line), and, while previewing a fake, `/euihot
-teststatus` or the copyable `/euihot window`.
+This release renames the AddOn folder to `DoHelper/` (and the TOC to
+`DoHelper.toc`). Replace the old `EllesmereUI_HoTPrediction/` folder with
+`DoHelper/`, then `/reload` (or restart).
+
+World of Warcraft stores SavedVariables in a file named after the AddOn folder,
+so move your data over in one step: with the game closed, rename
+`WTF/Account/<account>/SavedVariables/EllesmereUI_HoTPrediction.lua` to
+`.../SavedVariables/DoHelper.lua`. The variable name inside the file is
+unchanged (`EllesmereUI_HoTPredictionDB`), so the copied file loads as-is.
+Skipping this step just starts with default settings; it never crashes or
+deletes anything. The fake test value is never persisted, so update with no fake
+active. Verify with `/euihot status` (version line), and, while previewing a
+fake, `/euihot teststatus` or the copyable `/euihot window`.
 
 ## Quick start
 
@@ -112,28 +119,36 @@ and repeat with Cleave, Maul, forms/pages and any macros you use.
 
 ### Settings menu and minimap button (v0.4.0)
 
-### Simple notes (v0.7.0)
+### Notes with topics (v0.7.0, topics in v0.10.0)
 
 A lightweight notepad for anything you want on screen while playing (flask
-countdowns, pulls, loot rules, your own reminders).
+countdowns, pulls, loot rules, your own reminders). Each note keeps several
+named **topics**, so unrelated reminders stay separate.
 
+* **Topics:** the Notes tab and the floating window both have a topic row:
+  `‹` / `›` cycle topics, the middle field renames the active one, `+` adds a
+  topic and `-` deletes the active one (the last topic can never be deleted).
+  From chat: `/euihot notes list | new [title] | delete | next | prev |
+  site <n|title>`. Topics have an internal limit of 50 and each topic's text is
+  capped at 20,000 bytes.
 * **Notes tab:** open `/euihot options` → **Notes**. Type into the multi-line box;
-  the text is saved to `EllesmereUI_HoTPredictionDB` as you type.
+  the active topic's text is saved to `EllesmereUI_HoTPredictionDB` as you type.
 * **Floating window:** click **Show floating notes**, run `/euihot notes`, or set
-  the **Toggle notes window** key binding (Key Bindings → AddOns → EllesmereUI HoT
-  Prediction). The window can be dragged by its title bar and is independent of the
-  settings window.
-* **Collapse / close:** **Collapse** rolls the window up to its title bar (click
-  **Expand** to restore); **Close** hides it. Visibility and the collapsed state
-  persist, so a note you leave open comes back after `/reload`.
-* **Edit only out of combat:** the note is editable whenever you are out of combat
-  and becomes read-only during combat, so it never swallows your keys. It unlocks
-  automatically when combat ends.
+  the **Toggle notes window** key binding (Key Bindings → AddOns → DoHelper). The
+  window can be dragged by its header and is independent of the settings window.
+* **Collapse / close:** the arrow (`v`/`^`) next to **Do** rolls the window up to
+  a compact **`Do ^`** pill; click the arrow again to open it. **Close** hides it.
+  Visibility, active topic and the collapsed state persist, so a note you leave
+  open comes back after `/reload`.
+* **Edit only out of combat:** the text, the topic title, add and delete controls
+  are editable out of combat and become read-only during combat, so the note never
+  swallows your keys; cycling topics stays available. It unlocks automatically
+  when combat ends.
 * **Styling:** in the Notes tab set window **width/height** (180-900 × 80-800),
   **font size** (8-32), **text RGB**, and **background RGB + opacity** (0-1 each),
   then **Apply style**. **Reset style** restores the defaults. Size is set by the
   width/height fields (not by edge-dragging), so it is deterministic and safe in
-  combat.
+  combat. Styling is shared by every topic.
 
 Notes are plain player data: no healing math, no vendor files and no idle timers.
 Only the floating window's own drag creates a transient `OnUpdate` that the client
@@ -547,7 +562,7 @@ All commands are `/euihot ...` (aliases `/hotpred ...`, and `/dohelper ...` /
 | `spell add\|remove <spellID> [name]` | Register/remove a modified spell/rank ID at runtime. |
 | `amountmode total\|effective` | CLEU adapter assumption (see below); resets learned magnitudes. |
 | `excludehots on\|off` | Explicit excludes-HoTs overlap opt-in (see below). |
-| `notes [show\|hide\|toggle\|collapse\|expand]` | Show/hide/toggle the floating notes window, or collapse/expand it. With no argument it opens (shows) the window. |
+| `notes [show\|hide\|toggle\|collapse\|expand\|list\|new [title]\|delete\|next\|prev\|site <n\|title>]` | Show/hide/toggle the floating notes window, collapse/expand it, and manage the named note topics (list/add/delete/cycle/select). With no argument it opens (shows) the window. |
 | `combattext on\|off` | Enable/disable the centered `+ combat` / `- combat` indicator. |
 | `combattext test [enter\|leave]` | Preview the enter (default) or leave line. |
 | `combattext status` | One line: enabled, font size, show/fade seconds, colour and position. |
@@ -976,7 +991,14 @@ clamped; clicking a trainer opens one reused detail panel and never moves the
 map; `/dohelper` and `/dh` keep `/euihot` and `/hotpred` working; the legacy
 settings paths and the saved DB name persist; and the guarded map adapter
 resolves classic/modern candidates, accepts a native or TomTom waypoint, and
-honestly refuses false/error/secret APIs and combat.
+honestly refuses false/error/secret APIs and combat. v0.10.0 adds: the AddOn
+folder and TOC are renamed to `DoHelper` while the SavedVariables name, frame ids
+and binding globals stay compatible; notes keep multiple named topics with
+add/rename/delete/cycle from the Notes tab, the floating window and
+`/euihot notes`; a pre-topics single note migrates into the first topic without
+loss; the collapsed window is a compact `Do ^` pill; topic controls lock in
+combat while cycling stays available; and a corrupt topic list is repaired
+without discarding valid entries.
 
 ---
 
@@ -1016,6 +1038,7 @@ honestly refuses false/error/secret APIs and combat.
   numeric Zone type, a matching `mapID`, and a known English/known-localized
   city alias. An unknown localized name places no waypoint (the approximate
   coordinates remain usable). No fabricated legacy area id is ever substituted.
-* The Blizzard settings **category name** is `DoHelper`; the historical AddOn
-  folder, SavedVariables name, global frame ids and binding globals remain
-  compatibility identifiers.
+* The Blizzard settings **category name** and the AddOn folder are `DoHelper`;
+  the SavedVariables name, global frame ids and binding globals remain
+  compatibility identifiers (renaming the SavedVariables would lose saved
+  settings). The pre-topics single note text is migrated into the first topic.

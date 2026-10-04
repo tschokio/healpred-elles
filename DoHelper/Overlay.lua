@@ -1,4 +1,4 @@
--- EllesmereUI_HoTPrediction / Overlay.lua
+-- DoHelper / Overlay.lua
 -- Owns the single overlay bar that draws our conservative remainder segment at
 -- the leading edge of the native incoming-heal chain. It never modifies native
 -- frames, textures or functions: it only reads them, creates its own StatusBar
