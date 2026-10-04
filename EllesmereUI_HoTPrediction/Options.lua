@@ -574,6 +574,7 @@ local function ensureWindow()
 	for i, class in ipairs(ns.catalogClasses) do if class.key ~= "CUSTOM" then classButton(class.key, class.name, i) end end
 
 	f.controls = {}
+	local refreshing = false
 	local notesPage = CreateFrame("Frame", nil, f)
 	notesPage:SetSize(510, 492)
 	notesPage:SetPoint("TOPLEFT", f, "TOPLEFT", 15, -100)
@@ -678,22 +679,158 @@ local function ensureWindow()
 		ns.notes.RefreshEditable()
 	end
 
+	local combatPage = CreateFrame("Frame", nil, f)
+	combatPage:SetSize(510, 492)
+	combatPage:SetPoint("TOPLEFT", f, "TOPLEFT", 15, -100)
+	f.combatPage = combatPage
+	background(combatPage, -3, 4, 516, 492)
+	local combatHeading = label(combatPage, "Combat text | shown on entering and leaving combat", 8, -5, 482)
+	combatHeading:SetTextColor(0.55, 0.75, 0.78, 1)
+	local function combatField(key, x, y, width, maxLetters)
+		local e = CreateFrame("EditBox", nil, combatPage, "InputBoxTemplate")
+		e:SetSize(width or 56, 22)
+		e:SetPoint("TOPLEFT", combatPage, "TOPLEFT", x, y)
+		e:SetAutoFocus(false)
+		e:SetMaxLetters(maxLetters or 10)
+		e:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+		f.controls[key] = e
+		return e
+	end
+	local function combatCheck(key, title, x, y, width, read, write)
+		local c = CreateFrame("CheckButton", nil, combatPage, "UICheckButtonTemplate")
+		c:SetSize(26, 26)
+		c:SetPoint("TOPLEFT", combatPage, "TOPLEFT", x, y)
+		label(combatPage, title, x + 30, y - 6, width)
+		c:SetScript("OnClick", function(self) if not refreshing then write(self:GetChecked() and true or false); f.Refresh() end end)
+		c.read = read
+		f.controls[key] = c
+		return c
+	end
+	local function combatButton(key, title, x, y, width, action)
+		local b = CreateFrame("Button", nil, combatPage, "UIPanelButtonTemplate")
+		b:SetSize(width, 24)
+		b:SetPoint("TOPLEFT", combatPage, "TOPLEFT", x, y)
+		b:SetText(title)
+		b:SetScript("OnClick", action)
+		flatButton(b)
+		f.controls[key] = b
+		return b
+	end
+	label(combatPage, "Enter text", 10, -35, 100)
+	combatField("combatEnter", 115, -30, 140, 40)
+	label(combatPage, "Leave text", 270, -35, 90)
+	combatField("combatLeave", 365, -30, 140, 40)
+	label(combatPage, "Font size (8-60)", 10, -71, 130)
+	combatField("combatFont", 145, -66, 66)
+	label(combatPage, "Opacity (0-1)", 270, -71, 100)
+	combatField("combatOpacity", 375, -66, 66)
+	label(combatPage, "Show seconds (0 = until next change)", 10, -107, 245)
+	combatField("combatDuration", 258, -102, 60)
+	label(combatPage, "Fade seconds", 335, -107, 105)
+	combatField("combatFade", 442, -102, 58)
+	label(combatPage, "Text RGB (0-1)", 10, -143, 120)
+	combatField("combatTextR", 138, -138, 50)
+	combatField("combatTextG", 192, -138, 50)
+	combatField("combatTextB", 246, -138, 50)
+	label(combatPage, "Background RGBA (0-1; alpha 0 = none)", 10, -179, 255)
+	combatField("combatBgR", 272, -174, 48)
+	combatField("combatBgG", 324, -174, 48)
+	combatField("combatBgB", 376, -174, 48)
+	combatField("combatBgA", 428, -174, 48)
+	combatCheck("combatOutline", "Text outline", 18, -212, 140,
+		function() return ns.db.combatText.outline end,
+		function(v) ns.db.combatText.outline = v and true or false; ns.combatText.Refresh() end)
+	combatCheck("combatUnlock", "Unlock to drag (click-through when off)", 200, -212, 300,
+		function() return ns.combatText.unlocked end,
+		function(v) ns.combatText.SetUnlocked(v) end)
+	label(combatPage, "Position offset X / Y from screen centre", 10, -252, 250)
+	combatField("combatX", 270, -247, 70)
+	combatField("combatY", 348, -247, 70)
+	local combatMessage = label(combatPage, "", 10, -322, 486)
+	combatButton("combatResetPos", "Reset position", 428, -247, 72, function()
+		local s = ns.combatText.Style()
+		ns.combatText.SetStyle({ enterText = s.enterText, leaveText = s.leaveText, fontSize = s.fontSize,
+			opacity = s.opacity, duration = s.duration, fade = s.fade, outline = s.outline,
+			color = s.color, background = s.background, x = 0, y = 0 })
+		combatMessage:SetText("Combat text position reset to screen centre.")
+		f.RefreshCombat()
+	end)
+	combatButton("combatApply", "Apply style", 10, -284, 110, function()
+		local c = f.controls
+		local ok, message = ns.combatText.SetStyle({
+			enterText = c.combatEnter:GetText(),
+			leaveText = c.combatLeave:GetText(),
+			fontSize = tonumber(c.combatFont:GetText()),
+			opacity = tonumber(c.combatOpacity:GetText()),
+			duration = tonumber(c.combatDuration:GetText()),
+			fade = tonumber(c.combatFade:GetText()),
+			outline = c.combatOutline:GetChecked() and true or false,
+			color = { tonumber(c.combatTextR:GetText()), tonumber(c.combatTextG:GetText()), tonumber(c.combatTextB:GetText()) },
+			background = { tonumber(c.combatBgR:GetText()), tonumber(c.combatBgG:GetText()), tonumber(c.combatBgB:GetText()), tonumber(c.combatBgA:GetText()) },
+			x = tonumber(c.combatX:GetText()),
+			y = tonumber(c.combatY:GetText()),
+		})
+		if not ok then combatMessage:SetText(message); return end
+		for _, key in ipairs({ "combatEnter", "combatLeave", "combatFont", "combatOpacity", "combatDuration", "combatFade",
+			"combatTextR", "combatTextG", "combatTextB", "combatBgR", "combatBgG", "combatBgB", "combatBgA", "combatX", "combatY" }) do
+			c[key]:ClearFocus()
+		end
+		combatMessage:SetText("Combat text style saved.")
+		f.RefreshCombat()
+	end)
+	combatButton("combatResetStyle", "Reset style", 126, -284, 120, function()
+		local d = ns.DEFAULTS.combatText
+		ns.combatText.SetStyle({ enterText = d.enterText, leaveText = d.leaveText, fontSize = d.fontSize,
+			opacity = d.opacity, duration = d.duration, fade = d.fade, outline = d.outline,
+			color = { d.color[1], d.color[2], d.color[3] },
+			background = { d.background[1], d.background[2], d.background[3], d.background[4] },
+			x = d.x, y = d.y })
+		combatMessage:SetText("Default combat text style restored.")
+		f.RefreshCombat()
+	end)
+	combatButton("combatPreviewEnter", "Preview +", 252, -284, 110, function()
+		ns.combatText.Preview("enter")
+		combatMessage:SetText("Preview shown; it fades like a real transition.")
+	end)
+	combatButton("combatPreviewLeave", "Preview -", 368, -284, 110, function()
+		ns.combatText.Preview("leave")
+		combatMessage:SetText("Preview shown; it fades like a real transition.")
+	end)
+	function f.RefreshCombat()
+		local c = f.controls
+		local s = ns.combatText.Style()
+		c.combatEnter:SetText(s.enterText)
+		c.combatLeave:SetText(s.leaveText)
+		c.combatFont:SetText(tostring(s.fontSize))
+		c.combatOpacity:SetText(tostring(s.opacity))
+		c.combatDuration:SetText(tostring(s.duration))
+		c.combatFade:SetText(tostring(s.fade))
+		for i, key in ipairs({ "combatTextR", "combatTextG", "combatTextB" }) do c[key]:SetText(tostring(s.color[i])) end
+		for i, key in ipairs({ "combatBgR", "combatBgG", "combatBgB", "combatBgA" }) do c[key]:SetText(tostring(s.background[i])) end
+		c.combatX:SetText(tostring(s.x))
+		c.combatY:SetText(tostring(s.y))
+		ns.combatText.ApplyStyle()
+	end
+
 	function f.SelectTab(tab)
 		f.selectedTab = tab
 		page:SetShown(tab == "settings")
 		catalog:SetShown(tab == "spells")
 		notesPage:SetShown(tab == "notes")
+		combatPage:SetShown(tab == "combat")
 		if tab == "spells" then
 			for _, key in ipairs({ "alpha", "red", "green", "blue" }) do f.controls[key]:ClearFocus() end
 			f.RefreshCatalog()
 		elseif tab == "notes" then
 			f.RefreshNotes()
+		elseif tab == "combat" then
+			f.RefreshCombat()
 		end
 		f.controls.settingsTab:SetText(tab == "settings" and "[Settings]" or "Settings")
 		f.controls.spellsTab:SetText(tab == "spells" and "[Implemented spells]" or "Implemented spells")
 		f.controls.notesTab:SetText(tab == "notes" and "[Notes]" or "Notes")
+		f.controls.combatTab:SetText(tab == "combat" and "[Combat text]" or "Combat text")
 	end
-	local refreshing = false
 	local function command(text)
 		ns.HandleCommand(text)
 		f.Refresh()
@@ -737,7 +874,7 @@ local function ensureWindow()
 	edit("blue", 370, -216)
 	local message = label(page, "", 24, -275)
 	local function button(key, title, x, y, width, action)
-		local parent = (key == "settingsTab" or key == "notesTab" or key == "spellsTab" or key == "manageTab" or key == "close") and f or page
+		local parent = (key == "settingsTab" or key == "notesTab" or key == "combatTab" or key == "spellsTab" or key == "manageTab" or key == "close") and f or page
 		local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
 		b:SetSize(width, 24)
 		b:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
@@ -775,10 +912,11 @@ local function ensureWindow()
 	button("queueAppearance", "Next-swing appearance...", 24, -572, 225, function() ns.OpenQueueAppearance() end)
 	button("manageSpells", "Manage spells...", 270, -572, 225, function() ns.OpenSpellEditor() end)
 	button("close", "Close", 420, -606, 95, function() f:Hide() end)
-	button("settingsTab", "Settings", 18, -62, 118, function() f.SelectTab("settings") end)
-	button("notesTab", "Notes", 143, -62, 96, function() f.SelectTab("notes") end)
-	button("spellsTab", "Implemented spells", 246, -62, 176, function() f.SelectTab("spells") end)
-	button("manageTab", "Manage spells...", 429, -62, 160, function() ns.OpenSpellEditor() end)
+	button("settingsTab", "Settings", 18, -62, 110, function() f.SelectTab("settings") end)
+	button("notesTab", "Notes", 133, -62, 86, function() f.SelectTab("notes") end)
+	button("combatTab", "Combat text", 224, -62, 96, function() f.SelectTab("combat") end)
+	button("spellsTab", "Implemented spells", 325, -62, 165, function() f.SelectTab("spells") end)
+	button("manageTab", "Manage spells...", 495, -62, 150, function() ns.OpenSpellEditor() end)
 	f.Refresh = function()
 		refreshing = true
 		for _, c in pairs(f.controls) do if c.read then c:SetChecked(c.read()) end end
@@ -788,6 +926,7 @@ local function ensureWindow()
 		status:SetText("v" .. ns.version .. (ns.session.fake and " | PREVIEW ACTIVE (not real healing)" or " | Real healing mode"))
 		f.preview.Saved()
 		if f.RefreshNotes then f.RefreshNotes() end
+		if f.RefreshCombat then f.RefreshCombat() end
 		refreshing = false
 	end
 	f:SetScript("OnShow", function() f.Refresh(); f.SelectTab(f.selectedTab or "settings") end)

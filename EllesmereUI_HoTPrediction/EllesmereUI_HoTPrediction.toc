@@ -1,8 +1,8 @@
 ## Interface: 120000, 120001, 120005, 120007, 120100, 16001
 ## Title: |cff66f366EllesmereUI|r HoT Prediction
-## Notes: Player self-cast HoT prediction for EllesmereUIUnitFrames, real queued next-swing ability borders for EllesmereUIActionBars, and a simple persistent notes pad.
+## Notes: Player self-cast HoT prediction for EllesmereUIUnitFrames, real queued next-swing ability borders for EllesmereUIActionBars, a simple persistent notes pad, and a stylable +combat/-combat indicator.
 ## Author: ai-job
-## Version: 0.7.0
+## Version: 0.8.0
 ## SavedVariables: EllesmereUI_HoTPredictionDB
 ## Dependencies: EllesmereUIUnitFrames
 ## OptionalDeps: EllesmereUIActionBars
@@ -18,5 +18,6 @@ Overlay.lua
 QueuedSwing.lua
 SpellCatalog.lua
 Notes.lua
+CombatText.lua
 DebugWindow.lua
 Options.lua

@@ -1,0 +1,215 @@
+-- tests/spec_combat_text.lua
+-- Small centered +combat/-combat line with persisted styling and position.
+local function click(widget, ...)
+	widget:GetScript("OnClick")(widget, ...)
+end
+
+local function style(ct, o)
+	o = o or {}
+	return ct.SetStyle({
+		fontSize = o.fontSize or 20,
+		opacity = o.opacity or 1,
+		duration = o.duration or 2,
+		fade = o.fade or 0,
+		x = o.x or 0,
+		y = o.y or 0,
+		outline = o.outline or false,
+		color = o.color or { 1, 1, 1 },
+		background = o.background or { 0, 0, 0, 0 },
+		enterText = o.enterText,
+		leaveText = o.leaveText,
+	})
+end
+
+T.register("combat text: enter and leave transitions show the matching label", function()
+	local e = Mocks.NewEnv()
+	local ct = e.ns.combatText
+	assert_not_nil(ct.eventFrame, "combat text owns an event frame")
+	local f = ct.EnsureFrame()
+	assert_false(f:IsShown(), "hidden until the first transition")
+	ct.eventFrame:GetScript("OnEvent")(ct.eventFrame, "PLAYER_REGEN_DISABLED")
+	assert_true(f:IsShown())
+	assert_eq(f.label:GetText(), "+ combat")
+	ct.eventFrame:GetScript("OnEvent")(ct.eventFrame, "PLAYER_REGEN_ENABLED")
+	assert_true(f:IsShown())
+	assert_eq(f.label:GetText(), "- combat")
+	assert_false(f._mouseEnabled, "click-through by default")
+end)
+
+T.register("combat text: timed line hides after its duration and 0 stays until the next change", function()
+	local e = Mocks.NewEnv()
+	local ct = e.ns.combatText
+	assert_true(style(ct, { duration = 2 }))
+	local f = ct.EnsureFrame()
+	Mocks.SetNow(100)
+	ct.Show("enter")
+	assert_not_nil(f:GetScript("OnUpdate"), "a timed line counts down")
+	Mocks.SetNow(102.5)
+	f:GetScript("OnUpdate")(f, 0.5)
+	assert_false(f:IsShown(), "it hides once the duration elapses")
+	assert_nil(f:GetScript("OnUpdate"))
+	assert_true(style(ct, { duration = 0 }))
+	ct.Show("enter")
+	assert_nil(f:GetScript("OnUpdate"), "a sticky line has no updater")
+	assert_true(f:IsShown())
+	ct.Show("leave")
+	assert_eq(f.label:GetText(), "- combat")
+	assert_true(f:IsShown())
+end)
+
+T.register("combat text: style applies font outline colour opacity background and is validated atomically", function()
+	local e = Mocks.NewEnv()
+	local ct = e.ns.combatText
+	assert_true(style(ct, { fontSize = 30, opacity = 0.5, outline = true, color = { 0.2, 0.4, 0.6 }, background = { 0.1, 0.2, 0.3, 0.7 } }))
+	local f = ct.EnsureFrame()
+	ct.Show("enter")
+	local _, size, flags = f.label:GetFont()
+	assert_eq(size, 30)
+	assert_eq(flags, "OUTLINE")
+	assert_eq(f:GetAlpha(), 0.5)
+	local r = f.label:GetTextColor()
+	assert_eq(r, 0.2)
+	assert_eq(f._backdropColor[4], 0.7)
+	assert_false(style(ct, { fontSize = 200 }), "out-of-range font is refused")
+	assert_eq(ct.Style().fontSize, 30, "refused input leaves every stored value untouched")
+	assert_true(style(ct, { fontSize = 12, outline = false }))
+	local _, size2, flags2 = f.label:GetFont()
+	assert_eq(size2, 12)
+	assert_eq(flags2, "")
+end)
+
+T.register("combat text: custom labels are used and validated", function()
+	local e = Mocks.NewEnv()
+	local ct = e.ns.combatText
+	assert_true(style(ct, { enterText = "COMBAT!", leaveText = "safe" }))
+	local f = ct.EnsureFrame()
+	ct.Show("enter"); assert_eq(f.label:GetText(), "COMBAT!")
+	ct.Show("leave"); assert_eq(f.label:GetText(), "safe")
+	assert_false(style(ct, { enterText = "" }), "empty label refused")
+	assert_false(style(ct, { enterText = "bad|text" }), "format codes refused")
+	assert_false(style(ct, { leaveText = string.rep("x", 41) }), "too-long label refused")
+	assert_eq(e.ns.db.combatText.enterText, "COMBAT!", "refused labels do not overwrite the saved ones")
+end)
+
+T.register("combat text: disabling hides it and suppresses transitions", function()
+	local e = Mocks.NewEnv()
+	local ct = e.ns.combatText
+	local f = ct.EnsureFrame()
+	ct.Show("enter"); assert_true(f:IsShown())
+	e.ns.HandleCommand("combattext off")
+	assert_false(f:IsShown())
+	ct.eventFrame:GetScript("OnEvent")(ct.eventFrame, "PLAYER_REGEN_ENABLED")
+	assert_false(f:IsShown(), "a disabled line never appears")
+	e.ns.HandleCommand("combattext on")
+	ct.eventFrame:GetScript("OnEvent")(ct.eventFrame, "PLAYER_REGEN_DISABLED")
+	assert_true(f:IsShown())
+end)
+
+T.register("combat text: unlock enables dragging and locking restores click-through", function()
+	local e = Mocks.NewEnv()
+	local ct = e.ns.combatText
+	ct.SetUnlocked(true)
+	local f = ct.EnsureFrame()
+	assert_true(f._mouseEnabled, "unlocked frame accepts the mouse")
+	assert_true(f:IsShown())
+	assert_true(type(f:GetScript("OnDragStart")) == "function")
+	f:GetScript("OnDragStart")(f)
+	assert_true(f._moving)
+	f:GetScript("OnDragStop")(f)
+	assert_eq(e.ns.db.combatText.x, 0)
+	assert_eq(e.ns.db.combatText.y, 0)
+	ct.SetUnlocked(false)
+	assert_false(f._mouseEnabled, "locked frame is click-through")
+	assert_false(f:IsShown())
+	assert_nil(f:GetScript("OnDragStart"))
+end)
+
+T.register("combat text: saved position applies and no idle updater exists", function()
+	local e = Mocks.NewEnv()
+	local ct = e.ns.combatText
+	assert_true(style(ct, { x = 120, y = -40, duration = 0 }))
+	local f = ct.EnsureFrame()
+	local point, _, relPoint, ox, oy = f:GetPoint(1)
+	assert_eq(point, "CENTER")
+	assert_eq(relPoint, "CENTER")
+	assert_eq(ox, 120)
+	assert_eq(oy, -40)
+	assert_nil(f:GetScript("OnUpdate"))
+	ct.Show("enter")
+	assert_nil(f:GetScript("OnUpdate"), "sticky line has no updater")
+end)
+
+T.register("combat text: preview shows even when disabled and uses the saved style", function()
+	local e = Mocks.NewEnv()
+	e.ns.db.combatText.enabled = false
+	local ct = e.ns.combatText
+	local f = ct.EnsureFrame()
+	ct.Preview("leave")
+	assert_true(f:IsShown())
+	assert_eq(f.label:GetText(), "- combat")
+end)
+
+T.register("combat text: options tab switches cleanly and edits apply without creating the display", function()
+	local e = Mocks.NewEnv()
+	local f = e.ns.OpenOptions()
+	assert_nil(e.ns.combatText.window, "opening options must not create the display")
+	assert_false(f.combatPage:IsShown())
+	click(f.controls.combatTab)
+	assert_eq(f.selectedTab, "combat")
+	assert_true(f.combatPage:IsShown())
+	assert_false(f.notesPage:IsShown())
+	assert_false(f.settingsPage:IsShown())
+	assert_false(f.spellsPage:IsShown())
+	local c = f.controls
+	c.combatEnter:SetText("FIGHT"); c.combatLeave:SetText("calm")
+	c.combatFont:SetText("26"); c.combatOpacity:SetText("0.8")
+	c.combatDuration:SetText("3"); c.combatFade:SetText("0")
+	c.combatTextR:SetText("1"); c.combatTextG:SetText("0.5"); c.combatTextB:SetText("0")
+	c.combatBgR:SetText("0"); c.combatBgG:SetText("0"); c.combatBgB:SetText("0"); c.combatBgA:SetText("0.4")
+	c.combatX:SetText("50"); c.combatY:SetText("-25")
+	click(c.combatApply)
+	assert_eq(e.ns.db.combatText.enterText, "FIGHT")
+	assert_eq(e.ns.db.combatText.fontSize, 26)
+	assert_eq(e.ns.db.combatText.background[4], 0.4)
+	assert_eq(e.ns.db.combatText.x, 50)
+	assert_eq(e.ns.db.combatText.y, -25)
+	click(c.combatPreviewEnter)
+	local win = e.ns.combatText.window
+	assert_eq(win.label:GetText(), "FIGHT")
+	click(c.combatPreviewLeave)
+	assert_eq(win.label:GetText(), "calm")
+	click(c.combatResetStyle)
+	assert_eq(e.ns.db.combatText.fontSize, e.ns.DEFAULTS.combatText.fontSize)
+	assert_eq(e.ns.db.combatText.x, 0)
+	c.combatFont:SetText("999")
+	click(c.combatApply)
+	assert_eq(e.ns.db.combatText.fontSize, e.ns.DEFAULTS.combatText.fontSize, "invalid apply changes nothing")
+	assert_nil(e.ns.session.fake)
+end)
+
+T.register("combat text: outline and unlock checkboxes reflect state and apply immediately", function()
+	local e = Mocks.NewEnv()
+	local f = e.ns.OpenOptions()
+	click(f.controls.combatTab)
+	local outline = f.controls.combatOutline
+	assert_true(outline:GetChecked(), "default outline is on")
+	outline:SetChecked(false); click(outline)
+	assert_false(e.ns.db.combatText.outline)
+	local unlock = f.controls.combatUnlock
+	assert_false(unlock:GetChecked())
+	unlock:SetChecked(true); click(unlock)
+	assert_true(e.ns.combatText.unlocked)
+	assert_true(e.ns.combatText.window:IsShown())
+	unlock:SetChecked(false); click(unlock)
+	assert_false(e.ns.combatText.unlocked)
+	assert_false(e.ns.combatText.window:IsShown())
+end)
+
+T.register("combat text: status and test commands report and preview", function()
+	local e = Mocks.NewEnv()
+	e.ns.HandleCommand("combattext status")
+	e.ns.HandleCommand("combattext test leave")
+	local f = e.ns.combatText.EnsureFrame()
+	assert_eq(f.label:GetText(), "- combat")
+	assert_true(#e.mocks.chat > 0)
+end)

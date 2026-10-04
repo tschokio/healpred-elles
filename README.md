@@ -40,7 +40,7 @@ StatusBar of its own and secure-hooks native callbacks read-only.
 
 The installed folder is the deliverable; there is no separate zip/binary.
 
-### Updating (to v0.7.0)
+### Updating (to v0.8.0)
 
 Replace the `EllesmereUI_HoTPrediction/` folder in your AddOns directory with the
 new one, then `/reload` (or restart). SavedVariables
@@ -128,6 +128,27 @@ countdowns, pulls, loot rules, your own reminders).
 Notes are plain player data: no healing math, no vendor files and no idle timers.
 Only the floating window's own drag creates a transient `OnUpdate` that the client
 removes on release.
+
+### Combat text (v0.8.0)
+
+A small, centered line that flashes **`+ combat`** when you enter combat and
+**`- combat`** when you leave, so the transition is obvious in the middle of the
+screen.
+
+* **Where:** `/euihot options` → **Combat text**. The line is centered by default;
+  the X/Y offset fields move it (values are signed), or tick **Unlock to drag on
+  screen** and drag it. While unlocked it accepts the mouse; when you untick it,
+  it returns to click-through so it never blocks your clicks in combat.
+* **When:** **Show seconds** controls how long each line stays (0 = keep it until
+  the next transition). **Fade seconds** fades it out before hiding (0 = no fade).
+* **How it looks:** **Enter text** / **Leave text** (up to 40 characters), **font
+  size** (8-60), **Text RGB** and **opacity**, an optional **text outline**, and an
+  optional **background RGBA** (alpha 0 = none). **Apply style** saves; **Reset
+  style** restores defaults; **Reset position** recenters. **Preview +** / **Preview -**
+  show a sample without waiting for combat.
+* **Independent:** the indicator has its own event frame, so it keeps working when
+  the healing helper is disabled (`/euihot combattext on|off`). It has no idle
+  timer: the only `OnUpdate` exists while a timed line is fading out.
 
 ### Throw and custom spell editor (v0.6.1)
 
@@ -457,6 +478,9 @@ All commands are `/euihot ...` (alias `/hotpred ...`).
 | `amountmode total\|effective` | CLEU adapter assumption (see below); resets learned magnitudes. |
 | `excludehots on\|off` | Explicit excludes-HoTs overlap opt-in (see below). |
 | `notes [show\|hide\|toggle\|collapse\|expand]` | Show/hide/toggle the floating notes window, or collapse/expand it. With no argument it opens (shows) the window. |
+| `combattext on\|off` | Enable/disable the centered `+ combat` / `- combat` indicator. |
+| `combattext test [enter\|leave]` | Preview the enter (default) or leave line. |
+| `combattext status` | One line: enabled, font size, show/fade seconds, colour and position. |
 | `reset` | Clear session learning and invalidate the aura cache. |
 
 Settings persist in `EllesmereUI_HoTPredictionDB`. Manual interval/amount
@@ -861,7 +885,15 @@ floating window; the note is read-only in combat and unlocks on
 persist; style apply is validated atomically and resets to defaults; text is
 capped and refuses secret/non-string input; the floating window keeps no idle
 `OnUpdate` and its title is not occluded by its own editor; and the key-binding
-entry point toggles the window.
+entry point toggles the window. v0.8.0 adds: enter/leave transitions show the
+matching label; a timed line hides after its duration while a 0-second line stays
+until the next change; style (font, outline, colour, opacity, background) applies
+and is validated atomically with signed X/Y offsets; custom labels are used and
+reject empty/format-code/overlong input; disabling hides and suppresses the line;
+unlock enables dragging and locking restores click-through; the saved position
+applies; preview works while disabled; the options tab switches cleanly and does
+not create the display; and the only `OnUpdate` exists while a timed line is
+visible.
 
 ---
 

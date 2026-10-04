@@ -6,7 +6,7 @@
 local addonName, ns = ...
 
 ns.name = addonName
-ns.version = "0.7.0"
+ns.version = "0.8.0"
 ns.debugEnabled = false
 ns.inCombat = false
 ns.started = false
@@ -185,6 +185,21 @@ ns.DEFAULTS = {
 		textColor = { 0.90, 0.94, 0.98 },
 		background = { 0.05, 0.07, 0.10, 0.85 },
 		x = 0, y = 0,              -- saved offset from the screen center
+	},
+	-- Small centered "+ combat" / "- combat" line shown on combat transitions.
+	-- Independent of the healing helper; its own event frame drives it.
+	combatText = {
+		enabled = true,
+		enterText = "+ combat",
+		leaveText = "- combat",
+		fontSize = 22,
+		color = { 1.0, 0.9, 0.3 },
+		outline = true,
+		opacity = 1,
+		background = { 0, 0, 0, 0 }, -- rgba; alpha 0 = no background
+		duration = 2,                -- seconds; 0 = keep until the next change
+		fade = 0.5,                  -- seconds of fade-out before hiding
+		x = 0, y = 0,                -- saved offset from the screen center
 	},
 }
 
@@ -431,6 +446,7 @@ function ns.Startup()
 	ns.initCapabilities()
 	if ns.learner and ns.learner.Setup then ns.learner.Setup() end
 	if ns.notes and ns.notes.Setup then ns.notes.Setup() end
+	if ns.combatText and ns.combatText.Setup then ns.combatText.Setup() end
 	ns.SetRuntimeEnabled(ns.db.enabled)
 	ns.unregister("ADDON_LOADED")
 
@@ -529,7 +545,7 @@ local function parseNumber(s)
 	return tonumber(s)
 end
 
-local HELP = "commands: test <v> | test off | teststatus | status | window | approximate on|off | debug [on|off] | debug window | enable on|off | alpha <a> | color <r> <g> <b> | color overlay <r> <g> <b> | color native | interval <id> <s>|off | amount <id> <tickTotal> [stacks]|off [stacks] | observe on|off | spell add|remove <id> [name] | amountmode total|effective | excludehots on|off | notes [show|hide|toggle|collapse|expand] | reset | help"
+local HELP = "commands: test <v> | test off | teststatus | status | window | approximate on|off | debug [on|off] | debug window | enable on|off | alpha <a> | color <r> <g> <b> | color overlay <r> <g> <b> | color native | interval <id> <s>|off | amount <id> <tickTotal> [stacks]|off [stacks] | observe on|off | spell add|remove <id> [name] | amountmode total|effective | excludehots on|off | notes [show|hide|toggle|collapse|expand] | combattext [on|off|test [enter|leave]|status] | reset | help"
 
 -- Bound for a manual tick-total calibration. It only has to be a sane upper
 -- limit on a single heal tick, not a game mechanic.
@@ -547,6 +563,26 @@ function ns.HandleCommand(input)
 		ns.print("settings: /euihot options (or menu) | /euihot minimap on|off; minimap left-click settings, right-click diagnostics, drag to move.")
 		ns.print("next-swing borders: /euihot queue on|off | queue color <r> <g> <b> | queue add|remove|reset <id> [name] | queue status")
 		ns.print("notes: /euihot notes [show|hide|toggle|collapse|expand]; open the Notes tab to write and style them.")
+		ns.print("combat text: /euihot combattext on|off | combattext test [enter|leave] | combattext status; style it in the Combat text tab.")
+		return
+	elseif cmd == "combattext" or cmd == "ct" then
+		local op = (args[1] or "status"):lower()
+		if not ns.combatText then ns.print("combat text module unavailable (CombatText.lua not loaded)."); return end
+		if op == "on" or op == "off" then
+			ns.db.combatText.enabled = op == "on"
+			ns.combatText.Refresh()
+			ns.print("combat text " .. (ns.db.combatText.enabled and "enabled" or "disabled") .. ".")
+		elseif op == "test" then
+			ns.combatText.Preview((args[2] or "enter"):lower() == "leave" and "leave" or "enter")
+			ns.print("combat text preview: " .. tostring(args[2] or "enter") .. ".")
+		elseif op == "status" then
+			local s = ns.combatText.Style()
+			ns.print(string.format("combat text enabled=%s size=%s show=%.1fs fade=%.1fs color=%.2f,%.2f,%.2f pos=%s,%s",
+				tostring(ns.db.combatText.enabled), tostring(s.fontSize), s.duration, s.fade,
+				s.color[1], s.color[2], s.color[3], tostring(s.x), tostring(s.y)))
+		else
+			ns.print("usage: /euihot combattext on|off | combattext test [enter|leave] | combattext status")
+		end
 		return
 	elseif cmd == "notes" then
 		local op = (args[1] or "show"):lower()
