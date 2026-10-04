@@ -40,7 +40,7 @@ StatusBar of its own and secure-hooks native callbacks read-only.
 
 The installed folder is the deliverable; there is no separate zip/binary.
 
-### Updating (to v0.6.1)
+### Updating (to v0.7.0)
 
 Replace the `EllesmereUI_HoTPrediction/` folder in your AddOns directory with the
 new one, then `/reload` (or restart). SavedVariables
@@ -101,6 +101,33 @@ border, next swing/cancel → no border, insufficient-Rage failed press → no b
 and repeat with Cleave, Maul, forms/pages and any macros you use.
 
 ### Settings menu and minimap button (v0.4.0)
+
+### Simple notes (v0.7.0)
+
+A lightweight notepad for anything you want on screen while playing (flask
+countdowns, pulls, loot rules, your own reminders).
+
+* **Notes tab:** open `/euihot options` → **Notes**. Type into the multi-line box;
+  the text is saved to `EllesmereUI_HoTPredictionDB` as you type.
+* **Floating window:** click **Show floating notes**, run `/euihot notes`, or set
+  the **Toggle notes window** key binding (Key Bindings → AddOns → EllesmereUI HoT
+  Prediction). The window can be dragged by its title bar and is independent of the
+  settings window.
+* **Collapse / close:** **Collapse** rolls the window up to its title bar (click
+  **Expand** to restore); **Close** hides it. Visibility and the collapsed state
+  persist, so a note you leave open comes back after `/reload`.
+* **Edit only out of combat:** the note is editable whenever you are out of combat
+  and becomes read-only during combat, so it never swallows your keys. It unlocks
+  automatically when combat ends.
+* **Styling:** in the Notes tab set window **width/height** (180-900 × 80-800),
+  **font size** (8-32), **text RGB**, and **background RGB + opacity** (0-1 each),
+  then **Apply style**. **Reset style** restores the defaults. Size is set by the
+  width/height fields (not by edge-dragging), so it is deterministic and safe in
+  combat.
+
+Notes are plain player data: no healing math, no vendor files and no idle timers.
+Only the floating window's own drag creates a transient `OnUpdate` that the client
+removes on release.
 
 ### Throw and custom spell editor (v0.6.1)
 
@@ -429,6 +456,7 @@ All commands are `/euihot ...` (alias `/hotpred ...`).
 | `spell add\|remove <spellID> [name]` | Register/remove a modified spell/rank ID at runtime. |
 | `amountmode total\|effective` | CLEU adapter assumption (see below); resets learned magnitudes. |
 | `excludehots on\|off` | Explicit excludes-HoTs overlap opt-in (see below). |
+| `notes [show\|hide\|toggle\|collapse\|expand]` | Show/hide/toggle the floating notes window, or collapse/expand it. With no argument it opens (shows) the window. |
 | `reset` | Clear session learning and invalidate the aura cache. |
 
 Settings persist in `EllesmereUI_HoTPredictionDB`. Manual interval/amount
@@ -826,7 +854,14 @@ Select All focuses and selects the whole report; a live overlay tick does not
 disturb the text or selection; Close/Escape hide it and clear focus; manual
 editing cannot mutate addon data; the window adds no ticker, event, `OnUpdate`
 or vendor-frame change; and missing Ellesmere/CLEU/secret-range inputs still
-yield copyable text instead of errors.
+yield copyable text instead of errors. v0.7.0 adds: the Notes tab switches pages
+without side effects; edits persist and mirror between the options editor and the
+floating window; the note is read-only in combat and unlocks on
+`PLAYER_REGEN_ENABLED`; collapse/close/restore and the drag-saved position
+persist; style apply is validated atomically and resets to defaults; text is
+capped and refuses secret/non-string input; the floating window keeps no idle
+`OnUpdate` and its title is not occluded by its own editor; and the key-binding
+entry point toggles the window.
 
 ---
 

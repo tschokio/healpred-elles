@@ -6,7 +6,7 @@
 local addonName, ns = ...
 
 ns.name = addonName
-ns.version = "0.6.1"
+ns.version = "0.7.0"
 ns.debugEnabled = false
 ns.inCombat = false
 ns.started = false
@@ -170,6 +170,19 @@ ns.DEFAULTS = {
 	amountOverrides = {},          -- [spellID] = { [stacks] = exact tick total } (user calibration only)
 	extraSpells = {},              -- [spellID] = { name =, family = }
 	removedSpells = {},            -- [spellID] = true
+	-- Simple notes: persisted text plus an optional floating window. Editing is
+	-- out-of-combat only; the window can be moved, collapsed, closed and styled.
+	notes = {
+		text = "",
+		shown = false,             -- reopen the floating window after a reload
+		collapsed = false,         -- rolled up to the title bar
+		width = 320,
+		height = 240,
+		fontSize = 14,
+		textColor = { 0.90, 0.94, 0.98 },
+		background = { 0.05, 0.07, 0.10, 0.85 },
+		x = 0, y = 0,              -- saved offset from the screen center
+	},
 }
 
 function ns.InitDatabase()
@@ -414,6 +427,7 @@ function ns.Startup()
 
 	ns.initCapabilities()
 	if ns.learner and ns.learner.Setup then ns.learner.Setup() end
+	if ns.notes and ns.notes.Setup then ns.notes.Setup() end
 	ns.SetRuntimeEnabled(ns.db.enabled)
 	ns.unregister("ADDON_LOADED")
 
@@ -512,7 +526,7 @@ local function parseNumber(s)
 	return tonumber(s)
 end
 
-local HELP = "commands: test <v> | test off | teststatus | status | window | approximate on|off | debug [on|off] | debug window | enable on|off | alpha <a> | color <r> <g> <b> | color overlay <r> <g> <b> | color native | interval <id> <s>|off | amount <id> <tickTotal> [stacks]|off [stacks] | observe on|off | spell add|remove <id> [name] | amountmode total|effective | excludehots on|off | reset | help"
+local HELP = "commands: test <v> | test off | teststatus | status | window | approximate on|off | debug [on|off] | debug window | enable on|off | alpha <a> | color <r> <g> <b> | color overlay <r> <g> <b> | color native | interval <id> <s>|off | amount <id> <tickTotal> [stacks]|off [stacks] | observe on|off | spell add|remove <id> [name] | amountmode total|effective | excludehots on|off | notes [show|hide|toggle|collapse|expand] | reset | help"
 
 -- Bound for a manual tick-total calibration. It only has to be a sane upper
 -- limit on a single heal tick, not a game mechanic.
@@ -529,6 +543,19 @@ function ns.HandleCommand(input)
 		ns.print(HELP)
 		ns.print("settings: /euihot options (or menu) | /euihot minimap on|off; minimap left-click settings, right-click diagnostics, drag to move.")
 		ns.print("next-swing borders: /euihot queue on|off | queue color <r> <g> <b> | queue add|remove|reset <id> [name] | queue status")
+		ns.print("notes: /euihot notes [show|hide|toggle|collapse|expand]; open the Notes tab to write and style them.")
+		return
+	elseif cmd == "notes" then
+		local op = (args[1] or "show"):lower()
+		if not ns.notes then
+			ns.print("notes module unavailable (Notes.lua not loaded)."); return
+		end
+		if op == "show" or op == "open" then ns.notes.Open()
+		elseif op == "hide" or op == "close" then ns.notes.Close()
+		elseif op == "toggle" then ns.notes.Toggle()
+		elseif op == "collapse" then ns.notes.SetCollapsed(true)
+		elseif op == "expand" then ns.notes.SetCollapsed(false)
+		else ns.print("usage: /euihot notes [show|hide|toggle|collapse|expand]") end
 		return
 	elseif cmd == "queue" then
 		local op = (args[1] or "status"):lower()

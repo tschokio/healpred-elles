@@ -572,18 +572,126 @@ local function ensureWindow()
 	end
 	classButton("ALL", "All classes", 0)
 	for i, class in ipairs(ns.catalogClasses) do if class.key ~= "CUSTOM" then classButton(class.key, class.name, i) end end
+
+	f.controls = {}
+	local notesPage = CreateFrame("Frame", nil, f)
+	notesPage:SetSize(510, 492)
+	notesPage:SetPoint("TOPLEFT", f, "TOPLEFT", 15, -100)
+	f.notesPage = notesPage
+	background(notesPage, -3, 4, 516, 492)
+	local notesHeading = label(notesPage, "Notes | saved as you type | editable out of combat", 8, -5, 482)
+	notesHeading:SetTextColor(0.55, 0.75, 0.78, 1)
+	local notesEditor = CreateFrame("EditBox", nil, notesPage, "BackdropTemplate")
+	notesEditor:SetMultiLine(true)
+	notesEditor:SetAutoFocus(false)
+	notesEditor:SetSize(486, 186)
+	notesEditor:SetPoint("TOPLEFT", notesPage, "TOPLEFT", 10, -30)
+	notesEditor:SetTextInsets(8, 8, 8, 8)
+	notesEditor:SetBackdrop({ bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 })
+	notesEditor:SetBackdropColor(0.02, 0.03, 0.04, 1)
+	notesEditor:SetBackdropBorderColor(0.2, 0.3, 0.34, 0.9)
+	notesEditor:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+	notesEditor:SetScript("OnTextChanged", function(self) ns.notes.OnEditorChanged(self) end)
+	f.notesEditor = notesEditor
+	ns.notes.tabEditor = notesEditor
+	f.notesHint = label(notesPage, "", 10, -222, 486)
+	ns.notes.tabHint = f.notesHint
+
+	local function noteField(key, x, y, width)
+		local e = CreateFrame("EditBox", nil, notesPage, "InputBoxTemplate")
+		e:SetSize(width or 52, 22)
+		e:SetPoint("TOPLEFT", notesPage, "TOPLEFT", x, y)
+		e:SetAutoFocus(false)
+		e:SetMaxLetters(10)
+		e:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+		f.controls[key] = e
+		return e
+	end
+	label(notesPage, "Window width x height (180-900 / 80-800)", 10, -254, 260)
+	noteField("notesWidth", 280, -249, 58)
+	label(notesPage, "x", 344, -254, 12)
+	noteField("notesHeight", 360, -249, 58)
+	label(notesPage, "Font size (8-32)", 10, -284, 150)
+	noteField("notesFont", 150, -279, 58)
+	label(notesPage, "Text RGB (0-1)", 230, -284, 120)
+	noteField("notesTextR", 340, -279, 46)
+	noteField("notesTextG", 392, -279, 46)
+	noteField("notesTextB", 444, -279, 46)
+	label(notesPage, "Background RGB + opacity (0-1)", 10, -314, 240)
+	noteField("notesBgR", 260, -309, 46)
+	noteField("notesBgG", 312, -309, 46)
+	noteField("notesBgB", 364, -309, 46)
+	noteField("notesBgA", 416, -309, 46)
+	local notesMessage = label(notesPage, "", 10, -400, 486)
+	local function notesButton(key, title, x, y, width, action)
+		local b = CreateFrame("Button", nil, notesPage, "UIPanelButtonTemplate")
+		b:SetSize(width, 24)
+		b:SetPoint("TOPLEFT", notesPage, "TOPLEFT", x, y)
+		b:SetText(title)
+		b:SetScript("OnClick", action)
+		flatButton(b)
+		f.controls[key] = b
+		return b
+	end
+	notesButton("notesApply", "Apply style", 10, -346, 120, function()
+		local c = f.controls
+		local ok, message = ns.notes.SetStyle({
+			width = tonumber(c.notesWidth:GetText()),
+			height = tonumber(c.notesHeight:GetText()),
+			fontSize = tonumber(c.notesFont:GetText()),
+			textColor = { tonumber(c.notesTextR:GetText()), tonumber(c.notesTextG:GetText()), tonumber(c.notesTextB:GetText()) },
+			background = { tonumber(c.notesBgR:GetText()), tonumber(c.notesBgG:GetText()), tonumber(c.notesBgB:GetText()), tonumber(c.notesBgA:GetText()) },
+		})
+		if not ok then notesMessage:SetText(message); return end
+		for _, key in ipairs({ "notesWidth", "notesHeight", "notesFont", "notesTextR", "notesTextG", "notesTextB", "notesBgR", "notesBgG", "notesBgB", "notesBgA" }) do c[key]:ClearFocus() end
+		notesMessage:SetText(ns.api.InCombat() and "Style saved. The floating window is read-only in combat." or "Notes style saved.")
+		f.RefreshNotes()
+	end)
+	notesButton("notesReset", "Reset style", 140, -346, 120, function()
+		local d = ns.DEFAULTS.notes
+		ns.notes.SetStyle({ width = d.width, height = d.height, fontSize = d.fontSize,
+			textColor = { d.textColor[1], d.textColor[2], d.textColor[3] },
+			background = { d.background[1], d.background[2], d.background[3], d.background[4] } })
+		notesMessage:SetText("Default notes style restored.")
+		f.RefreshNotes()
+	end)
+	notesButton("notesShow", "Show floating notes", 10, -378, 170, function()
+		ns.notes.Open()
+		notesMessage:SetText("Floating notes opened. Drag the title bar to move; Collapse rolls it up.")
+	end)
+	notesButton("notesCollapse", "Collapse / expand", 190, -378, 150, function()
+		ns.notes.SetCollapsed(not ns.notes.IsCollapsed())
+		notesMessage:SetText(ns.notes.IsCollapsed() and "Notes collapsed." or "Notes expanded.")
+	end)
+	notesButton("notesClose", "Close", 350, -378, 90, function()
+		ns.notes.Close()
+		notesMessage:SetText("Floating notes closed.")
+	end)
+	function f.RefreshNotes()
+		local c = f.controls
+		local s = ns.notes.Style()
+		c.notesWidth:SetText(tostring(s.width)); c.notesHeight:SetText(tostring(s.height)); c.notesFont:SetText(tostring(s.fontSize))
+		for i, key in ipairs({ "notesTextR", "notesTextG", "notesTextB" }) do c[key]:SetText(tostring(s.textColor[i])) end
+		for i, key in ipairs({ "notesBgR", "notesBgG", "notesBgB", "notesBgA" }) do c[key]:SetText(tostring(s.background[i])) end
+		ns.notes.RefreshText()
+		ns.notes.RefreshEditable()
+	end
+
 	function f.SelectTab(tab)
 		f.selectedTab = tab
 		page:SetShown(tab == "settings")
 		catalog:SetShown(tab == "spells")
+		notesPage:SetShown(tab == "notes")
 		if tab == "spells" then
 			for _, key in ipairs({ "alpha", "red", "green", "blue" }) do f.controls[key]:ClearFocus() end
 			f.RefreshCatalog()
+		elseif tab == "notes" then
+			f.RefreshNotes()
 		end
 		f.controls.settingsTab:SetText(tab == "settings" and "[Settings]" or "Settings")
 		f.controls.spellsTab:SetText(tab == "spells" and "[Implemented spells]" or "Implemented spells")
+		f.controls.notesTab:SetText(tab == "notes" and "[Notes]" or "Notes")
 	end
-	f.controls = {}
 	local refreshing = false
 	local function command(text)
 		ns.HandleCommand(text)
@@ -628,7 +736,7 @@ local function ensureWindow()
 	edit("blue", 370, -216)
 	local message = label(page, "", 24, -275)
 	local function button(key, title, x, y, width, action)
-		local parent = (key == "settingsTab" or key == "spellsTab" or key == "manageTab" or key == "close") and f or page
+		local parent = (key == "settingsTab" or key == "notesTab" or key == "spellsTab" or key == "manageTab" or key == "close") and f or page
 		local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
 		b:SetSize(width, 24)
 		b:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
@@ -666,9 +774,10 @@ local function ensureWindow()
 	button("queueAppearance", "Next-swing appearance...", 24, -572, 225, function() ns.OpenQueueAppearance() end)
 	button("manageSpells", "Manage spells...", 270, -572, 225, function() ns.OpenSpellEditor() end)
 	button("close", "Close", 420, -606, 95, function() f:Hide() end)
-	button("settingsTab", "Settings", 18, -62, 130, function() f.SelectTab("settings") end)
-	button("spellsTab", "Implemented spells", 160, -62, 185, function() f.SelectTab("spells") end)
-	button("manageTab", "Manage spells...", 357, -62, 160, function() ns.OpenSpellEditor() end)
+	button("settingsTab", "Settings", 18, -62, 118, function() f.SelectTab("settings") end)
+	button("notesTab", "Notes", 143, -62, 96, function() f.SelectTab("notes") end)
+	button("spellsTab", "Implemented spells", 246, -62, 176, function() f.SelectTab("spells") end)
+	button("manageTab", "Manage spells...", 429, -62, 160, function() ns.OpenSpellEditor() end)
 	f.Refresh = function()
 		refreshing = true
 		for _, c in pairs(f.controls) do if c.read then c:SetChecked(c.read()) end end
@@ -677,6 +786,7 @@ local function ensureWindow()
 		for i, key in ipairs({"red", "green", "blue"}) do f.controls[key]:SetText(tostring(rgb[i])) end
 		status:SetText("v" .. ns.version .. (ns.session.fake and " | PREVIEW ACTIVE (not real healing)" or " | Real healing mode"))
 		f.preview.Saved()
+		if f.RefreshNotes then f.RefreshNotes() end
 		refreshing = false
 	end
 	f:SetScript("OnShow", function() f.Refresh(); f.SelectTab(f.selectedTab or "settings") end)

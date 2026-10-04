@@ -1,0 +1,6 @@
+<Bindings>
+	<Binding name="ELLESMEREUI_HOTPRED" header="true" category="ADDONS"/>
+	<Binding name="ELLESMEREUI_HOTPRED_TOGGLE_NOTES" header="ELLESMEREUI_HOTPRED" category="ADDONS">
+		EllesmereUI_HoTPrediction_ToggleNotes()
+	</Binding>
+</Bindings>

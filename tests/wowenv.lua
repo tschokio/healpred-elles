@@ -39,6 +39,9 @@ end
 -- frame widget mock
 ------------------------------------------------------------------------------
 
+-- Lua 5.1 exposes a global `unpack`; 5.3+ moved it to table.unpack.
+local unpackValues = table.unpack or unpack
+
 local FrameMT = {}
 FrameMT.__index = FrameMT
 local frameSeq = 0
@@ -69,7 +72,7 @@ local function newTexture(owner, layer)
 		GetPoint = function(self, i)
 			local p = self._points[i or 1]
 			if not p then return nil end
-			return unpack(p)
+			return unpackValues(p)
 		end,
 		ClearAllPoints = function(self) self._points = {} end,
 		SetSize = function(self, w, h) self._width, self._height = w, h end,
@@ -142,7 +145,10 @@ local function newFontString(owner, layer)
 		SetText = function(self, t) self._text = tostring(t or "") end,
 		GetText = function(self) return self._text end,
 		SetFont = function(self, ...) self._font = { ... } end,
-		GetFont = function(self) return self._font and unpack(self._font) end,
+		GetFont = function(self)
+			local f = self._font
+			if f then return f[1], f[2], f[3] end
+		end,
 		SetTextColor = function(self, r, g, b, a) self._color = { r, g, b, a } end,
 		GetTextColor = function(self)
 			local c = self._color or { 1, 1, 1, 1 }
@@ -185,7 +191,7 @@ function FrameMT:SetAllPoints(ref) self._points = { { "ALL", ref or self._parent
 function FrameMT:GetPoint(i)
 	local p = self._points[i or 1]
 	if not p then return nil end
-	return unpack(p)
+	return unpackValues(p)
 end
 function FrameMT:SetSize(w, h) self._width, self._height = w, h end
 function FrameMT:SetWidth(w) self._width = w end
@@ -298,8 +304,13 @@ function FrameMT:GetText() return self._text end
 function FrameMT:SetMultiLine(v) self._multiLine = v and true or false end
 function FrameMT:IsMultiLine() return self._multiLine and true or false end
 function FrameMT:SetAutoFocus(v) self._autoFocus = v and true or false end
+function FrameMT:SetEnabled(v) self._enabled = v and true or false end
+function FrameMT:IsEnabled() return self._enabled ~= false end
 function FrameMT:SetFont(path, size, flags) self._font = { path, size, flags } end
-function FrameMT:GetFont() return self._font and unpack(self._font) end
+function FrameMT:GetFont()
+	local f = self._font
+	if f then return f[1], f[2], f[3] end
+end
 function FrameMT:SetTextInsets(l, r, t, b) self._insets = { l, r, t, b } end
 function FrameMT:SetJustifyH(j) self._justifyH = j end
 function FrameMT:SetJustifyV(j) self._justifyV = j end
@@ -624,7 +635,7 @@ function Mocks.Reset()
 		local t = Mocks.cleu
 		if not t then return nil end
 		local n = t.n or #t
-		return unpack(t, 1, n)
+		return unpackValues(t, 1, n)
 	end
 	_G.EllesmereUI = nil
 end
@@ -732,7 +743,9 @@ local function parseTOC(src)
 	local files = {}
 	for line in src:gmatch("[^\r\n]+") do
 		local trimmed = line:gsub("%s+$", "")
-		if trimmed ~= "" and not trimmed:match("^##") then
+		-- Only Lua sources are loaded by this interpreter. XML manifests
+		-- (Bindings.xml) are declared in the TOC for the game client only.
+		if trimmed ~= "" and not trimmed:match("^##") and not trimmed:match("%.xml$") then
 			files[#files + 1] = trimmed
 		end
 	end
