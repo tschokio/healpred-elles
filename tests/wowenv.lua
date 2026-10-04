@@ -563,6 +563,9 @@ function Mocks.Reset()
 	Mocks.descriptions = {}
 	Mocks.channel = nil
 	Mocks.rage = 0
+	-- Weapon training map-adapter state (only used by spec_weapon_training).
+	Mocks.waypoint = nil
+	Mocks.superTracked = nil
 
 	_G.EllesmereUI_HoTPredictionDB = nil
 
@@ -602,6 +605,13 @@ function Mocks.Reset()
 	_G.GetLocale = function() return "enUS" end
 	_G.C_Spell = { GetSpellDescription = function(id) return Mocks.descriptions[id] end }
 	_G.C_TooltipInfo = nil
+	-- Optional map / waypoint / tracking APIs. WeaponsTraining degrades gracefully
+	-- when these are absent; the spec installs its own mocks per case.
+	_G.C_Map = nil
+	_G.UiMapPoint = nil
+	_G.C_SuperTrack = nil
+	_G.TomTom = nil
+	_G.ToggleWorldMap = nil
 	_G.UnitGetTotalHealAbsorbs = function()
 		if not Mocks.healAbsorbApiPresent then error("missing heal absorb API") end
 		return Mocks.healAbsorb

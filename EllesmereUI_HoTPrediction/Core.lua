@@ -6,7 +6,7 @@
 local addonName, ns = ...
 
 ns.name = addonName
-ns.version = "0.8.0"
+ns.version = "0.9.0"
 ns.debugEnabled = false
 ns.inCombat = false
 ns.started = false
@@ -66,7 +66,7 @@ function ns.isPositiveInt(v)
 end
 
 function ns.print(msg)
-	local line = "|cff66f366[HoTPred]|r " .. tostring(msg)
+	local line = "|cff66f366[DoHelper]|r " .. tostring(msg)
 	if DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then
 		DEFAULT_CHAT_FRAME:AddMessage(line)
 	else
@@ -545,7 +545,7 @@ local function parseNumber(s)
 	return tonumber(s)
 end
 
-local HELP = "commands: test <v> | test off | teststatus | status | window | approximate on|off | debug [on|off] | debug window | enable on|off | alpha <a> | color <r> <g> <b> | color overlay <r> <g> <b> | color native | interval <id> <s>|off | amount <id> <tickTotal> [stacks]|off [stacks] | observe on|off | spell add|remove <id> [name] | amountmode total|effective | excludehots on|off | notes [show|hide|toggle|collapse|expand] | combattext [on|off|test [enter|leave]|status] | reset | help"
+local HELP = "commands: test <v> | test off | teststatus | status | window | approximate on|off | debug [on|off] | debug window | enable on|off | alpha <a> | color <r> <g> <b> | color overlay <r> <g> <b> | color native | interval <id> <s>|off | amount <id> <tickTotal> [stacks]|off [stacks] | observe on|off | spell add|remove <id> [name] | amountmode total|effective | excludehots on|off | notes [show|hide|toggle|collapse|expand] | combattext [on|off|test [enter|leave]|status] | weapons | reset | help"
 
 -- Bound for a manual tick-total calibration. It only has to be a sane upper
 -- limit on a single heal tick, not a game mechanic.
@@ -560,10 +560,11 @@ function ns.HandleCommand(input)
 
 	if cmd == "help" or cmd == "" then
 		ns.print(HELP)
-		ns.print("settings: /euihot options (or menu) | /euihot minimap on|off; minimap left-click settings, right-click diagnostics, drag to move.")
+		ns.print("settings: /euihot options (or menu), /dohelper options; minimap left-click settings, right-click diagnostics, drag to move.")
 		ns.print("next-swing borders: /euihot queue on|off | queue color <r> <g> <b> | queue add|remove|reset <id> [name] | queue status")
 		ns.print("notes: /euihot notes [show|hide|toggle|collapse|expand]; open the Notes tab to write and style them.")
 		ns.print("combat text: /euihot combattext on|off | combattext test [enter|leave] | combattext status; style it in the Combat text tab.")
+		ns.print("weapon training: /dohelper weapons (or /euihot weapons) opens the Weapon training tab; reference only, no proficiency is learned by clicking.")
 		return
 	elseif cmd == "combattext" or cmd == "ct" then
 		local op = (args[1] or "status"):lower()
@@ -641,6 +642,9 @@ function ns.HandleCommand(input)
 		return
 	elseif cmd == "options" or cmd == "menu" then
 		if ns.OpenOptions then ns.OpenOptions() end
+		return
+	elseif cmd == "weapons" or cmd == "weapontraining" or cmd == "weapon" then
+		if ns.OpenOptions then ns.OpenOptions("weapons") end
 		return
 	elseif cmd == "minimap" then
 		local v = (args[1] or ""):lower()
@@ -883,9 +887,16 @@ end
 
 function ns.SetupSlash()
 	if type(SlashCmdList) == "nil" then return end
+	-- DoHelper is the public name; the historical command names remain aliases so
+	-- existing macros and habits keep working. Internal identifiers are unchanged.
 	SLASH_ELLESMEREUIHOTPRED1 = "/euihot"
 	SLASH_ELLESMEREUIHOTPRED2 = "/hotpred"
 	SlashCmdList["ELLESMEREUIHOTPRED"] = function(msg)
+		ns.HandleCommand(msg)
+	end
+	SLASH_DOHELPER1 = "/dohelper"
+	SLASH_DOHELPER2 = "/dh"
+	SlashCmdList["DOHELPER"] = function(msg)
 		ns.HandleCommand(msg)
 	end
 end
@@ -971,7 +982,7 @@ function ns._BuildStatusReport(includeDebug)
 		end
 	end
 
-	add("addon v%s enabled=%s debug=%s mode=%s excludeHoTs=%s shareNativeStyle=%s alpha=%.2f",
+	add("DoHelper (EllesmereUI_HoTPrediction) v%s enabled=%s debug=%s mode=%s excludeHoTs=%s shareNativeStyle=%s alpha=%.2f",
 		tostring(ns.version), tostring(ns.db.enabled), tostring(ns.db.debug), tostring(ns.db.amountMode),
 		tostring(ns.db.assumeApiExcludesHoTs), tostring(ns.db.shareNativeStyle), ns.db.alpha or 0)
 	add("approximate prediction=%s", tostring(ns.db.approximatePrediction))

@@ -258,13 +258,16 @@ function ns.InitOptions()
 	if not ns.optionsCategoryPanel and CreateFrame and ((Settings and Settings.RegisterCanvasLayoutCategory
 		and Settings.RegisterAddOnCategory) or InterfaceOptions_AddCategory) then
 		local panel = CreateFrame("Frame", nil, UIParent)
+		-- panel.name is the legacy category identifier pinned by the automated
+		-- tests and by existing settings registration; it is kept as a
+		-- compatibility identifier while the visible content says DoHelper.
 		panel.name = "EllesmereUI HoT Prediction"
-		label(panel, panel.name, 16, -16)
-		label(panel, "Configure the player healing overlay. Settings also open via /euihot options.", 16, -44)
+		label(panel, "DoHelper", 16, -16)
+		label(panel, "Public name DoHelper; registered under the legacy category 'EllesmereUI HoT Prediction' for settings compatibility. Settings also open via /dohelper options.", 16, -44)
 		local open = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
 		open:SetSize(180, 26)
 		open:SetPoint("TOPLEFT", panel, "TOPLEFT", 16, -76)
-		open:SetText("Open HoT settings")
+		open:SetText("Open DoHelper settings")
 		open:SetScript("OnClick", function() ns.OpenOptions() end)
 		panel:Hide()
 		local ok = pcall(function()
@@ -294,7 +297,8 @@ function ns.InitOptions()
 	b:SetScript("OnEnter", function(self)
 		if not GameTooltip then return end
 		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-		GameTooltip:AddLine("EllesmereUI HoT Prediction")
+		GameTooltip:AddLine("DoHelper")
+		GameTooltip:AddLine("Legacy addon: EllesmereUI HoT Prediction", 1, 1, 1)
 		GameTooltip:AddLine("Left-click: settings | Right-click: diagnostics", 1, 1, 1)
 		GameTooltip:AddLine("Drag: move around minimap", 1, 1, 1)
 		GameTooltip:Show()
@@ -440,7 +444,7 @@ local function ensureWindow()
 	f:RegisterForDrag("LeftButton")
 	f:SetScript("OnDragStart", function(self) self:StartMoving() end)
 	f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
-	windowStyle(f, "EllesmereUI helper", "Healing predictions & queued attacks - your controls, in one place.", 800)
+	windowStyle(f, "DoHelper", "EllesmereUI helper suite - healing predictions, queued attacks, notes, combat text and weapon training.", 800)
 	f.preview = queuePreview(f, 552, -100, 224, 486)
 	local page = CreateFrame("Frame", nil, f)
 	page:SetSize(540, 610)
@@ -812,12 +816,23 @@ local function ensureWindow()
 		ns.combatText.ApplyStyle()
 	end
 
+	-- Weapon training tab (DoHelper reference). It builds and manages its own
+	-- scrollable page; only this call lives in Options. Preview is hidden on that
+	-- tab so the reference panel can use the full window width.
+	if ns.weaponTraining and ns.weaponTraining.BuildOptionsUI then
+		ns.weaponTraining.BuildOptionsUI(f)
+	end
+
 	function f.SelectTab(tab)
 		f.selectedTab = tab
 		page:SetShown(tab == "settings")
 		catalog:SetShown(tab == "spells")
 		notesPage:SetShown(tab == "notes")
 		combatPage:SetShown(tab == "combat")
+		if f.weaponPage then f.weaponPage:SetShown(tab == "weapons") end
+		-- The weapon reference needs the full width; every other tab keeps the
+		-- right-hand queue preview exactly as before.
+		if f.preview then f.preview:SetShown(tab ~= "weapons") end
 		if tab == "spells" then
 			for _, key in ipairs({ "alpha", "red", "green", "blue" }) do f.controls[key]:ClearFocus() end
 			f.RefreshCatalog()
@@ -825,11 +840,14 @@ local function ensureWindow()
 			f.RefreshNotes()
 		elseif tab == "combat" then
 			f.RefreshCombat()
+		elseif tab == "weapons" then
+			if f.weaponPage and f.weaponPage.Refresh then f.weaponPage.Refresh() end
 		end
 		f.controls.settingsTab:SetText(tab == "settings" and "[Settings]" or "Settings")
 		f.controls.spellsTab:SetText(tab == "spells" and "[Implemented spells]" or "Implemented spells")
 		f.controls.notesTab:SetText(tab == "notes" and "[Notes]" or "Notes")
 		f.controls.combatTab:SetText(tab == "combat" and "[Combat text]" or "Combat text")
+		if f.controls.weaponTab then f.controls.weaponTab:SetText(tab == "weapons" and "[Weapon training]" or "Weapon training") end
 	end
 	local function command(text)
 		ns.HandleCommand(text)
@@ -874,7 +892,7 @@ local function ensureWindow()
 	edit("blue", 370, -216)
 	local message = label(page, "", 24, -275)
 	local function button(key, title, x, y, width, action)
-		local parent = (key == "settingsTab" or key == "notesTab" or key == "combatTab" or key == "spellsTab" or key == "manageTab" or key == "close") and f or page
+		local parent = (key == "settingsTab" or key == "notesTab" or key == "combatTab" or key == "spellsTab" or key == "weaponTab" or key == "manageTab" or key == "close") and f or page
 		local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
 		b:SetSize(width, 24)
 		b:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
@@ -912,11 +930,14 @@ local function ensureWindow()
 	button("queueAppearance", "Next-swing appearance...", 24, -572, 225, function() ns.OpenQueueAppearance() end)
 	button("manageSpells", "Manage spells...", 270, -572, 225, function() ns.OpenSpellEditor() end)
 	button("close", "Close", 420, -606, 95, function() f:Hide() end)
-	button("settingsTab", "Settings", 18, -62, 110, function() f.SelectTab("settings") end)
-	button("notesTab", "Notes", 133, -62, 86, function() f.SelectTab("notes") end)
-	button("combatTab", "Combat text", 224, -62, 96, function() f.SelectTab("combat") end)
-	button("spellsTab", "Implemented spells", 325, -62, 165, function() f.SelectTab("spells") end)
-	button("manageTab", "Manage spells...", 495, -62, 150, function() ns.OpenSpellEditor() end)
+	-- Top tab strip reflowed to fit the new Weapon training tab (preview stays
+	-- below it and is hidden only while that tab is selected).
+	button("settingsTab", "Settings", 12, -62, 96, function() f.SelectTab("settings") end)
+	button("notesTab", "Notes", 112, -62, 70, function() f.SelectTab("notes") end)
+	button("combatTab", "Combat text", 186, -62, 92, function() f.SelectTab("combat") end)
+	button("spellsTab", "Implemented spells", 282, -62, 160, function() f.SelectTab("spells") end)
+	button("weaponTab", "Weapon training", 446, -62, 130, function() f.SelectTab("weapons") end)
+	button("manageTab", "Manage spells...", 580, -62, 130, function() ns.OpenSpellEditor() end)
 	f.Refresh = function()
 		refreshing = true
 		for _, c in pairs(f.controls) do if c.read then c:SetChecked(c.read()) end end
@@ -927,6 +948,7 @@ local function ensureWindow()
 		f.preview.Saved()
 		if f.RefreshNotes then f.RefreshNotes() end
 		if f.RefreshCombat then f.RefreshCombat() end
+		if f.weaponPage and f.weaponPage.Refresh then f.weaponPage.Refresh() end
 		refreshing = false
 	end
 	f:SetScript("OnShow", function() f.Refresh(); f.SelectTab(f.selectedTab or "settings") end)
@@ -940,11 +962,11 @@ local function ensureWindow()
 	return f
 end
 
-function ns.OpenOptions()
+function ns.OpenOptions(tab)
 	local f = ensureWindow()
 	if not f then ns.print("settings unavailable: this client cannot create frames."); return end
 	f.Refresh()
-	f.SelectTab(f.selectedTab or "settings")
+	f.SelectTab(tab or f.selectedTab or "settings")
 	f:Show()
 	return f
 end

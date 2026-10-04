@@ -1,8 +1,8 @@
 ## Interface: 120000, 120001, 120005, 120007, 120100, 16001
-## Title: |cff66f366EllesmereUI|r HoT Prediction
-## Notes: Player self-cast HoT prediction for EllesmereUIUnitFrames, real queued next-swing ability borders for EllesmereUIActionBars, a simple persistent notes pad, and a stylable +combat/-combat indicator.
+## Title: |cff66f366DoHelper|r HoT Prediction
+## Notes: DoHelper (addon folder EllesmereUI_HoTPrediction): player self-cast HoT prediction, real queued next-swing ability borders, a persistent notes pad, a stylable +combat/-combat indicator, and a Weapon training reference tab. The addon folder and SavedVariables keep their historical EllesmereUI_HoTPrediction names for settings compatibility.
 ## Author: ai-job
-## Version: 0.8.0
+## Version: 0.9.0
 ## SavedVariables: EllesmereUI_HoTPredictionDB
 ## Dependencies: EllesmereUIUnitFrames
 ## OptionalDeps: EllesmereUIActionBars
@@ -20,4 +20,5 @@ SpellCatalog.lua
 Notes.lua
 CombatText.lua
 DebugWindow.lua
+WeaponTraining.lua
 Options.lua

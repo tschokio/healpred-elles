@@ -335,5 +335,5 @@ function EllesmereUI_HoTPrediction_ToggleNotes()
 end
 
 -- Friendly names in the Blizzard Key Bindings UI (Bindings.xml declares the keys).
-BINDING_HEADER_ELLESMEREUI_HOTPRED = "EllesmereUI HoT Prediction"
+BINDING_HEADER_ELLESMEREUI_HOTPRED = "DoHelper"
 BINDING_NAME_ELLESMEREUI_HOTPRED_TOGGLE_NOTES = "Toggle notes window"

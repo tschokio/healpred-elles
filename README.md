@@ -1,4 +1,4 @@
-# EllesmereUI_HoTPrediction
+# DoHelper (EllesmereUI_HoTPrediction)
 
 A lightweight, standalone World of Warcraft addon that adds a **conservative
 player self-cast HoT (heal-over-time) prediction segment** on top of the native
@@ -22,6 +22,16 @@ StatusBar of its own and secure-hooks native callbacks read-only.
 > behavior described as the implementation's intent; verify in game. There is no
 > guarantee it is correct for every client/era.
 
+**About the name.** `DoHelper` is the public name. The AddOn **folder**
+(`EllesmereUI_HoTPrediction/`), the **SavedVariables** name
+(`EllesmereUI_HoTPredictionDB`), the global frame IDs (`EllesmereUI_HoTPrediction*`),
+the Blizzard settings category identifier (`EllesmereUI HoT Prediction`) and the
+historical global binding functions all stay exactly as before: they are
+compatibility identifiers, not branding. Renaming any of them would relocate
+saved settings or lose data, so the rename is display-only. Both command styles
+work: `/dohelper` (and `/dh`) as well as the historical `/euihot` and `/hotpred`.
+Adding the Weapon training tab does not change any existing behaviour.
+
 ---
 
 ## Install
@@ -40,7 +50,7 @@ StatusBar of its own and secure-hooks native callbacks read-only.
 
 The installed folder is the deliverable; there is no separate zip/binary.
 
-### Updating (to v0.8.0)
+### Updating (to v0.9.0)
 
 Replace the `EllesmereUI_HoTPrediction/` folder in your AddOns directory with the
 new one, then `/reload` (or restart). SavedVariables
@@ -149,6 +159,46 @@ screen.
 * **Independent:** the indicator has its own event frame, so it keeps working when
   the healing helper is disabled (`/euihot combattext on|off`). It has no idle
   timer: the only `OnUpdate` exists while a timed line is fading out.
+
+### Weapon training reference (v0.9.0)
+
+A read-only **Weapon training** tab that turns the user-supplied WoW Forever
+weapon reference into a browsable, clickable guide. It never learns a
+proficiency and never changes your character: clicking a trainer only opens a
+detail panel.
+
+* **Open it:** `/dohelper weapons`, `/euihot weapons`, or `/euihot options` →
+  **Weapon training**. The tab uses the full window width; the right-hand queue
+  preview is hidden there and restored on every other tab.
+* **Select:** cycle the Race (`<` `>`) and Class (`<` `>`) selectors. All ten
+  races and all nine classes are reachable; only class/race combinations that
+  actually exist are shown. The tab lists the supplied starting package with its
+  confidence label, the start zone → capital route, and one row per eligible
+  weapon.
+* **Weapon rows** show `[allowed]` or `[provisional: Forever beta]`, whether the
+  weapon is a **supplied starting** weapon or **starting unknown**, its
+  requirements (level 1, or level 20 for polearms) and an approximate cost.
+  Wands are a default caster proficiency and have **no** trainer. Every
+  eligible weapon shows its trainer(s) as buttons; a Horde race shows only Horde
+  trainers, and a Skyborne race (faction unconfirmed) shows both, clearly noted.
+* **Trainer detail:** clicking a trainer opens one reused panel with the city,
+  district, approximate coordinates, weapons taught and data confidence, plus
+  explicit **Show map** and **Set waypoint** buttons. Selecting a trainer never
+  moves the map. In combat both map actions refuse with an explanatory message.
+* **Map safety:** city map ids are resolved at runtime from both the classic
+  (e.g. `1453`) and modern (e.g. `84`) candidates through
+  `C_Map.GetMapInfo`, and only accepted when the resolved map is a `CITY` whose
+  name matches. If it cannot be validated, **no waypoint is placed** (no
+  fabricated legacy id). Native `C_Map.SetUserWaypoint` /
+  `UiMapPoint.CreateFromCoordinates` (with optional `C_SuperTrack`) is used
+  first; optional TomTom is used only when the native API is unavailable or
+  refuses. Note that English city-name matching intentionally fails closed on a
+  localized client.
+* **Provenance:** every value is labelled *Classic-established reference*,
+  *Supplied Forever change*, *Forever beta / provisional*, *Supplied typical /
+  verify client*, or *Unconfirmed*. The full data and provenance are documented
+  in [`WEAPON_TRAINING_REFERENCE.md`](WEAPON_TRAINING_REFERENCE.md); the tab
+  itself is stamped *User-supplied WoW Forever reference; not live verified*.
 
 ### Throw and custom spell editor (v0.6.1)
 
@@ -452,10 +502,12 @@ require EllesmereUIUnitFrames and `/euihot approximate on` on restricted Forever
 
 ## Commands
 
-All commands are `/euihot ...` (alias `/hotpred ...`).
+All commands are `/euihot ...` (aliases `/hotpred ...`, and `/dohelper ...` /
+`/dh ...`).
 
 | Command | Effect |
 | --- | --- |
+| `weapons` | Open the settings window on the **Weapon training** tab (also `/dohelper weapons`). |
 | `test <value>` | Show a fake `+value` segment after the native chain (session only, finite non-negative). |
 | `test off` | Clear the fake segment. |
 | `teststatus` | One concise line for the fake render: unit/native readiness, requested amount, own overlay `IsShown`, range source (`native-range`/`UnitHealthMax`, public/restricted), last render reason, engine-clipped visible amount. Use this when chat scrollback is broken. |
@@ -893,7 +945,20 @@ reject empty/format-code/overlong input; disabling hides and suppresses the line
 unlock enables dragging and locking restores click-through; the saved position
 applies; preview works while disabled; the options tab switches cleanly and does
 not create the display; and the only `OnUpdate` exists while a timed line is
-visible.
+visible. v0.9.0 adds: all ten race × nine class combinations are classified by
+the model; class eligibility includes the Forever rogue one-handed-axe and
+shaman two-handed-axe/mace changes; the druid polearm is provisional at level
+20; starting packages keep their partial/unknown qualifiers (the Orc hunter
+stays a supplied GUN rather than a silently corrected bow); the Tauren druid
+example routes Mulgore → Thunder Bluff with MACE1+STAFF and the expected
+trainers; all eight trainers are present and faction-matched (Skyborne lists
+both factions, clearly noted); the lazy Weapon training tab hides the preview
+and restores it on every other tab; rows are reused and the scroll range is
+clamped; clicking a trainer opens one reused detail panel and never moves the
+map; `/dohelper` and `/dh` keep `/euihot` and `/hotpred` working; the legacy
+settings paths and the saved DB name persist; and the guarded map adapter
+resolves classic/modern candidates, accepts a native or TomTom waypoint, and
+honestly refuses false/error/secret APIs and combat.
 
 ---
 
@@ -924,3 +989,14 @@ visible.
 * Haste-curve phase drift is approximated by the recent-window learned interval.
 * Automatic learning is per session; only explicit manual interval/amount
   calibration persists.
+* **Weapon training data is user-supplied and not live verified.** Every row
+  carries one confidence label; trainers, costs and starting packages must be
+  confirmed in the client. Selecting a trainer or a class never learns a
+  proficiency and never changes the map.
+* **English city-name matching makes the map adapter fail closed on a localized
+  client**: when `C_Map.GetMapInfo` returns a non-English city name for the
+  candidate ids, no waypoint is placed (the approximate coordinates remain
+  usable). No fabricated legacy area id is ever substituted.
+* The Blizzard settings **category identifier** deliberately stays
+  `EllesmereUI HoT Prediction` for settings compatibility; only the visible
+  content and the chat/tooltip branding say DoHelper.

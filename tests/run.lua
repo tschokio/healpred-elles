@@ -49,6 +49,7 @@ loadRel("tests/spec_spell_catalog.lua")
 loadRel("tests/spec_all_classes.lua")
 loadRel("tests/spec_notes.lua")
 loadRel("tests/spec_combat_text.lua")
+loadRel("tests/spec_weapon_training.lua")
 
 T.run()
 _G.__HOT_EXIT = (T.fail == 0) and 0 or 1
