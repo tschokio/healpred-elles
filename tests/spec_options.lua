@@ -149,3 +149,81 @@ T.register("options: missing frame API reports gracefully and preview persists o
 	toggle(f.controls.enabled, false)
 	assert_nil(e.ns.session.fake)
 end)
+
+T.register("options: descriptive labels render above the page background", function()
+	local e = Mocks.NewEnv()
+	local f = e.ns.OpenOptions()
+	local page = f.settingsPage
+	local checked = 0
+	for _, l in ipairs(page._fontStrings) do
+		if l:GetText() ~= "" then
+			checked = checked + 1
+			assert_true(Mocks.IsRegionVisible(l), "hidden settings label: " .. l:GetText())
+		end
+	end
+	assert_true(checked >= 8, "expected the settings descriptions to exist")
+	-- The decoration is a BACKGROUND draw-layer texture on the page itself, not
+	-- an opaque child frame sitting at page frame level + 1.
+	assert_not_nil(Mocks.FindTexture(page, "BACKGROUND"), "page background must be a texture")
+	assert_true(Mocks.LayerRank("BACKGROUND") < Mocks.LayerRank("OVERLAY"),
+		"backgrounds must draw below OVERLAY text")
+	assert_eq(#Mocks.OpaqueChildFrames(page), 0, "no opaque child panel may cover page labels")
+	-- Controls are child frames one level above the page and stay clickable.
+	assert_not_nil(f.controls.enabled)
+	local ctrlLevel = f.controls.enabled:GetFrameLevel()
+	assert_true(ctrlLevel > page:GetFrameLevel(), "controls must sit above the page background")
+end)
+
+T.register("options: window heading and preview labels are never occluded", function()
+	local e = Mocks.NewEnv()
+	local f = e.ns.OpenOptions()
+	local heading = Mocks.FindFontString(f, "EllesmereUI helper")
+	assert_not_nil(heading, "window heading must exist")
+	assert_true(Mocks.IsRegionVisible(heading), "window heading must stay visible")
+	local preview = f.preview
+	assert_not_nil(preview, "preview panel must exist")
+	local previewLabel = Mocks.FindFontString(preview, "ACTION BUTTON PREVIEW")
+	assert_not_nil(previewLabel)
+	assert_true(Mocks.IsRegionVisible(previewLabel), "preview labels must stay visible over their own panel")
+end)
+
+T.register("queue appearance: field labels render above the decorative background", function()
+	local e = Mocks.NewEnv()
+	local f = e.ns.OpenQueueAppearance()
+	assert_not_nil(Mocks.FindTexture(f, "BACKGROUND"), "appearance background must be a texture")
+	assert_true(Mocks.LayerRank("BACKGROUND") < Mocks.LayerRank("OVERLAY"))
+	local checked = 0
+	for _, l in ipairs(f._fontStrings) do
+		if l:GetText() ~= "" then
+			checked = checked + 1
+			assert_true(Mocks.IsRegionVisible(l), "hidden appearance label: " .. l:GetText())
+		end
+	end
+	assert_true(checked >= 6, "expected the appearance descriptions to exist")
+	assert_true(f.controls.thickness:GetFrameLevel() > f:GetFrameLevel(),
+		"edit boxes must sit above the appearance background")
+end)
+
+T.register("layering mock: opaque higher-level frame occludes a parent label", function()
+	Mocks.NewEnv()
+	local parent = CreateFrame("Frame", nil, UIParent)
+	parent:SetSize(300, 200)
+	parent:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, 0)
+	local l = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	l:SetPoint("TOPLEFT", parent, "TOPLEFT", 10, -10)
+	l:SetWidth(100)
+	l:SetText("hello")
+	assert_true(Mocks.IsRegionVisible(l))
+	local cover = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+	cover:SetSize(200, 100)
+	cover:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
+	cover:SetBackdrop({ bgFile = "x" })
+	assert_eq(cover:GetFrameLevel(), parent:GetFrameLevel() + 1, "child frames inherit parent level + 1")
+	assert_false(Mocks.IsRegionVisible(l), "opaque child panel must hide the parent's label")
+	-- A BACKGROUND texture on the parent must not hide its own OVERLAY text.
+	cover:Hide()
+	local t = parent:CreateTexture(nil, "BACKGROUND")
+	t:SetSize(200, 100)
+	t:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
+	assert_true(Mocks.IsRegionVisible(l), "same-frame background textures render below labels")
+end)

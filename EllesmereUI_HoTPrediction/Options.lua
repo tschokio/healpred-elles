@@ -27,6 +27,26 @@ local function panel(parent, x, y, width, height)
 	return p
 end
 
+-- Decorative background painted into the parent's own BACKGROUND draw layer.
+-- A child frame defaults to parent frame level + 1 and would therefore cover
+-- the parent's OVERLAY FontStrings (descriptive labels), while textures share
+-- the parent's frame level and always render beneath its text. Textures also
+-- never intercept mouse input, unlike a mouse-enabled frame.
+local function background(parent, x, y, width, height)
+	local border = parent:CreateTexture(nil, "BACKGROUND")
+	border:SetTexture(WHITE)
+	border:SetVertexColor(0.12, 0.18, 0.22, 1)
+	border:SetPoint("TOPLEFT", parent, "TOPLEFT", x - 1, y + 1)
+	border:SetSize(width + 2, height + 2)
+	local fill = parent:CreateTexture(nil, "BACKGROUND")
+	fill:SetTexture(WHITE)
+	fill:SetVertexColor(0.055, 0.075, 0.095, 1)
+	fill:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+	fill:SetSize(width, height)
+	parent.background = fill
+	return fill
+end
+
 local function windowStyle(f, title, subtitle, width)
 	f:SetBackdrop({ bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 })
 	f:SetBackdropColor(0.025, 0.035, 0.048, 0.99)
@@ -216,7 +236,7 @@ function ns.OpenQueueAppearance()
 		f:SetScript("OnDragStart", function(self) self:StartMoving() end)
 		f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
 		windowStyle(f, "Next-swing appearance", "Style your queued attack highlight. Preview edits before saving.", 770)
-		panel(f, 12, -66, 484, 274)
+		background(f, 12, -66, 484, 274)
 		f.preview = queuePreview(f, 510, -66, 244, 338)
 		f.controls = {}
 		local refreshing = false
@@ -331,12 +351,12 @@ local function ensureWindow()
 	page:SetSize(540, 610)
 	page:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -34)
 	f.settingsPage = page
-	panel(page, 12, -54, 516, 510)
+	background(page, 12, -54, 516, 510)
 	local catalog = CreateFrame("Frame", nil, f)
 	catalog:SetSize(510, 492)
 	catalog:SetPoint("TOPLEFT", f, "TOPLEFT", 15, -100)
 	f.spellsPage = catalog
-	panel(catalog, -3, 4, 516, 492)
+	background(catalog, -3, 4, 516, 492)
 	local scroll = CreateFrame("ScrollFrame", nil, catalog, "UIPanelScrollFrameTemplate")
 	scroll:SetSize(476, 486)
 	scroll:SetPoint("TOPLEFT", catalog, "TOPLEFT", 0, 0)

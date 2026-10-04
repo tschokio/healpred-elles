@@ -42,18 +42,46 @@ end
 local FrameMT = {}
 FrameMT.__index = FrameMT
 local frameSeq = 0
+local regionSeq = 0
 
-local function newTexture(owner)
+local function newTexture(owner, layer)
+	regionSeq = regionSeq + 1
 	return {
 		_owner = owner,
+		_layer = layer or "ARTWORK",
+		_seq = regionSeq,
 		_path = nil,
 		_points = {},
 		_masks = {},
 		_rotation = 0,
+		_width = nil, _height = nil, _shown = true,
 		SetTexture = function(self, p) self._path = p end,
 		GetTexture = function(self) return self._path end,
+		SetColorTexture = function(self, ...) self._path = "Interface\\Buttons\\WHITE8X8"; self._color = { ... } end,
+		SetVertexColor = function(self, r, g, b, a) self._vertexColor = { r, g, b, a } end,
+		GetVertexColor = function(self)
+			local c = self._vertexColor or { 1, 1, 1, 1 }
+			return c[1], c[2], c[3], c[4]
+		end,
+		SetDrawLayer = function(self, l) self._layer = l end,
+		GetDrawLayer = function(self) return self._layer end,
 		SetPoint = function(self, ...) self._points[#self._points + 1] = { ... } end,
+		GetPoint = function(self, i)
+			local p = self._points[i or 1]
+			if not p then return nil end
+			return unpack(p)
+		end,
 		ClearAllPoints = function(self) self._points = {} end,
+		SetSize = function(self, w, h) self._width, self._height = w, h end,
+		SetWidth = function(self, w) self._width = w end,
+		SetHeight = function(self, h) self._height = h end,
+		GetWidth = function(self) return self._width end,
+		GetHeight = function(self) return self._height end,
+		SetAllPoints = function(self, ref) self._points = { { "ALL", ref or owner } } end,
+		Show = function(self) self._shown = true end,
+		Hide = function(self) self._shown = false end,
+		SetShown = function(self, v) self._shown = v and true or false end,
+		IsShown = function(self) return self._shown end,
 		AddMaskTexture = function(self, m) self._masks[#self._masks + 1] = m end,
 		RemoveMaskTexture = function(self, m)
 			for i = #self._masks, 1, -1 do if self._masks[i] == m then table.remove(self._masks, i) end end
@@ -77,7 +105,11 @@ local function newFrame(frameType, name, parent, template)
 		_min = 0, _max = 1, _value = 0,
 		_orientation = "HORIZONTAL", _reverse = false,
 		_color = { 1, 1, 1 }, _alpha = 1,
-		_level = 1, _strata = "MEDIUM",
+		-- Faithful to the client: a child frame starts one frame level above its
+		-- parent (parentless roots start at 0). This is what makes an opaque
+		-- child panel cover its parent's own FontStrings until the panel is
+		-- replaced with same-frame BACKGROUND draw-layer textures.
+		_level = parent and ((parent._level or 0) + 1) or 0, _strata = "MEDIUM",
 		_scripts = {}, _events = {}, _children = {},
 		_text = "", _selStart = 0, _selEnd = 0, _focus = false,
 		_seq = frameSeq,
@@ -98,9 +130,12 @@ end
 
 -- A minimal FontString: enough to record what the window sets and to read it
 -- back in tests. Widgets in the real client also expose these methods.
-local function newFontString(owner)
+local function newFontString(owner, layer)
+	regionSeq = regionSeq + 1
 	return {
 		_owner = owner,
+		_layer = layer or "OVERLAY",
+		_seq = regionSeq,
 		_text = "",
 		_points = {},
 		SetText = function(self, t) self._text = tostring(t or "") end,
@@ -175,7 +210,13 @@ function FrameMT:GetFrameLevel() return self._level end
 function FrameMT:SetFrameLevel(l) self._level = l end
 function FrameMT:GetFrameStrata() return self._strata end
 function FrameMT:SetFrameStrata(s) self._strata = s end
-function FrameMT:CreateTexture() return newTexture(self) end
+function FrameMT:CreateTexture(name, layer)
+	local t = newTexture(self, layer)
+	t._name = name
+	self._textures = self._textures or {}
+	self._textures[#self._textures + 1] = t
+	return t
+end
 function FrameMT:GetStatusBarTexture() return self._sbTexture end
 function FrameMT:SetStatusBarTexture(t)
 	if type(t) == "string" then
@@ -235,7 +276,7 @@ function FrameMT:StopMovingOrSizing() self._moving = false end
 
 -- FontString creation (enough for title/instruction labels).
 function FrameMT:CreateFontString(name, layer, template)
-	local text = newFontString(self)
+	local text = newFontString(self, layer)
 	text._template = template
 	self._fontStrings = self._fontStrings or {}
 	self._fontStrings[#self._fontStrings + 1] = text
@@ -316,6 +357,161 @@ function FrameMT:SetTextColor(r, g, b, a) self._textColor = { r, g, b, a } end
 function FrameMT:GetTextColor()
 	local c = self._textColor or { 1, 1, 1, 1 }
 	return c[1], c[2], c[3], c[4]
+end
+
+------------------------------------------------------------------------------
+-- deterministic layering model
+--
+-- Enough of the client's render order to make a hidden label a test failure:
+-- frames are ordered by strata, then frame level, then creation order; a
+-- FontString shares its owner's frame level but renders above the owner's own
+-- BACKGROUND textures. An opaque frame is one that called SetBackdrop (or has
+-- a solid background texture); such a frame occludes a region when it stacks
+-- above the region's owner and its rectangle overlaps.
+------------------------------------------------------------------------------
+
+local STRATA_RANK = {
+	BACKGROUND = 0, LOW = 1, MEDIUM = 2, HIGH = 3,
+	DIALOG = 4, FULLSCREEN = 5, FULLSCREEN_DIALOG = 6, TOOLTIP = 7,
+}
+local LAYER_RANK = { BACKGROUND = 0, BORDER = 1, ARTWORK = 2, OVERLAY = 3, HIGHLIGHT = 4 }
+
+function Mocks.LayerRank(layer) return LAYER_RANK[layer] end
+function Mocks.StrataRank(strata) return STRATA_RANK[strata] end
+
+-- Resolve a frame's top-left in a shared coordinate space (UIParent origin),
+-- following TOPLEFT/TOP/CENTER/BOTTOM anchors used by the options window.
+local function absTopLeft(frame, seen)
+	seen = seen or {}
+	if seen[frame] then return 0, 0 end
+	seen[frame] = true
+	local p = frame._points and frame._points[1]
+	if not p then
+		if frame._parent then return absTopLeft(frame._parent, seen) end
+		return 0, 0
+	end
+	local point = p[1]
+	local rel = p[2] or frame._parent
+	local relPoint = p[3] or point
+	local ox, oy = p[4] or 0, p[5] or 0
+	if not rel then return ox, oy end
+	local rx, ry = absTopLeft(rel, seen)
+	local relW, relH = rel._width or 0, rel._height or 0
+	if relPoint == "CENTER" then rx, ry = rx + relW / 2, ry - relH / 2
+	elseif relPoint == "TOPRIGHT" then rx = rx + relW
+	elseif relPoint == "BOTTOMLEFT" or relPoint == "BOTTOM" then ry = ry - relH
+	elseif relPoint == "BOTTOMRIGHT" then rx, ry = rx + relW, ry - relH
+	elseif relPoint == "RIGHT" then rx, ry = rx + relW, ry - relH / 2 end
+	if point == "CENTER" then
+		local fw, fh = frame._width or 0, frame._height or 0
+		return rx + ox - fw / 2, ry + oy + fh / 2
+	elseif point == "TOPRIGHT" then
+		local fw = frame._width or 0
+		return rx + ox - fw, ry + oy
+	elseif point == "TOP" then
+		local fw = frame._width or 0
+		return rx + ox - fw / 2, ry + oy
+	end
+	return rx + ox, ry + oy
+end
+
+local function frameAbsRect(f)
+	local x, y = absTopLeft(f)
+	return x, y - (f._height or 0), x + (f._width or 0), y
+end
+
+-- A region's top-left is anchored to another frame (its owner by default) and
+-- its rectangle extends down and to the right, like the client.
+local function regionAbsRect(r)
+	local owner = r._owner
+	local x, y
+	local p = r._points and r._points[1]
+	if p then
+		local point = p[1]
+		local rel = p[2] or owner
+		local relPoint = p[3] or point
+		local ox, oy = p[4] or 0, p[5] or 0
+		local relW = rel and (rel._width or 0) or 0
+		local relH = rel and (rel._height or 0) or 0
+		local rx, ry = 0, 0
+		if rel then rx, ry = absTopLeft(rel) end
+		if relPoint == "CENTER" then rx, ry = rx + relW / 2, ry - relH / 2
+		elseif relPoint == "TOPRIGHT" then rx = rx + relW
+		elseif relPoint == "BOTTOMLEFT" or relPoint == "BOTTOM" then ry = ry - relH
+		elseif relPoint == "BOTTOMRIGHT" then rx, ry = rx + relW, ry - relH end
+		x, y = rx + ox, ry + oy
+	else
+		x, y = absTopLeft(owner)
+	end
+	local w = r._width or 100
+	local h = r._height
+	if not h and r.GetStringHeight then h = r:GetStringHeight() end
+	return x, y - (h or 12), x + w, y
+end
+
+local function effectivelyShown(f)
+	while f do
+		if f._shown == false then return false end
+		f = f._parent
+	end
+	return true
+end
+
+local function isAncestor(anc, f)
+	local p = f and f._parent
+	while p do
+		if p == anc then return true end
+		p = p._parent
+	end
+	return false
+end
+
+-- True when a region would actually be drawn: no shown opaque frame that stacks
+-- above the region's owner covers the same rectangle.
+function Mocks.IsRegionVisible(region)
+	if not region or region._shown == false then return true end
+	local owner = region._owner
+	if not owner or not effectivelyShown(owner) then return true end
+	local l, b, rr, t = regionAbsRect(region)
+	local osr = STRATA_RANK[owner._strata] or STRATA_RANK.MEDIUM
+	for _, f in ipairs(Mocks.frames) do
+		if f ~= owner and f._backdrop ~= nil and effectivelyShown(f) and not isAncestor(f, owner) then
+			local sr = STRATA_RANK[f._strata] or STRATA_RANK.MEDIUM
+			local above
+			if sr ~= osr then above = sr > osr
+			elseif (f._level or 0) ~= (owner._level or 0) then above = (f._level or 0) > (owner._level or 0)
+			else above = (f._seq or 0) > (owner._seq or 0) end
+			if above then
+				local fl, fb, fr, ft = frameAbsRect(f)
+				if fl < rr and l < fr and fb < t and b < ft then return false end
+			end
+		end
+	end
+	return true
+end
+
+function Mocks.FindFontString(frame, fragment)
+	for _, l in ipairs(frame._fontStrings or {}) do
+		if l:GetText():find(fragment, 1, true) then return l end
+	end
+	return nil
+end
+
+function Mocks.FindTexture(frame, layer)
+	for _, t in ipairs(frame._textures or {}) do
+		if not layer or t._layer == layer then return t end
+	end
+	return nil
+end
+
+-- Opaque child frames (those with a backdrop) are the ones that hide a
+-- parent's own FontStrings.
+function Mocks.OpaqueChildFrames(frame)
+	local out = {}
+	for _, f in ipairs(Mocks.frames or {}) do
+		if f._parent == frame and f._backdrop ~= nil then out[#out + 1] = f end
+	end
+	return out
 end
 
 ------------------------------------------------------------------------------

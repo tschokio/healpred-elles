@@ -53,3 +53,19 @@ T.register("spell catalog: every registry ID appears and custom/disabled entries
 	assert_eq(f.catalogScroll:GetVerticalScroll(), 0)
 	assert_nil(e.ns.session.fake)
 end)
+
+T.register("spell catalog: text renders above the decorative catalog background", function()
+	local e = Mocks.NewEnv()
+	local f = e.ns.OpenOptions()
+	click(f.controls.spellsTab)
+	assert_true(f.spellsPage:IsShown())
+	-- The catalog backdrop is a BACKGROUND draw-layer texture on the catalog
+	-- frame; a child frame here would also cover the window tabs' hit area.
+	assert_not_nil(Mocks.FindTexture(f.spellsPage, "BACKGROUND"), "catalog background must be a texture")
+	assert_eq(#Mocks.OpaqueChildFrames(f.spellsPage), 0, "no opaque child panel may cover the catalog")
+	assert_true(Mocks.IsRegionVisible(f.catalogText), "catalog text must stay readable")
+	-- Background decoration is a texture: it has no mouse surface at all.
+	local fill = Mocks.FindTexture(f.spellsPage, "BACKGROUND")
+	assert_nil(fill.EnableMouse, "background decoration must not intercept mouse input")
+	assert_true(f.controls.spellsTab:IsShown() and f.controls.settingsTab:IsShown())
+end)

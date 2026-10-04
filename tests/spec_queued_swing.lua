@@ -368,3 +368,28 @@ T.register("queue preview: close discards drafts and combat preview has independ
 	assert_eq(f.preview.border._backdrop.edgeSize, 3)
 	assert_eq(e.ns.db.queuedSwingThickness, 3)
 end)
+
+T.register("queue preview: sample panel labels sit above its own opaque frame", function()
+	local e = env()
+	local f = e.ns.OpenOptions()
+	local pv = f.preview
+	-- The sample panel is a real container frame (its labels must live on it),
+	-- so nothing on the settings page may cover those labels either.
+	for _, l in ipairs(pv._fontStrings) do
+		if l:GetText() ~= "" then
+			assert_true(Mocks.IsRegionVisible(l), "hidden preview label: " .. l:GetText())
+		end
+	end
+	local state = Mocks.FindFontString(pv, "QUEUED")
+	assert_not_nil(state, "queued state label must exist")
+	assert_true(state:GetText():find("QUEUED") ~= nil)
+	-- Decorative settings-page background is a texture and cannot swallow clicks.
+	local fill = Mocks.FindTexture(f.settingsPage, "BACKGROUND")
+	assert_not_nil(fill)
+	assert_nil(fill.EnableMouse)
+	click(pv.button)
+	assert_false(pv.border:IsShown())
+	click(pv.button)
+	assert_true(pv.border:IsShown())
+	assert_nil(e.ns.session.fake)
+end)
