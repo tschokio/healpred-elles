@@ -96,7 +96,7 @@ end)
 T.register("priest/shaman/paladin: deferred triggers summons direct heals and procs stay excluded", function()
 	local e = env()
 	for _, id in ipairs({1277462,1277634,1277638,1277639,1277640,724,27870,27871,
-		402174,1240720,1240721,1316995,401859,1240826,1240827,2944,19280,
+		402174,1240720,1240721,1316995,401859,1240826,1240827,
 		5394,6375,6377,10462,10463,635,633,19750,20165,20349,1310911,1311015}) do
 		assert_nil(e.ns.spells.Meta(id))
 		aura(id)

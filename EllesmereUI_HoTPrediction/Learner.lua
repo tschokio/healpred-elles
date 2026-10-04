@@ -241,6 +241,8 @@ function learner.HandleCLEU(args)
 	if not spellID or not ns.spells.IsCandidate(spellID) then return end
 	local meta = ns.spells.Meta(spellID)
 	if not meta then return end
+	-- Target-dependent drains must not learn a self-aura phase or mix targets.
+	if meta.targetDrain then return end
 
 	-- Ownership: only a positively owned current aura may be learned from.
 	local auras = ns.api.ReadPlayerAuras()

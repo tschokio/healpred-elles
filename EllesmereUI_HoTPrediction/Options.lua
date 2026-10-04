@@ -98,9 +98,10 @@ local function queuePreview(parent, x, y, width, height)
 		{ "Maul", "Ability_Druid_Maul" },
 		{ "Strike", "Ability_Rogue_Ambush" },
 		{ "Cleave", "Ability_Warrior_Cleave" },
+		{ "Raptor", "Ability_MeleeDamage" },
 	}) do
 		local select = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
-		local size = (width - 32) / 3
+		local size = (width - 32) / 4
 		select:SetSize(size - 4, 22)
 		select:SetPoint("TOPLEFT", p, "TOPLEFT", 16 + (i - 1) * size, -78)
 		select:SetText(ability[1])
@@ -365,25 +366,126 @@ local function ensureWindow()
 	catalog:SetPoint("TOPLEFT", f, "TOPLEFT", 15, -100)
 	f.spellsPage = catalog
 	background(catalog, -3, 4, 516, 492)
+	local catalogHeading = label(catalog, "503 spellbook entries reviewed | select a class", 8, -5, 482)
+	catalogHeading:SetTextColor(0.55, 0.75, 0.78, 1)
 	local scroll = CreateFrame("ScrollFrame", nil, catalog, "UIPanelScrollFrameTemplate")
-	scroll:SetSize(476, 486)
-	scroll:SetPoint("TOPLEFT", catalog, "TOPLEFT", 0, 0)
+	scroll:SetSize(476, 412)
+	scroll:SetPoint("TOPLEFT", catalog, "TOPLEFT", 0, -74)
 	local content = CreateFrame("Frame", nil, scroll)
-	content:SetSize(466, 486)
-	local text = label(content, "", 0, 0, 466)
-	text:SetWordWrap(true)
+	content:SetSize(466, 412)
 	scroll:SetScrollChild(content)
 	scroll:EnableMouseWheel(true)
 	scroll:SetScript("OnMouseWheel", function(self, delta)
 		self:SetVerticalScroll(math.max(0, math.min(self:GetVerticalScrollRange(), self:GetVerticalScroll() - delta * 40)))
 	end)
-	f.catalogText, f.catalogScroll = text, scroll
-	function f.RefreshCatalog()
-		text:SetText(ns.BuildSpellCatalog())
-		content:SetHeight(math.max(486, text:GetStringHeight() + 12))
+	f.catalogScroll, f.catalogRows, f.catalogExpanded = scroll, {}, {}
+	f.catalogFilter = "ALL"
+	function f.RefreshCatalog(keepScroll)
+		f.catalogSnapshot = ns.BuildSpellCatalog()
+		local oldScroll = scroll:GetVerticalScroll()
+		local index, y = 0, 0
+		local function card()
+			index = index + 1
+			local row = f.catalogRows[index]
+			if not row then
+				row = panel(content, 0, 0, 466, 100)
+				row.icon = row:CreateTexture(nil, "ARTWORK")
+				row.icon:SetPoint("TOPLEFT", row, "TOPLEFT", 10, -10)
+				row.icon:SetSize(32, 32)
+				row.title = label(row, "", 54, -10, 306)
+				row.status = label(row, "", 54, -30, 394)
+				row.note = label(row, "", 10, -56, 442)
+				row.ids = label(row, "", 10, -90, 442)
+				row.details = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+				row.details:SetSize(84, 22)
+				row.details:SetPoint("TOPRIGHT", row, "TOPRIGHT", -10, -10)
+				flatButton(row.details)
+				row.details:SetScript("OnClick", function()
+					f.catalogExpanded[row.key] = not f.catalogExpanded[row.key]
+					f.RefreshCatalog(true)
+				end)
+				f.catalogRows[index] = row
+			end
+			row:ClearAllPoints(); row:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
+			row:Show()
+			return row
+		end
+		for _, group in ipairs(ns.GetSpellCatalog()) do
+			if (f.catalogFilter == "ALL" or f.catalogFilter == group.key) and #group.rows > 0 then
+				local heading = card()
+					heading.key = "class:" .. group.key
+					heading.entry = nil
+					heading.icon:SetTexture(group.key == "CUSTOM" and "Interface\\Icons\\INV_Misc_Book_11" or "Interface\\Icons\\ClassIcon_" .. group.key:lower())
+					heading.title:ClearAllPoints(); heading.title:SetPoint("TOPLEFT", heading, "TOPLEFT", 54, -10)
+					heading.status:ClearAllPoints(); heading.status:SetPoint("TOPLEFT", heading, "TOPLEFT", 54, -30)
+				heading.title:SetText(group.name)
+				heading.title:SetTextColor(group.color[1], group.color[2], group.color[3], 1)
+				heading.status:SetText(group.count and (group.count .. " entries reviewed | support & limitations below") or "User-added spell candidates")
+				heading.status:SetTextColor(0.55, 0.66, 0.72, 1)
+				heading.note:SetText(""); heading.ids:SetText(""); heading.details:Hide()
+				heading:SetHeight(52); y = y + 60
+				for _, entry in ipairs(group.rows) do
+					local row = card()
+					row.key, row.entry = entry.key, entry
+					local path = "Interface\\Icons\\" .. entry.icon
+					local getTexture = C_Spell and C_Spell.GetSpellTexture or GetSpellTexture
+					if type(getTexture) == "function" and entry.ids[1] then
+						local ok, value = pcall(getTexture, entry.ids[1])
+						if ok and not ns.isSecret(value) and (type(value) == "string" or type(value) == "number") then path = value end
+					end
+					row.icon:SetTexture(path)
+					row.title:SetText(entry.name); row.title:SetTextColor(0.92, 0.95, 0.97, 1)
+					local top = math.max(32, row.title:GetStringHeight() + 16)
+					row.status:ClearAllPoints(); row.status:SetPoint("TOPLEFT", row, "TOPLEFT", 54, -top)
+					row.status:SetText(entry.status .. (#entry.ids == 0 and #entry.disabled > 0 and " - disabled" or ""))
+					row.status:SetTextColor(entry.deferred and 0.95 or 0.35, entry.deferred and 0.72 or 0.88, entry.deferred and 0.4 or 0.8, 1)
+					local noteY = top + row.status:GetStringHeight() + 12
+					row.note:ClearAllPoints(); row.note:SetPoint("TOPLEFT", row, "TOPLEFT", 10, -noteY)
+					row.note:SetText(entry.note); row.note:SetTextColor(0.65, 0.72, 0.76, 1)
+					local height = noteY + row.note:GetStringHeight() + 12
+					local hasIDs = #entry.ids > 0 or #entry.disabled > 0
+					row.details:SetShown(hasIDs)
+					row.details:SetText(f.catalogExpanded[entry.key] and "Hide IDs" or "Rank IDs")
+					if f.catalogExpanded[entry.key] and hasIDs then
+						local ids = #entry.ids > 0 and ("IDs: " .. ns.CatalogIDs(entry.ids)) or ""
+						if #entry.disabled > 0 then ids = ids .. "\nDisabled by your settings: " .. ns.CatalogIDs(entry.disabled) end
+						row.ids:ClearAllPoints(); row.ids:SetPoint("TOPLEFT", row, "TOPLEFT", 10, -height)
+						row.ids:SetText(ids); row.ids:SetTextColor(0.55, 0.75, 0.78, 1)
+						height = height + row.ids:GetStringHeight() + 12
+					else row.ids:SetText("") end
+					row:SetHeight(height); y = y + height + 8
+				end
+			end
+		end
+		for i = index + 1, #f.catalogRows do f.catalogRows[i]:Hide() end
+		content:SetHeight(math.max(412, y))
 		scroll:UpdateScrollChildRect()
-		scroll:SetVerticalScroll(0)
+		scroll:SetVerticalScroll(keepScroll and math.min(oldScroll, scroll:GetVerticalScrollRange()) or 0)
 	end
+	f.catalogClassButtons = {}
+	local function classButton(key, name, index)
+		local b = CreateFrame("Button", nil, catalog, "UIPanelButtonTemplate")
+		b:SetSize(key == "ALL" and 52 or 40, 38)
+		b:SetPoint("TOPLEFT", catalog, "TOPLEFT", index == 0 and 8 or 64 + (index - 1) * 44, -28)
+		flatButton(b)
+		if key == "ALL" then b:SetText("All") else
+			local icon = b:CreateTexture(nil, "ARTWORK")
+			icon:SetTexture("Interface\\Icons\\ClassIcon_" .. key:lower())
+			icon:SetPoint("TOPLEFT", b, "TOPLEFT", 4, -3); icon:SetSize(30, 30)
+		end
+		b:SetScript("OnClick", function()
+			f.catalogFilter = key
+			catalogHeading:SetText(name .. " | click Rank IDs for exact spells")
+			f.RefreshCatalog()
+		end)
+		b:SetScript("OnEnter", function(self)
+			if GameTooltip then GameTooltip:SetOwner(self, "ANCHOR_TOP"); GameTooltip:AddLine(name); GameTooltip:Show() end
+		end)
+		b:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+		f.catalogClassButtons[key] = b
+	end
+	classButton("ALL", "All classes", 0)
+	for i, class in ipairs(ns.catalogClasses) do if class.key ~= "CUSTOM" then classButton(class.key, class.name, i) end end
 	function f.SelectTab(tab)
 		f.selectedTab = tab
 		page:SetShown(tab == "settings")
@@ -473,7 +575,7 @@ local function ensureWindow()
 	button("diagnostics", "Copy diagnostics", 340, -435, 175, function() ns.OpenDebugWindow() end)
 	local status = label(page, "", 24, -470)
 	label(page, "Preview is session-only; Stop preview to display real healing again.\nManual rank/tick calibration: /euihot help. Changes save immediately.", 24, -495)
-	check("queue", "Highlight genuinely queued Maul / Heroic Strike / Cleave", -532,
+	check("queue", "Highlight genuinely queued next-swing attacks (all supported classes)", -532,
 		function() return ns.db.queuedSwingEnabled end, function(v) command("queue " .. (v and "on" or "off")) end)
 	button("queueAppearance", "Next-swing appearance...", 24, -572, 225, function() ns.OpenQueueAppearance() end)
 	button("close", "Close", 420, -606, 95, function() f:Hide() end)

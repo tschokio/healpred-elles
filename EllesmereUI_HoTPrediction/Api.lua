@@ -85,6 +85,7 @@ end
 -- paint timer NEVER triggers a rescan by itself.
 function api.InvalidateAuraCache()
 	ns.session.auraCache = nil
+	ns.session.targetDrains = nil
 end
 
 function api.ReadPlayerAuras()
@@ -103,6 +104,7 @@ function api.ReadPlayerChannel()
 	local id = ns.toNumber(values[9]) -- eighth API return is spellID
 	local meta = id and ns.spells.Meta(id)
 	if not meta or not meta.channel then return nil end
+	if meta.lifeDrain and not ns.db.approximatePrediction then return nil end
 	local start = ns.toNumber(values[5]) -- start/end milliseconds
 	local finish = ns.toNumber(values[6])
 	if not start or not finish or finish <= start or finish / 1000 <= ns.now() then return nil end
@@ -117,12 +119,75 @@ function api.ReadPredictionAuras()
 		local meta = ns.spells.Meta(aura.spellID)
 		-- Never duplicate Tranquility's channel as an aura, nor let an aura survive
 		-- its interrupted channel. Other self/foreign records retain normal gates.
-		if not (meta and meta.channel) then out[#out + 1] = aura end
+		if not (meta and (meta.channel or meta.targetDrain)) then out[#out + 1] = aura end
 	end
 	local channel = api.ReadPlayerChannel()
 	if channel then out[#out + 1] = channel end
+	if ns.db.approximatePrediction then
+		for _, aura in ipairs(api.ReadTargetDrains()) do out[#out + 1] = aura end
+	end
 	return out
 end
+
+function api.InvalidateTargetDrains()
+	if ns.session then ns.session.targetDrains = nil end
+end
+
+local function publicFlag(fn, unit)
+	if type(fn) ~= "function" then return nil end
+	local ok, value = pcall(fn, unit)
+	if not ok or ns.isSecret(value) then return nil end
+	if value == true or value == 1 then return true end
+	if value == false or value == 0 then return false end
+	return nil
+end
+
+-- Only currently inspectable hostile target debuffs owned by the player.
+-- Switching target hides old estimates, never retains an off-screen DoT timer.
+function api.ReadTargetDrains()
+	if not ns.db.approximatePrediction then return {} end
+	local canAttack = type(UnitCanAttack) == "function" and function(unit) return UnitCanAttack("player", unit) end
+	if publicFlag(UnitExists, "target") ~= true or publicFlag(canAttack, "target") ~= true
+		or publicFlag(UnitIsDeadOrGhost, "target") ~= false then
+		api.InvalidateTargetDrains(); return {}
+	end
+	local ok, guid = pcall(UnitGUID or function() end, "target")
+	if not ok or ns.isSecret(guid) or type(guid) ~= "string" then api.InvalidateTargetDrains(); return {} end
+	local cache = ns.session.targetDrains
+	if cache and cache.guid == guid then return cache.auras end
+	local records = {}
+	local fn = C_UnitAuras and C_UnitAuras.GetAuraDataByIndex
+	if type(fn) ~= "function" then return records end
+	for _, filter in ipairs({ "HARMFUL|PLAYER", "HARMFUL" }) do
+		local accepted = false
+		for i = 1, 199 do
+			local success, raw = pcall(fn, "target", i, filter)
+			if i == 1 then accepted = success end
+			if not success or ns.isSecret(raw) or raw == nil then break end
+			local aura = api._AuraFromModern(raw)
+			local meta = aura and ns.spells.Meta(aura.spellID)
+			if meta and meta.targetDrain and aura.sourceUnit == "player" then
+				aura.unit, aura.filter, aura.targetGUID = "target", "HARMFUL", guid
+				records[#records + 1] = aura
+			end
+		end
+		if accepted then break end
+	end
+	ns.session.targetDrains = { guid = guid, auras = records }
+	return records
+end
+
+ns.on("UNIT_AURA", function(_, unit)
+	if not ns.isSecret(unit) and unit == "target" then
+		api.InvalidateTargetDrains()
+		if ns.db.approximatePrediction and ns.overlay then ns.overlay.RequestPaint() end
+	end
+end)
+ns.on("PLAYER_TARGET_CHANGED", function()
+	api.InvalidateTargetDrains()
+	if ns.db.approximatePrediction and ns.overlay then ns.overlay.RequestPaint() end
+end)
+ns.on("PLAYER_ENTERING_WORLD", api.InvalidateTargetDrains)
 
 function api.GetRageHealingBudget()
 	if type(UnitPower) ~= "function" or type(UnitHealthMax) ~= "function" then

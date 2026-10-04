@@ -6,7 +6,7 @@
 local addonName, ns = ...
 
 ns.name = addonName
-ns.version = "0.5.5"
+ns.version = "0.6.0"
 ns.debugEnabled = false
 ns.inCombat = false
 ns.started = false
@@ -233,7 +233,9 @@ function ns.register(event)
 	end
 	local ok, ret
 	if event:match("^UNIT_") and type(f.RegisterUnitEvent) == "function" then
-		ok, ret = pcall(f.RegisterUnitEvent, f, event, "player")
+		if event == "UNIT_AURA" then
+			ok, ret = pcall(f.RegisterUnitEvent, f, event, "player", "target")
+		else ok, ret = pcall(f.RegisterUnitEvent, f, event, "player") end
 	else
 		ok, ret = pcall(f.RegisterEvent, f, event)
 	end
@@ -577,6 +579,7 @@ function ns.HandleCommand(input)
 		local v = (args[1] or ""):lower()
 		if v ~= "on" and v ~= "off" then ns.print("usage: /euihot approximate on|off"); return end
 		ns.db.approximatePrediction = v == "on"
+		if ns.api.InvalidateTargetDrains then ns.api.InvalidateTargetDrains() end
 		if ns.estimates then ns.estimates.Invalidate() end
 		if ns.overlay then ns.overlay.RequestPaint() end
 		ns.print(v == "on" and "approximate prediction ON: public tooltip/manual amounts; heal absorbs ignored; restricted native overlap unverified (may double-count). /euihot test off to use real auras."

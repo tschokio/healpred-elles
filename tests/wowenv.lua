@@ -571,6 +571,8 @@ function Mocks.Reset()
 	_G.InCombatLockdown = function() return Mocks.inCombat end
 	_G.UnitGUID = function() return Mocks.playerGUID end
 	_G.UnitExists = function() return true end
+	_G.UnitCanAttack = nil
+	_G.UnitIsDeadOrGhost = nil
 	_G.UnitHealth = function() return Mocks.health end
 	_G.UnitHealthMax = function() return Mocks.maxHealth end
 	_G.UnitPower = function(_, powerType)

@@ -25,6 +25,9 @@ local function addFamily(family, ids, opts)
 			channel = opts.channel,
 			resourceHealing = opts.resourceHealing,
 			tooltipSpellID = opts.tooltipSpellID,
+			tooltipSupport = opts.tooltipSupport,
+			targetDrain = opts.targetDrain,
+			lifeDrain = opts.lifeDrain,
 		}
 	end
 end
@@ -44,6 +47,21 @@ addFamily("FrenziedRegeneration", { 22842, 22845 },
 addFamily("Lifebloom", { 33763 }, { stacksMatter = true })
 addFamily("Germination", { 155777 })
 addFamily("WildGrowth", { 48438 }, { approximate = true })
+
+-- Reviewed ForeverChanges spellbooks 2026-10-04, build 1.60.1.70205.
+-- Lightwell's summon is NOT a healing aura; only the applied Renew counts.
+-- Its cadence is not documented: require observed/manual or explicit tick text.
+addFamily("LightwellRenew", { 7001 }, { tooltipSupport = true, tooltipSpellID = 724 })
+addFamily("LightwellRenew", { 27873 }, { tooltipSupport = true, tooltipSpellID = 27870 })
+addFamily("LightwellRenew", { 27874 }, { tooltipSupport = true, tooltipSpellID = 27871 })
+-- Life drains are opt-in rough estimates, never guaranteed incoming healing.
+-- Channel state / owned current-target debuffs are required, not cast attempts.
+addFamily("DrainLife", { 689, 699, 709, 7651, 11699, 11700 },
+	{ channel = true, lifeDrain = true, approximate = true, foreverInterval = 1 })
+addFamily("SiphonLife", { 18265, 18879, 18880, 18881 },
+	{ targetDrain = true, lifeDrain = true, approximate = true, foreverInterval = 3 })
+addFamily("DevouringPlague", { 2944, 19276, 19277, 19278, 19279, 19280 },
+	{ targetDrain = true, lifeDrain = true, approximate = true, foreverInterval = 3 })
 
 spells.BASE = BASE
 

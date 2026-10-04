@@ -40,7 +40,7 @@ StatusBar of its own and secure-hooks native callbacks read-only.
 
 The installed folder is the deliverable; there is no separate zip/binary.
 
-### Updating (to v0.5.5)
+### Updating (to v0.6.0)
 
 Replace the `EllesmereUI_HoTPrediction/` folder in your AddOns directory with the
 new one, then `/reload` (or restart). SavedVariables
@@ -54,7 +54,7 @@ teststatus` or the copyable `/euihot window`.
 ### Queued next-swing action borders (v0.5.0)
 
 With `EllesmereUIActionBars` installed, the existing helper now draws a thick,
-opaque **cyan border** around buttons whose Maul, Heroic Strike or Cleave is
+opaque **cyan border** around buttons whose Maul, Heroic Strike, Cleave or Raptor Strike is
 actually queued. Enabled by default; no separate addon or vendor edits required.
 This feature does **not** require native healing prediction to be enabled.
 
@@ -102,6 +102,52 @@ and repeat with Cleave, Maul, forms/pages and any macros you use.
 
 ### Settings menu and minimap button (v0.4.0)
 
+### All-class spellbook audit and icon catalog (v0.6.0)
+
+Reviewed **503 entries across all nine ForeverChanges spellbooks** on 2026-10-04,
+including Shaman in addition to the eight requested classes. The source build is
+**1.60.1.70205**; see [SPELLBOOK_AUDIT.md](SPELLBOOK_AUDIT.md) for counts, URLs,
+new IDs, classifications and limits. This is coverage of the listed class
+spellbooks, not a claim of every racial, item, legacy-perk or server-triggered effect.
+
+* **Raptor Strike:** all eight Forever ranks now use the existing real queued-state
+  detector. Together with Maul, Heroic Strike and Cleave, these cover the known
+  next-swing families in the reviewed books. Instant strikes, auto-shot, seals,
+  weapon procs and triggered retaliation are not treated as queues.
+* **Lightwell Renew:** actual applied aura IDs `7001, 27873, 27874`, not the summon.
+  Requires readable player ownership/timing. Prefer the active aura tooltip;
+  matching summon-rank descriptions are explicit fallback aliases. No cadence
+  is invented: supply an observed `/euihot interval <activeID> <seconds>` or an
+  explicit live per-tick tooltip. Removal/expiry stops prediction. Other players'
+  Lightwells or an unidentifiable summon-owner remain excluded.
+* **Drain Life:** all six Forever ranks, only during the player's actual readable
+  channel. **Approximate mode only**; interrupt/end clears immediately on refresh.
+* **Siphon Life / Devouring Plague:** all four/six ranks, only from an owned,
+  readable harmful aura on the **current living hostile target**, not a player
+  buff or cast attempt. **Approximate mode only**; cancellation/removal, death,
+  target switch or restricted/missing target identity hides the estimate. Switching
+  away intentionally drops off-screen drains; there is no multi-target forecast.
+  Rank tooltip amounts already contain public displayed bonuses; no extra scaling.
+  Damage resistance, absorption and future target death can reduce real healing,
+  so these are explicitly unverified damage-dependent estimates, not guaranteed heals.
+* All previously implemented Renew, Riptide and Druid healing remains supported.
+  No new fixed healing magnitudes are baked in. Missing tooltip/cadence/ownership
+  still withholds an estimate instead of guessing. English/German transfer clauses
+  are supported; other locales need manual amounts/cadence.
+
+The **Implemented spells** tab now uses **class icons, class-colored headings,
+spell icon cards, support badges and short notes**. Filter by class using the icon
+row; **All** includes custom candidates. Click **Rank IDs** on any implemented
+card to expand exact enabled/disabled IDs. Unsupported/conditional cases are
+separate, clearly labelled cards. It is a support catalog, not your known spells.
+Cards are reused; there are no background catalog refreshes or new timers.
+
+Only `UNIT_AURA` adds a target subscription; scans are event-invalidated and cached
+by public target GUID, with a cheap validity/identity check during model reads.
+The addon still paints **only the player frame**. Other players' healing,
+pet frames, multi-target drains, ward trigger guessing and passive regeneration
+are outside scope. All additions are mock-tested, not live-verified.
+
 **Appearance window stacking fix (v0.5.5):** the next-swing appearance editor
 uses `FULLSCREEN_DIALOG`, above the main settings window's `DIALOG` layer and
 below tooltips. Its controls and preview inherit the higher layer so main-window
@@ -118,7 +164,7 @@ frame/draw-layer ordering; live in-game visual confirmation is still needed.
 
 **Redesigned GUI and button preview (v0.5.3):** the dark-panel settings window
 and next-swing appearance editor now include an isolated sample action button.
-Choose Maul, Strike or Cleave and click the sample to toggle its queued border.
+Choose Maul, Strike, Cleave or Raptor and click the sample to toggle its queued border.
 The appearance editor previews valid size/thickness/opacity/RGB drafts as you type;
 only **Apply appearance** saves them. Invalid drafts retain the last valid sample,
 and closing/reopening reloads your saved values. The preview shares the real border's
@@ -127,13 +173,10 @@ It never casts spells, changes real queued state, or starts a fake healing previ
 No preview timers or animation loops are added. Live-game visual verification is
 still needed; the GUI and preview interactions are mock-tested.
 
-**Implemented spells tab (v0.5.2):** open `/euihot options` and select
-**Implemented spells**. The scrollable catalog lists built-in healing families,
-exact rank IDs, manual/observation-only candidates, user-added/disabled IDs and
-next-swing queue abilities. It is built from the actual runtime spell registries
-when opened, not from your spellbook or active auras. Limitations and exclusions
-(including other players' HoTs) are shown explicitly. Browsing does not change
-settings, start a preview or add background work.
+**Implemented spells tab:** open `/euihot options` and select **Implemented spells**.
+Class-grouped cards are built from actual runtime spell registries when opened,
+not your spellbook or active auras. Limitations and exclusions (including other
+players' HoTs) are shown explicitly. Browsing does not change settings or start a preview.
 
 * **Left-click the minimap icon** or use `/euihot options` (alias: `/euihot menu`).
   Also available under Blizzard's **Settings → AddOns → EllesmereUI HoT Prediction**
@@ -307,14 +350,15 @@ Reviewed the English and German ForeverChanges spellbooks for
 This is **not complete coverage of every healing effect**. Priest Contingency
 Plan is a conditional ward followed by a separate triggered heal: the ward is
 not counted before activation, and the triggered aura IDs/cadence still need
-verification. Lightwell needs the actual clicked healing aura, its ownership and
-cadence—not the summoned object's three-minute duration. Penance needs verified
+verification. v0.6.0 now registers Lightwell Renew's actual applied IDs; readable
+ownership and a verified/manual/explicit-tooltip cadence are still required,
+not the summoned object's three-minute duration. Penance needs verified
 channel recipient tracking (unlike Tranquility, it does not necessarily heal the
-caster). Prayer of Mending is conditional; Devouring Plague/Vampiric Embrace
-depend on damage to enemies and are outside player-aura-only estimation.
+caster). Prayer of Mending and Vampiric Embrace remain conditional. v0.6.0 adds
+Devouring Plague as a rough current-target estimate in Approximate mode only.
 Shaman Healing Stream Totem needs verified totem lifetime/rank/ownership and
 player range tracking; its summon is not treated as a five-minute player HoT.
-None of these deferred effects are automatically registered or predicted.
+The other deferred effects are not automatically registered or predicted.
 
 Renew/Riptide are mock-tested in English and German but **not live-verified**.
 Character-specific public tooltip amounts include displayed bonuses without any
@@ -364,7 +408,8 @@ that timer; idle/blocked predictions only evaluate after owning events or
 structure changes. A stationary fake is not repainted every tick. Frame identity
 is checked every second while idle, and every tick while visible. Missing-frame
 attachment retries are limited to once per second. Aura scans use an
-event-invalidated cache, unit subscriptions are player-only where supported,
+event-invalidated cache, unit subscriptions are player-only except `UNIT_AURA`
+(also current target for the opt-in life drains),
 and native hooks ignore other frames. Pathological tick schedules exceeding
 10,000 iterations are withheld rather than running an unbounded loop.
 

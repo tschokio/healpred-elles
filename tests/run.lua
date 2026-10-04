@@ -46,6 +46,7 @@ loadRel("tests/spec_options.lua")
 loadRel("tests/spec_forms.lua")
 loadRel("tests/spec_queued_swing.lua")
 loadRel("tests/spec_spell_catalog.lua")
+loadRel("tests/spec_all_classes.lua")
 
 T.run()
 _G.__HOT_EXIT = (T.fail == 0) and 0 or 1

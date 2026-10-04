@@ -124,19 +124,63 @@ local function locale()
 	return "unknown"
 end
 
+-- Explicit transfer clauses only, and only for registered life-drain families.
+-- Damage is a rough upper estimate: resist/absorb/death can reduce actual healing.
+function estimates.ParseLifeDrain(text, lang)
+	if ns.isSecret(text) or type(text) ~= "string" or #text > 8192 then return nil end
+	if lang ~= "enUS" and lang ~= "enGB" and lang ~= "deDE" then return nil end
+	-- Native Lua's lower() is ASCII-only on many clients; normalize the leading
+	-- umlaut explicitly instead of relying on the test VM's Unicode behavior.
+	text = text:gsub("Überträgt", "überträgt"):lower():gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+	local amount, seconds
+	if lang == "deDE" then
+		seconds, amount = text:match("überträgt%s+alle%s+" .. NUMBER .. "%s+sek%.?%s+" .. NUMBER .. "%s+gesundheit%s+vom%s+ziel%s+auf%s+den%s+zaubernden")
+		if not amount and text:find("heilt den zaubernden", 1, true) then
+			seconds, amount = text:match("fügt%s+so%s+" .. NUMBER .. "%s+sek%.?%s+lang%s+" .. NUMBER .. "%s+punkt%(e%)%s+schattenschaden")
+			if amount and seconds then
+				local a, s = number(amount, lang), number(seconds, lang)
+				if a and s and s <= 300 then return { kind = "total", amount = a, seconds = s } end
+				return nil
+			end
+		end
+	else
+		if text:find("heals the caster", 1, true) then
+			amount, seconds = text:match(NUMBER .. "%s+shadow%s+damage%s+over%s+" .. NUMBER .. "%s+sec")
+			if amount and seconds then
+				local a, s = number(amount, lang), number(seconds, lang)
+				if a and s and s <= 300 then return { kind = "total", amount = a, seconds = s } end
+				return nil
+			end
+		end
+		amount, seconds = text:match("transfers%s+" .. NUMBER .. "%s+health%s+every%s+" .. NUMBER .. "%s+seconds?%s+from%s+the%s+target%s+to%s+the%s+caster")
+		if not amount then
+			amount, seconds = text:match("transfers%s+" .. NUMBER .. "%s+health%s+from%s+the%s+target%s+to%s+the%s+caster%s+every%s+" .. NUMBER .. "%s+sec")
+		end
+	end
+	amount, seconds = amount and number(amount, lang), seconds and number(seconds, lang)
+	if amount and seconds and seconds <= 300 then return { kind = "tick", amount = amount, seconds = seconds } end
+end
+
 local function readTooltip(id, aura, meta)
 	local lang = locale()
 	local why
+	local function parse(text)
+		if meta.lifeDrain then
+			local transfer = estimates.ParseLifeDrain(text, lang)
+			if transfer then return transfer end
+		end
+		return estimates.Parse(text, lang)
+	end
 	local fn = C_TooltipInfo and C_TooltipInfo.GetUnitAuraByAuraInstanceID
 	local instance = aura and ns.toNumber(aura.instanceID)
 	if type(fn) == "function" and instance then
-		local ok, info = pcall(fn, "player", instance, "HELPFUL")
+		local ok, info = pcall(fn, aura.unit or "player", instance, aura.filter or "HELPFUL")
 		local lines = ok and field(info, "lines")
 		local result
 		for i = 1, 40 do
 			local line = field(lines, i)
 			if not line then break end
-			local parsed, err = estimates.Parse(field(line, "leftText"), lang)
+			local parsed, err = parse(field(line, "leftText"))
 			if parsed then
 				if result and (result.kind ~= parsed.kind or result.amount ~= parsed.amount or result.seconds ~= parsed.seconds) then
 					return nil, nil, "ambiguous aura tooltip; use manual amount"
@@ -153,7 +197,7 @@ local function readTooltip(id, aura, meta)
 		for _, spellID in ipairs(ids) do
 			local ok, text = pcall(fn, spellID) -- exact rank or explicit verified effect alias
 			if ok then
-				local parsed, err = estimates.Parse(text, lang)
+				local parsed, err = parse(text)
 				if parsed then return parsed, spellID == id and "spell description" or "spell description (effect alias)" end
 				why = err
 			else why = "spell description read failed" end
@@ -165,8 +209,8 @@ end
 function estimates.Fill(data, id, aura)
 	local meta = ns.spells.Meta(id)
 	if not meta then return end
-	local automaticFamily = meta.foreverInterval ~= nil
-	if automaticFamily and not data.interval and isForever() then
+	local automaticFamily = meta.foreverInterval ~= nil or meta.tooltipSupport
+	if meta.foreverInterval and not data.interval and isForever() then
 		data.interval = meta.foreverInterval
 		data.intervalSource = "Forever " .. tostring(meta.foreverInterval) .. "s cadence (approximate)"
 	end
@@ -177,10 +221,13 @@ function estimates.Fill(data, id, aura)
 	local now = ns.now()
 	local instance = aura and ns.toNumber(aura.instanceID)
 	local expiration = aura and ns.toNumber(aura.expirationTime)
+	local unit = aura and aura.unit or "player"
+	local targetGUID = aura and aura.targetGUID
 	local entry = cache[id]
-	if not entry or entry.untilTime <= now or entry.instance ~= instance or entry.expiration ~= expiration then
+	if not entry or entry.untilTime <= now or entry.instance ~= instance or entry.expiration ~= expiration
+		or entry.unit ~= unit or entry.targetGUID ~= targetGUID then
 		local parsed, source, why = readTooltip(id, aura, meta)
-		entry = { parsed = parsed, source = source, why = why, instance = instance,
+		entry = { parsed = parsed, source = source, why = why, instance = instance, unit = unit, targetGUID = targetGUID,
 			expiration = expiration, untilTime = now + CACHE_SECONDS }
 		cache[id] = entry -- PUBLIC parsed values only; never retain tooltip strings
 	end
@@ -210,6 +257,7 @@ function estimates.Fill(data, id, aura)
 				if meta.family == "WildGrowth" and parsed.kind == "total" then
 					data.amountSource = data.amountSource .. "; average tick, taper unmodelled"
 				end
+				if meta.lifeDrain then data.amountSource = data.amountSource .. "; damage/resists/absorbs unverified" end
 			end
 		end
 	else
