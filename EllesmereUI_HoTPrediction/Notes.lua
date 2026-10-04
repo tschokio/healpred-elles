@@ -91,14 +91,16 @@ end
 -- and loses focus so the player's keys are not swallowed.
 function notes.RefreshEditable()
 	local editable = notes.IsEditable()
-	local lockText = editable and "" or "Combat: notes are read-only. Editing unlocks when combat ends."
 	for _, e in ipairs(notes.Editors()) do
 		if not editable then safe(e, "ClearFocus") end
 		safe(e, "SetEnabled", editable)
 	end
-	if notes.window and notes.window.hint then notes.window.hint:SetText(lockText) end
+	-- The floating hint stays short so it cannot grow into the editor; the tab
+	-- has room for the longer explanation.
+	if notes.window and notes.window.hint then notes.window.hint:SetText(editable and "" or "Combat: read-only") end
 	if notes.tabHint then
-		notes.tabHint:SetText(lockText ~= "" and lockText or "Edits save as you type. Notes are read-only during combat.")
+		notes.tabHint:SetText(editable and "Edits save as you type. Notes are read-only during combat."
+			or "Combat: notes are read-only. Editing unlocks when combat ends.")
 	end
 end
 
@@ -157,7 +159,7 @@ function notes.ApplyStyle()
 	if f then
 		safe(f, "SetBackdropColor", s.background[1], s.background[2], s.background[3], s.background[4])
 		f:SetSize(s.width, notes.IsCollapsed() and TITLE_HEIGHT or s.height)
-		if f.edit then f.edit:SetSize(s.width - 16, s.height - TITLE_HEIGHT - 24) end
+		if f.edit then f.edit:SetSize(s.width - 16, math.max(16, s.height - TITLE_HEIGHT - 32)) end
 		if f.title then safe(f.title, "SetFont", FONT, s.fontSize + 2, "") end
 	end
 	if notes.tabEditor then safe(notes.tabEditor, "SetFont", FONT, s.fontSize, "") end
@@ -236,6 +238,9 @@ function notes.EnsureWindow()
 		safe(self, "StopMovingOrSizing")
 		notes.SavePosition()
 	end)
+	-- Hiding a focused editor must release focus so it cannot swallow keys while
+	-- the window is closed (Close, Escape or a reload).
+	f:SetScript("OnHide", function() if f.edit then safe(f.edit, "ClearFocus") end end)
 	f:SetSize(s.width, s.height)
 	f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
 	f:SetBackdropBorderColor(0.18, 0.38, 0.4, 0.9)

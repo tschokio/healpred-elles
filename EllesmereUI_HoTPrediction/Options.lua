@@ -673,6 +673,7 @@ local function ensureWindow()
 		c.notesWidth:SetText(tostring(s.width)); c.notesHeight:SetText(tostring(s.height)); c.notesFont:SetText(tostring(s.fontSize))
 		for i, key in ipairs({ "notesTextR", "notesTextG", "notesTextB" }) do c[key]:SetText(tostring(s.textColor[i])) end
 		for i, key in ipairs({ "notesBgR", "notesBgG", "notesBgB", "notesBgA" }) do c[key]:SetText(tostring(s.background[i])) end
+		ns.notes.ApplyStyle() -- keep the tab editor's font/colour in sync with saved style
 		ns.notes.RefreshText()
 		ns.notes.RefreshEditable()
 	end
@@ -792,6 +793,7 @@ local function ensureWindow()
 	f:SetScript("OnShow", function() f.Refresh(); f.SelectTab(f.selectedTab or "settings") end)
 	f:SetScript("OnHide", function()
 		for _, key in ipairs({"alpha", "red", "green", "blue"}) do f.controls[key]:ClearFocus() end
+		if f.notesEditor then f.notesEditor:ClearFocus() end
 	end)
 	if type(UISpecialFrames) == "table" then UISpecialFrames[#UISpecialFrames + 1] = WINDOW end
 	f.SelectTab("settings")

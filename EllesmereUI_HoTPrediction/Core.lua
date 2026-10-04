@@ -97,6 +97,9 @@ function ns.applyDefaults(dst, defaults)
 	dst = dst or {}
 	for k, v in pairs(defaults) do
 		if type(v) == "table" then
+			-- A hand-edited or truncated SavedVariables value of the wrong type
+			-- must be replaced by a fresh table, not indexed as one.
+			if type(dst[k]) ~= "table" then dst[k] = nil end
 			dst[k] = ns.applyDefaults(dst[k], v)
 		elseif dst[k] == nil then
 			dst[k] = v
