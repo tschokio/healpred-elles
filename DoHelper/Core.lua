@@ -6,7 +6,11 @@
 local addonName, ns = ...
 
 ns.name = addonName
-ns.version = "0.10.0"
+ns.version = "0.12.0"
+-- Bumped when saved settings need a one-time migration. The marker lives in
+-- SavedVariables, so a migration (for example the old blank crit-sound path)
+-- runs exactly once and a deliberate later blank choice is preserved.
+ns.SCHEMA_VERSION = 2
 ns.debugEnabled = false
 ns.inCombat = false
 ns.started = false
@@ -108,6 +112,67 @@ function ns.applyDefaults(dst, defaults)
 	return dst
 end
 
+-----------------------------------------------------------------------------
+-- one-time saved-settings migrations
+-----------------------------------------------------------------------------
+
+local LEGACY_TEXT_COLOR = { 1.0, 0.9, 0.3 }
+
+local function sanitizedRGB(t)
+	if type(t) ~= "table" then return nil end
+	local out = {}
+	for i = 1, 3 do
+		local v = ns.toNumber(t[i])
+		if v == nil or v < 0 or v > 1 then return nil end
+		out[i] = v
+	end
+	return out
+end
+
+local function sameRGB(t, ref)
+	if type(t) ~= "table" then return false end
+	for i = 1, 3 do
+		local v = ns.toNumber(t[i])
+		if v == nil or math.abs(v - ref[i]) > 1e-9 then return false end
+	end
+	return true
+end
+
+-- Runs BEFORE applyDefaults, keyed by db.schema. It must never touch a saved
+-- value after the marker is written: a blank crit-sound path chosen on purpose
+-- later must survive every reload. Never raises on corrupted data.
+function ns.MigrateDatabase(db)
+	if type(db) ~= "table" then return end
+	local version = ns.toNumber(db.schema) or 0
+	if version >= ns.SCHEMA_VERSION then return end
+
+	-- v1 -> v2 combat text: the single legacy `color` becomes both new colours
+	-- only when it was genuinely custom. The old default gets the new distinct
+	-- enter/leave defaults instead, and a corrupted colour is ignored.
+	local ct = db.combatText
+	if type(ct) == "table" then
+		local hasEnter = type(ct.enterColor) == "table"
+		local hasLeave = type(ct.leaveColor) == "table"
+		if not hasEnter and not hasLeave then
+			local legacy = sanitizedRGB(ct.color)
+			if legacy and not sameRGB(legacy, LEGACY_TEXT_COLOR) then
+				ct.enterColor = { legacy[1], legacy[2], legacy[3] }
+				ct.leaveColor = { legacy[1], legacy[2], legacy[3] }
+			end
+		end
+	end
+
+	-- v1 -> v2 crit sounds: the old blank default becomes the bundled bam.mp3
+	-- exactly once. An explicit custom path is preserved, and after the marker
+	-- a deliberately blank path (built-in raid warning) is preserved too.
+	local cs = db.critSounds
+	if type(cs) == "table" and not ns.isSecret(cs.path) and (cs.path == nil or cs.path == "") then
+		cs.path = ns.DEFAULTS.critSounds.path
+	end
+
+	db.schema = ns.SCHEMA_VERSION
+end
+
 ------------------------------------------------------------------------------
 -- settings
 ------------------------------------------------------------------------------
@@ -152,6 +217,7 @@ function ns.initCapabilities()
 end
 
 ns.DEFAULTS = {
+	schema = 2,                    -- migration marker; never edit by hand
 	enabled = true,
 	debug = false,
 	alpha = 0.60,                  -- our segment's opacity (composited with native)
@@ -162,6 +228,7 @@ ns.DEFAULTS = {
 	approximatePrediction = false, -- opt-in: public tooltip/manual estimate, ignores heal absorbs
 	minimapHidden = false,
 	minimapAngle = 225,
+	critSounds = { enabled = false, damage = true, healing = true, path = "Interface\\AddOns\\DoHelper\\Sounds\\bam.mp3", channel = "Master", cooldown = 0.5 },
 	queuedSwingEnabled = true,
 	queuedSwingColor = { 0.0, 1.0, 1.0 }, -- distinct opaque next-swing border
 	queuedSwingThickness = 3,
@@ -191,17 +258,24 @@ ns.DEFAULTS = {
 	},
 	-- Small centered "+ combat" / "- combat" line shown on combat transitions.
 	-- Independent of the healing helper; its own event frame drives it.
+	-- enterColor / leaveColor are independent; `color` remains as the legacy
+	-- fallback for old saved data and old SetStyle callers.
 	combatText = {
 		enabled = true,
 		enterText = "+ combat",
 		leaveText = "- combat",
 		fontSize = 22,
-		color = { 1.0, 0.9, 0.3 },
+		enterColor = { 0.35, 0.88, 0.55 },
+		leaveColor = { 0.62, 0.74, 0.88 },
+		color = { 1.0, 0.9, 0.3 },   -- legacy fallback (old callers/data)
 		outline = true,
 		opacity = 1,
 		background = { 0, 0, 0, 0 }, -- rgba; alpha 0 = no background
 		duration = 2,                -- seconds; 0 = keep until the next change
 		fade = 0.5,                  -- seconds of fade-out before hiding
+		direction = "up",            -- "up" | "down" | "none"
+		distance = 18,               -- pixels; 0 = no motion
+		motion = 1,                  -- seconds for the scroll; 0.1-10
 		x = 0, y = 0,                -- saved offset from the screen center
 	},
 }
@@ -210,7 +284,9 @@ function ns.InitDatabase()
 	if type(EllesmereUI_HoTPredictionDB) ~= "table" then
 		EllesmereUI_HoTPredictionDB = {}
 	end
-	ns.db = ns.applyDefaults(EllesmereUI_HoTPredictionDB, ns.DEFAULTS)
+	local db = EllesmereUI_HoTPredictionDB
+	ns.MigrateDatabase(db)
+	ns.db = ns.applyDefaults(db, ns.DEFAULTS)
 	-- A fake test is session-only by design.
 	ns.db.showFake = nil
 	ns.debugEnabled = ns.db.debug and true or false
@@ -450,6 +526,7 @@ function ns.Startup()
 	if ns.learner and ns.learner.Setup then ns.learner.Setup() end
 	if ns.notes and ns.notes.Setup then ns.notes.Setup() end
 	if ns.combatText and ns.combatText.Setup then ns.combatText.Setup() end
+	if ns.critSounds and ns.critSounds.Setup then ns.critSounds.Setup() end
 	ns.SetRuntimeEnabled(ns.db.enabled)
 	ns.unregister("ADDON_LOADED")
 
@@ -581,9 +658,11 @@ function ns.HandleCommand(input)
 			ns.print("combat text preview: " .. tostring(args[2] or "enter") .. ".")
 		elseif op == "status" then
 			local s = ns.combatText.Style()
-			ns.print(string.format("combat text enabled=%s size=%s show=%.1fs fade=%.1fs color=%.2f,%.2f,%.2f pos=%s,%s",
+			ns.print(string.format("combat text enabled=%s size=%s show=%.1fs fade=%.1fs motion=%s %.1fs %.0fpx enter=%.2f,%.2f,%.2f leave=%.2f,%.2f,%.2f pos=%s,%s",
 				tostring(ns.db.combatText.enabled), tostring(s.fontSize), s.duration, s.fade,
-				s.color[1], s.color[2], s.color[3], tostring(s.x), tostring(s.y)))
+				tostring(s.direction), s.motion, s.distance,
+				s.enterColor[1], s.enterColor[2], s.enterColor[3],
+				s.leaveColor[1], s.leaveColor[2], s.leaveColor[3], tostring(s.x), tostring(s.y)))
 		else
 			ns.print("usage: /euihot combattext on|off | combattext test [enter|leave] | combattext status")
 		end
@@ -1045,6 +1124,13 @@ function ns._BuildStatusReport(includeDebug)
 		tostring(cleuFn), tostring(cap.cleuRequested), tostring(cleuReg), tostring(delivered),
 		cap.cleuError and (" error=" .. tostring(cap.cleuError)) or "")
 	if cap.cleuGateReason then add("cleu gate: %s", tostring(cap.cleuGateReason)) end
+	if ns.critSounds then
+		local diag = ns.critSounds.diagnostics or {}
+		add("crit sounds enabled=%s damage=%s healing=%s path=%s detection=%s delivered=%d playerCrits=%d",
+			tostring(ns.db.critSounds.enabled), tostring(ns.db.critSounds.damage), tostring(ns.db.critSounds.healing),
+			tostring(ns.db.critSounds.path), tostring(ns.critSounds.DetectionState()),
+			ns.toNumber(diag.delivered) or 0, ns.toNumber(diag.playerCrits) or 0)
+	end
 	local CAL = "/euihot interval <id> <seconds> and /euihot amount <id> <tickTotal> [stacks]"
 	if not cleuFn or not cleuReg then
 		add("automatic tick learning unavailable; %s", ns.db.approximatePrediction
