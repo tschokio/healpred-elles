@@ -1,6 +1,7 @@
 -- Addon-owned configuration UI. No libraries, native frame edits or idle timers.
 -- The only OnUpdate exists while the user drags the minimap button.
 local addonName, ns = ...
+local UI = ns.ui
 local WINDOW = "EllesmereUI_HoTPredictionOptions"
 -- The appearance editor is a child of the main settings window in spirit, but a
 -- separate root frame. Both used DIALOG, so the main window's deeper
@@ -8,18 +9,26 @@ local WINDOW = "EllesmereUI_HoTPredictionOptions"
 -- interleaved into it. A higher stratum than DIALOG, still below TOOLTIP,
 -- lifts the whole editor (controls and preview inherit at creation).
 local APPEARANCE_STRATA = "FULLSCREEN_DIALOG"
+local NAVIGATION = {
+	{ "settingsTab", "settings", "Settings", "Healing predictions, highlights and general preferences." },
+	{ "spellsTab", "spells", "Implemented spells", "Browse class coverage, exact rank IDs and limitations." },
+	{ "notesTab", "notes", "Notes", "Keep your topics separate and style your floating notepad." },
+	{ "combatTab", "combat", "Combat text", "Customize the indicator shown when entering or leaving combat." },
+	{ "soundsTab", "sounds", "Sounds", "Choose an audio cue for readable critical hits and heals." },
+	{ "weaponTab", "weapons", "Weapon training", "Find proficiencies, starting skills and weapon trainers." },
+}
+local HELP = {
+	notes = { "YOUR NOTEPAD", "A place for reminders", "Use the arrows to switch topics. New topic creates a separate note; edit its title and press Enter to rename it.\n\nYour edits save as you type. The floating window mirrors the active topic.\n\nClick the arrow beside Do to collapse it to a tiny Do ^ toggle. Drag its header to move it.", "Editing locks during combat. Switching topics remains available." },
+	combat = { "COMBAT INDICATOR", "Clear, quiet feedback", "Choose your enter and leave labels, independent enter/leave colours, the text size and the timing.\n\nDirection and distance scroll the line up or down; 0 distance disables motion. Motion always restarts from the saved position.\n\nA duration of 0 keeps the label until the next transition (after the scroll settles).\n\nUse Preview + and Preview - to test without starting combat. Unlock to drag, then lock again to restore click-through.", "Size, colours and position remain independent of the settings theme." },
+	sounds = { "CUSTOM AUDIO", "Make each crit count", "The bundled default is Interface\\AddOns\\DoHelper\\Sounds\\bam.mp3. Use Cue to switch between bam.mp3 and the built-in raid warning, or type another local .ogg/.mp3 path.\n\nClick Apply + Test sound to preview. Use a cooldown to prevent sound bursts from multi-target hits.\n\nTry crit detection is an explicit, session-only combat-log opt-in; enabling sounds alone never registers anything.", "Registration is not delivery. Restricted clients may only support the test; the counters show what actually arrived." },
+}
 
 local function safe(obj, method, ...)
 	if obj and type(obj[method]) == "function" then return obj[method](obj, ...) end
 end
 
 local function label(parent, text, x, y, width)
-	local l = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-	l:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
-	l:SetWidth(width or 490)
-	l:SetJustifyH("LEFT")
-	l:SetText(text)
-	return l
+	return UI.Label(parent, text, x, y, width or 490)
 end
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
@@ -27,9 +36,7 @@ local function panel(parent, x, y, width, height)
 	local p = CreateFrame("Frame", nil, parent, "BackdropTemplate")
 	p:SetSize(width, height)
 	p:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
-	p:SetBackdrop({ bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 })
-	p:SetBackdropColor(0.055, 0.075, 0.095, 1)
-	p:SetBackdropBorderColor(0.12, 0.18, 0.22, 1)
+	UI.Surface(p)
 	return p
 end
 
@@ -39,36 +46,20 @@ end
 -- the parent's frame level and always render beneath its text. Textures also
 -- never intercept mouse input, unlike a mouse-enabled frame.
 local function background(parent, x, y, width, height)
-	local border = parent:CreateTexture(nil, "BACKGROUND")
-	border:SetTexture(WHITE)
-	border:SetVertexColor(0.12, 0.18, 0.22, 1)
-	border:SetPoint("TOPLEFT", parent, "TOPLEFT", x - 1, y + 1)
-	border:SetSize(width + 2, height + 2)
-	local fill = parent:CreateTexture(nil, "BACKGROUND")
-	fill:SetTexture(WHITE)
-	fill:SetVertexColor(0.055, 0.075, 0.095, 1)
-	fill:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
-	fill:SetSize(width, height)
-	parent.background = fill
-	return fill
+	return UI.Background(parent, x, y, width, height)
 end
 
 local function windowStyle(f, title, subtitle, width)
-	f:SetBackdrop({ bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 })
-	f:SetBackdropColor(0.025, 0.035, 0.048, 0.99)
-	f:SetBackdropBorderColor(0.18, 0.38, 0.4, 1)
+	UI.Window(f)
 	local heading = label(f, title, 24, -18, width - 48)
-	heading:SetFont("Fonts\\FRIZQT__.TTF", 18, "")
-	heading:SetTextColor(0.8, 1, 0.96, 1)
+	UI.Text(heading, "heading")
 	local hint = label(f, subtitle, 24, -44, width - 48)
-	hint:SetTextColor(0.55, 0.66, 0.72, 1)
+	UI.Text(hint, "muted")
+	f.heading, f.subtitle = heading, hint
 end
 
 local function flatButton(b)
-	-- Addon-owned, non-secure widget; keep its template's keyboard/click behavior.
-	if b.SetNormalTexture then b:SetNormalTexture(WHITE); b:GetNormalTexture():SetVertexColor(0.1, 0.19, 0.23, 1) end
-	if b.SetPushedTexture then b:SetPushedTexture(WHITE); b:GetPushedTexture():SetVertexColor(0.08, 0.32, 0.34, 1) end
-	b:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+	UI.Button(b)
 end
 
 function ns.OpenSpellEditor()
@@ -78,16 +69,20 @@ function ns.OpenSpellEditor()
 		ns.spellEditorWindow = f
 		f:SetSize(510, 410); f:SetPoint("CENTER"); f:SetFrameStrata(APPEARANCE_STRATA)
 		f:EnableMouse(true)
+		f:SetMovable(true); f:SetClampedToScreen(true); f:RegisterForDrag("LeftButton")
+		f:SetScript("OnDragStart", function(self) self:StartMoving() end)
+		f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
 		windowStyle(f, "Manage your spells", "Exact spell IDs; changes save immediately.", 510)
 		f.mode = "queue"
 		f.controls = {}
 		f.fieldLabels = {}
 		local function input(key, title, y, width)
 			f.fieldLabels[key] = label(f, title, 24, y - 5, 210)
-			local e = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
+			local e = CreateFrame("EditBox", nil, f, "BackdropTemplate")
 			e:SetSize(width or 240, 24); e:SetPoint("TOPLEFT", f, "TOPLEFT", 240, y)
 			e:SetAutoFocus(false); e:SetMaxLetters(key == "name" and 80 or 12)
 			e:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+			UI.Input(e)
 			f.controls[key] = e
 		end
 		input("id", "Spell ID (exact rank / aura)", -120)
@@ -103,8 +98,8 @@ function ns.OpenSpellEditor()
 		end
 		local function mode(value)
 			f.mode = value
-			f.controls.queue:SetText(value == "queue" and "[Action highlight]" or "Action highlight")
-			f.controls.hot:SetText(value == "hot" and "[Player HoT]" or "Player HoT")
+			UI.Selected(f.controls.queue, value == "queue")
+			UI.Selected(f.controls.hot, value == "hot")
 			f.controls.interval:SetShown(value == "hot"); f.controls.amount:SetShown(value == "hot")
 			for _, key in ipairs({"interval", "amount"}) do
 				if value == "hot" then f.fieldLabels[key]:Show() else f.fieldLabels[key]:Hide() end
@@ -147,20 +142,23 @@ function ns.OpenSpellEditor()
 		button("remove", "Remove", 160, -366, 100, function() apply("remove") end)
 		button("reset", "Reset ID", 270, -366, 100, function() apply("reset") end)
 		button("close", "Close", 380, -366, 100, function() f:Hide() end)
+		UI.Button(f.controls.add, "primary")
+		UI.Button(f.controls.remove, "danger")
 		f:SetScript("OnHide", function()
 			for _, key in ipairs({"id", "name", "interval", "amount"}) do f.controls[key]:ClearFocus() end
 		end)
 		if type(UISpecialFrames) == "table" then UISpecialFrames[#UISpecialFrames + 1] = "EllesmereUI_HoTPredictionSpellEditor" end
 		mode("queue")
 	end
+	UI.FitWindow(f)
 	f:Show()
 	return f
 end
 
-local function queuePreview(parent, x, y, width, height)
+local function queuePreview(parent, x, y, width, height, healing)
 	local p = panel(parent, x, y, width, height)
-	label(p, "ACTION BUTTON PREVIEW", 16, -18, width - 32):SetTextColor(0.35, 0.88, 0.8, 1)
-	label(p, "Click the icon to queue / release the sample.", 16, -44, width - 32)
+	UI.Text(label(p, "ACTION BUTTON PREVIEW", 16, -18, width - 32), "section")
+	UI.Text(label(p, "Click the icon to toggle the sample highlight.", 16, -44, width - 32), "muted")
 	local b = CreateFrame("Button", nil, p, "BackdropTemplate")
 	b:SetSize(48, 48)
 	b:SetPoint("TOP", p, "TOP", 0, -118)
@@ -178,6 +176,11 @@ local function queuePreview(parent, x, y, width, height)
 	local state = label(p, "", 16, -205, width - 32)
 	local details = label(p, "", 16, -238, width - 32)
 	label(p, "Sample only. No real casts or queues.\n48px icon; actual size follows EllesmereUI.", 16, -278, width - 32):SetTextColor(0.55, 0.66, 0.72, 1)
+	if healing then
+		UI.Rect(p, 16, -338, width - 32, 1, UI.colors.border)
+		UI.Label(p, "HEALING OVERLAY TEST", 16, -356, width - 32, "section")
+		UI.Label(p, "A session-only test on your player frame. Stop it to return to real healing.", 16, -378, width - 32, "muted")
+	end
 	p.button, p.border, p.queued = b, border, true
 	p.abilities = {}
 	for i, ability in ipairs({
@@ -266,6 +269,7 @@ function ns.InitOptions()
 		open:SetPoint("TOPLEFT", panel, "TOPLEFT", 16, -76)
 		open:SetText("Open DoHelper settings")
 		open:SetScript("OnClick", function() ns.OpenOptions() end)
+		UI.Button(open, "primary")
 		panel:Hide()
 		local ok = pcall(function()
 			if Settings and Settings.RegisterCanvasLayoutCategory and Settings.RegisterAddOnCategory then
@@ -344,12 +348,13 @@ function ns.OpenQueueAppearance()
 		end
 		local function field(key, title, y)
 			label(f, title, 24, y - 5, 335)
-			local e = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
+			local e = CreateFrame("EditBox", nil, f, "BackdropTemplate")
 			e:SetSize(90, 24)
 			e:SetPoint("TOPLEFT", f, "TOPLEFT", 375, y)
 			e:SetAutoFocus(false)
 			e:SetMaxLetters(12)
 			e:SetScript("OnEscapePressed", function(self) self:ClearFocus(); f:Hide() end)
+			UI.Input(e)
 			f.controls[key] = e
 		end
 		field("thickness", "Border thickness (1-12 pixels)", -76)
@@ -357,12 +362,13 @@ function ns.OpenQueueAppearance()
 		field("alpha", "Opacity (0-1)", -144)
 		label(f, "Color RGB (0-1 each)", 24, -187, 200)
 		for i, key in ipairs({ "red", "green", "blue" }) do
-			local e = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
+			local e = CreateFrame("EditBox", nil, f, "BackdropTemplate")
 			e:SetSize(65, 24)
 			e:SetPoint("TOPLEFT", f, "TOPLEFT", 230 + (i - 1) * 80, -182)
 			e:SetAutoFocus(false)
 			e:SetMaxLetters(12)
 			e:SetScript("OnEscapePressed", function(self) self:ClearFocus(); f:Hide() end)
+			UI.Input(e)
 			f.controls[key] = e
 		end
 		label(f, "Positive spacing enlarges the border; negative brings it inside the icon.\nSize/thickness edits made in combat take effect when combat ends.", 24, -222, 460)
@@ -411,6 +417,7 @@ function ns.OpenQueueAppearance()
 			message:SetText(ns.api.InCombat() and "Defaults saved. Size applies after combat." or "Default cyan border restored.")
 		end)
 		button("close", "Close", 370, 110, function() f:Hide() end)
+		UI.Button(f.controls.apply, "primary")
 		for _, key in ipairs({ "thickness", "padding", "alpha", "red", "green", "blue" }) do
 			f.controls[key]:SetScript("OnTextChanged", f.UpdatePreview)
 		end
@@ -421,6 +428,7 @@ function ns.OpenQueueAppearance()
 	end
 	-- Keep the root's ordering consistent when this lazy window is reused.
 	f:SetFrameStrata(APPEARANCE_STRATA)
+	UI.FitWindow(f)
 	f.Refresh()
 	f:Show()
 	return f
@@ -431,7 +439,8 @@ local function ensureWindow()
 	if not CreateFrame then return nil end
 	local f = CreateFrame("Frame", WINDOW, UIParent, "BackdropTemplate")
 	ns.optionsWindow = f
-	f:SetSize(800, 650)
+	f:SetSize(1000, 712)
+	f.contentX, f.contentY = 211, -128
 	f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
 	f:SetFrameStrata("DIALOG")
 	f:SetClampedToScreen(true)
@@ -440,16 +449,43 @@ local function ensureWindow()
 	f:RegisterForDrag("LeftButton")
 	f:SetScript("OnDragStart", function(self) self:StartMoving() end)
 	f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
-	windowStyle(f, "DoHelper", "EllesmereUI helper suite - healing predictions, queued attacks, notes, combat text and weapon training.", 800)
-	f.preview = queuePreview(f, 552, -100, 224, 486)
+	windowStyle(f, "DoHelper", "EllesmereUI helper suite  /  Make it yours", 1000)
+	f.heading:ClearAllPoints(); f.heading:SetPoint("TOPLEFT", f, "TOPLEFT", 72, -16); f.heading:SetWidth(700)
+	UI.Text(f.heading, "title")
+	f.subtitle:ClearAllPoints(); f.subtitle:SetPoint("TOPLEFT", f, "TOPLEFT", 72, -46); f.subtitle:SetWidth(700)
+	UI.Rect(f, 24, -22, 34, 34, UI.colors.selected, "BORDER")
+	UI.Label(f, "Do", 29, -30, 28, "heading")
+	UI.Label(f, "v" .. ns.version, 850, -29, 90, "muted")
+	UI.Rect(f, 16, -74, 968, 1, UI.colors.border)
+	f.sidebar = panel(f, 16, -84, 164, 584)
+	UI.Label(f.sidebar, "PERSONALIZE", 12, -16, 140, "section")
+	UI.Label(f.sidebar, "TOOLS", 12, -316, 140, "section")
+	f.sidebarStatus = UI.Label(f.sidebar, "", 12, -544, 140, "muted")
+	UI.Label(f.sidebar, "/dohelper options", 12, -562, 140, "muted")
+	f.pageTitle = UI.Label(f, "", 212, -88, 750, "heading")
+	f.pageDescription = UI.Label(f, "", 212, -112, 750, "muted")
+	f.preview = queuePreview(f, 752, -128, 224, 492, true)
+	f.helpPanel = panel(f, 752, -128, 224, 492)
+	f.helpPanel.heading = UI.Label(f.helpPanel, "", 16, -18, 192, "section")
+	f.helpPanel.title = UI.Label(f.helpPanel, "", 16, -50, 192, "heading")
+	f.helpPanel.body = UI.Label(f.helpPanel, "", 16, -88, 192)
+	UI.Rect(f.helpPanel, 16, -392, 192, 1, UI.colors.border)
+	f.helpPanel.hint = UI.Label(f.helpPanel, "", 16, -412, 192, "muted")
+	UI.Rect(f, 196, -674, 788, 1, UI.colors.border)
+	UI.Label(f, "Your settings are saved locally.  |  Escape closes this window.", 212, -689, 640, "muted")
 	local page = CreateFrame("Frame", nil, f)
 	page:SetSize(540, 610)
-	page:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -34)
+	page:SetPoint("TOPLEFT", f, "TOPLEFT", 196, -62)
 	f.settingsPage = page
-	background(page, 12, -54, 516, 510)
+	background(page, 12, -54, 516, 263)
+	background(page, 12, -329, 516, 158)
+	background(page, 12, -499, 516, 111)
+	UI.Label(page, "HEALING PREDICTION", 24, -66, 470, "section")
+	UI.Label(page, "GENERAL & DIAGNOSTICS", 24, -341, 470, "section")
+	UI.Label(page, "ACTION HIGHLIGHTS", 24, -511, 470, "section")
 	local catalog = CreateFrame("Frame", nil, f)
 	catalog:SetSize(510, 492)
-	catalog:SetPoint("TOPLEFT", f, "TOPLEFT", 15, -100)
+	catalog:SetPoint("TOPLEFT", f, "TOPLEFT", f.contentX, f.contentY)
 	f.spellsPage = catalog
 	background(catalog, -3, 4, 516, 492)
 	local catalogHeading = label(catalog, "503 spellbook entries reviewed | select a class", 8, -5, 482)
@@ -553,7 +589,6 @@ local function ensureWindow()
 		local b = CreateFrame("Button", nil, catalog, "UIPanelButtonTemplate")
 		b:SetSize(key == "ALL" and 52 or 40, 38)
 		b:SetPoint("TOPLEFT", catalog, "TOPLEFT", index == 0 and 8 or 64 + (index - 1) * 44, -28)
-		flatButton(b)
 		if key == "ALL" then b:SetText("All") else
 			local icon = b:CreateTexture(nil, "ARTWORK")
 			icon:SetTexture("Interface\\Icons\\ClassIcon_" .. key:lower())
@@ -561,6 +596,7 @@ local function ensureWindow()
 		end
 		b:SetScript("OnClick", function()
 			f.catalogFilter = key
+			for filter, control in pairs(f.catalogClassButtons) do UI.Selected(control, filter == key) end
 			catalogHeading:SetText(name .. " | click Rank IDs for exact spells")
 			f.RefreshCatalog()
 		end)
@@ -568,6 +604,8 @@ local function ensureWindow()
 			if GameTooltip then GameTooltip:SetOwner(self, "ANCHOR_TOP"); GameTooltip:AddLine(name); GameTooltip:Show() end
 		end)
 		b:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+		flatButton(b)
+		UI.Selected(b, key == "ALL")
 		f.catalogClassButtons[key] = b
 	end
 	classButton("ALL", "All classes", 0)
@@ -577,12 +615,12 @@ local function ensureWindow()
 	local refreshing = false
 	local notesPage = CreateFrame("Frame", nil, f)
 	notesPage:SetSize(510, 492)
-	notesPage:SetPoint("TOPLEFT", f, "TOPLEFT", 15, -100)
+	notesPage:SetPoint("TOPLEFT", f, "TOPLEFT", f.contentX, f.contentY)
 	f.notesPage = notesPage
 	background(notesPage, -3, 4, 516, 492)
 	local notesHeading = label(notesPage, "Notes | saved as you type | editable out of combat", 8, -5, 482)
 	notesHeading:SetTextColor(0.55, 0.75, 0.78, 1)
-	local notesMessage = label(notesPage, "", 10, -400, 486)
+	local notesMessage = label(notesPage, "", 10, -416, 486)
 
 	-- Topic row: every note keeps its own topic ("site"). Prev/next cycle the
 	-- list, the middle field renames the active topic, + / - add and delete.
@@ -598,7 +636,7 @@ local function ensureWindow()
 	end
 	notesTopicButton("notesPrev", "<", 10, 22, function() ns.notes.CycleSite(-1) end)
 	notesTopicButton("notesNext", ">", 36, 22, function() ns.notes.CycleSite(1) end)
-	local notesTitle = CreateFrame("EditBox", nil, notesPage, "InputBoxTemplate")
+	local notesTitle = CreateFrame("EditBox", nil, notesPage, "BackdropTemplate")
 	notesTitle:SetSize(246, 20)
 	notesTitle:SetPoint("TOPLEFT", notesPage, "TOPLEFT", 64, -28)
 	notesTitle:SetAutoFocus(false)
@@ -609,6 +647,7 @@ local function ensureWindow()
 	end)
 	notesTitle:SetScript("OnEditFocusLost", function(self) ns.notes.RenameSite(ns.notes.ActiveId(), self:GetText()) end)
 	notesTitle:SetScript("OnEscapePressed", function(self) f.RefreshNotes(); self:ClearFocus() end)
+	UI.Input(notesTitle)
 	f.controls.notesTitle = notesTitle
 	notesTopicButton("notesNew", "New topic", 316, 78, function()
 		local site = ns.notes.AddSite()
@@ -634,18 +673,20 @@ local function ensureWindow()
 	notesEditor:SetBackdropBorderColor(0.2, 0.3, 0.34, 0.9)
 	notesEditor:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 	notesEditor:SetScript("OnTextChanged", function(self) ns.notes.OnEditorChanged(self) end)
+	UI.Input(notesEditor, true)
 	f.notesEditor = notesEditor
 	ns.notes.tabEditor = notesEditor
 	f.notesHint = label(notesPage, "", 10, -222, 486)
 	ns.notes.tabHint = f.notesHint
 
 	local function noteField(key, x, y, width)
-		local e = CreateFrame("EditBox", nil, notesPage, "InputBoxTemplate")
+		local e = CreateFrame("EditBox", nil, notesPage, "BackdropTemplate")
 		e:SetSize(width or 52, 22)
 		e:SetPoint("TOPLEFT", notesPage, "TOPLEFT", x, y)
 		e:SetAutoFocus(false)
 		e:SetMaxLetters(10)
 		e:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+		UI.Input(e)
 		f.controls[key] = e
 		return e
 	end
@@ -708,6 +749,8 @@ local function ensureWindow()
 		ns.notes.Close()
 		notesMessage:SetText("Floating notes closed.")
 	end)
+	UI.Button(f.controls.notesApply, "primary")
+	UI.Button(f.controls.notesDelete, "danger")
 	function f.RefreshNotes()
 		local c = f.controls
 		local s = ns.notes.Style()
@@ -724,18 +767,19 @@ local function ensureWindow()
 
 	local combatPage = CreateFrame("Frame", nil, f)
 	combatPage:SetSize(510, 492)
-	combatPage:SetPoint("TOPLEFT", f, "TOPLEFT", 15, -100)
+	combatPage:SetPoint("TOPLEFT", f, "TOPLEFT", f.contentX, f.contentY)
 	f.combatPage = combatPage
 	background(combatPage, -3, 4, 516, 492)
 	local combatHeading = label(combatPage, "Combat text | shown on entering and leaving combat", 8, -5, 482)
 	combatHeading:SetTextColor(0.55, 0.75, 0.78, 1)
 	local function combatField(key, x, y, width, maxLetters)
-		local e = CreateFrame("EditBox", nil, combatPage, "InputBoxTemplate")
+		local e = CreateFrame("EditBox", nil, combatPage, "BackdropTemplate")
 		e:SetSize(width or 56, 22)
 		e:SetPoint("TOPLEFT", combatPage, "TOPLEFT", x, y)
 		e:SetAutoFocus(false)
 		e:SetMaxLetters(maxLetters or 10)
 		e:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+		UI.Input(e)
 		f.controls[key] = e
 		return e
 	end
@@ -746,6 +790,7 @@ local function ensureWindow()
 		label(combatPage, title, x + 30, y - 6, width)
 		c:SetScript("OnClick", function(self) if not refreshing then write(self:GetChecked() and true or false); f.Refresh() end end)
 		c.read = read
+		UI.Checkbox(c)
 		f.controls[key] = c
 		return c
 	end
@@ -771,34 +816,47 @@ local function ensureWindow()
 	combatField("combatDuration", 258, -102, 60)
 	label(combatPage, "Fade seconds", 335, -107, 105)
 	combatField("combatFade", 442, -102, 58)
-	label(combatPage, "Text RGB (0-1)", 10, -143, 120)
-	combatField("combatTextR", 138, -138, 50)
-	combatField("combatTextG", 192, -138, 50)
-	combatField("combatTextB", 246, -138, 50)
-	label(combatPage, "Background RGBA (0-1; alpha 0 = none)", 10, -179, 255)
-	combatField("combatBgR", 272, -174, 48)
-	combatField("combatBgG", 324, -174, 48)
-	combatField("combatBgB", 376, -174, 48)
-	combatField("combatBgA", 428, -174, 48)
-	combatCheck("combatOutline", "Text outline", 18, -212, 140,
+	label(combatPage, "Enter text RGB (0-1)", 10, -143, 150)
+	combatField("combatEnterR", 170, -138, 50)
+	combatField("combatEnterG", 224, -138, 50)
+	combatField("combatEnterB", 278, -138, 50)
+	label(combatPage, "Leave text RGB (0-1)", 10, -177, 150)
+	combatField("combatLeaveR", 170, -172, 50)
+	combatField("combatLeaveG", 224, -172, 50)
+	combatField("combatLeaveB", 278, -172, 50)
+	label(combatPage, "Background RGBA (0-1; alpha 0 = none)", 10, -211, 255)
+	combatField("combatBgR", 272, -206, 48)
+	combatField("combatBgG", 324, -206, 48)
+	combatField("combatBgB", 376, -206, 48)
+	combatField("combatBgA", 428, -206, 48)
+	label(combatPage, "Direction (up / down / none)", 10, -245, 160)
+	local dirButton = combatButton("combatDir", "Direction: Up", 180, -240, 130, function(self)
+		local order = { Up = "Down", Down = "None", None = "Up" }
+		local nextDir = order[self.direction or "Up"] or "Up"
+		self.direction = nextDir
+		self:SetText("Direction: " .. nextDir)
+	end)
+	dirButton.direction = "Up"
+	label(combatPage, "Distance px (0-100)", 10, -279, 130)
+	combatField("combatDistance", 145, -274, 55)
+	label(combatPage, "Motion seconds (0.1-10)", 220, -279, 150)
+	combatField("combatMotion", 375, -274, 55)
+	combatCheck("combatOutline", "Text outline", 18, -308, 140,
 		function() return ns.db.combatText.outline end,
 		function(v) ns.db.combatText.outline = v and true or false; ns.combatText.Refresh() end)
-	combatCheck("combatUnlock", "Unlock to drag (click-through when off)", 200, -212, 300,
+	combatCheck("combatUnlock", "Unlock to drag (click-through when off)", 200, -308, 270,
 		function() return ns.combatText.unlocked end,
 		function(v) ns.combatText.SetUnlocked(v) end)
-	label(combatPage, "Position offset X / Y from screen centre", 10, -252, 250)
-	combatField("combatX", 270, -247, 70)
-	combatField("combatY", 348, -247, 70)
-	local combatMessage = label(combatPage, "", 10, -322, 486)
-	combatButton("combatResetPos", "Reset position", 428, -247, 72, function()
-		local s = ns.combatText.Style()
-		ns.combatText.SetStyle({ enterText = s.enterText, leaveText = s.leaveText, fontSize = s.fontSize,
-			opacity = s.opacity, duration = s.duration, fade = s.fade, outline = s.outline,
-			color = s.color, background = s.background, x = 0, y = 0 })
-		combatMessage:SetText("Combat text position reset to screen centre.")
-		f.Refresh()
+	label(combatPage, "Position offset X / Y from screen centre", 10, -347, 250)
+	combatField("combatX", 270, -342, 70)
+	combatField("combatY", 348, -342, 70)
+	local combatMessage = label(combatPage, "", 10, -408, 486)
+	combatButton("combatResetPos", "Center", 428, -342, 72, function()
+		local ok, message = ns.combatText.SetPosition(0, 0)
+		combatMessage:SetText(ok and "Combat text position reset to screen centre." or message)
+		f.RefreshCombat()
 	end)
-	combatButton("combatApply", "Apply style", 10, -284, 110, function()
+	combatButton("combatApply", "Apply style", 10, -376, 110, function()
 		local c = f.controls
 		local ok, message = ns.combatText.SetStyle({
 			enterText = c.combatEnter:GetText(),
@@ -808,37 +866,47 @@ local function ensureWindow()
 			duration = tonumber(c.combatDuration:GetText()),
 			fade = tonumber(c.combatFade:GetText()),
 			outline = c.combatOutline:GetChecked() and true or false,
-			color = { tonumber(c.combatTextR:GetText()), tonumber(c.combatTextG:GetText()), tonumber(c.combatTextB:GetText()) },
+			enterColor = { tonumber(c.combatEnterR:GetText()), tonumber(c.combatEnterG:GetText()), tonumber(c.combatEnterB:GetText()) },
+			leaveColor = { tonumber(c.combatLeaveR:GetText()), tonumber(c.combatLeaveG:GetText()), tonumber(c.combatLeaveB:GetText()) },
 			background = { tonumber(c.combatBgR:GetText()), tonumber(c.combatBgG:GetText()), tonumber(c.combatBgB:GetText()), tonumber(c.combatBgA:GetText()) },
+			direction = c.combatDir.direction,
+			distance = tonumber(c.combatDistance:GetText()),
+			motion = tonumber(c.combatMotion:GetText()),
 			x = tonumber(c.combatX:GetText()),
 			y = tonumber(c.combatY:GetText()),
 		})
 		if not ok then combatMessage:SetText(message); return end
 		for _, key in ipairs({ "combatEnter", "combatLeave", "combatFont", "combatOpacity", "combatDuration", "combatFade",
-			"combatTextR", "combatTextG", "combatTextB", "combatBgR", "combatBgG", "combatBgB", "combatBgA", "combatX", "combatY" }) do
+			"combatEnterR", "combatEnterG", "combatEnterB", "combatLeaveR", "combatLeaveG", "combatLeaveB",
+			"combatBgR", "combatBgG", "combatBgB", "combatBgA", "combatDistance", "combatMotion", "combatX", "combatY" }) do
 			c[key]:ClearFocus()
 		end
 		combatMessage:SetText("Combat text style saved.")
 		f.RefreshCombat()
 	end)
-	combatButton("combatResetStyle", "Reset style", 126, -284, 120, function()
+	combatButton("combatResetStyle", "Reset style", 126, -376, 120, function()
 		local d = ns.DEFAULTS.combatText
 		ns.combatText.SetStyle({ enterText = d.enterText, leaveText = d.leaveText, fontSize = d.fontSize,
 			opacity = d.opacity, duration = d.duration, fade = d.fade, outline = d.outline,
 			color = { d.color[1], d.color[2], d.color[3] },
+			enterColor = { d.enterColor[1], d.enterColor[2], d.enterColor[3] },
+			leaveColor = { d.leaveColor[1], d.leaveColor[2], d.leaveColor[3] },
 			background = { d.background[1], d.background[2], d.background[3], d.background[4] },
+			direction = d.direction, distance = d.distance, motion = d.motion,
 			x = d.x, y = d.y })
 		combatMessage:SetText("Default combat text style restored.")
 		f.Refresh() -- re-check the outline box too, not just the numeric fields
 	end)
-	combatButton("combatPreviewEnter", "Preview +", 252, -284, 110, function()
+	combatButton("combatPreviewEnter", "Preview +", 252, -376, 110, function()
 		ns.combatText.Preview("enter")
-		combatMessage:SetText("Preview shown; it fades like a real transition.")
+		combatMessage:SetText("Preview shown; it scrolls and fades like a real transition.")
 	end)
-	combatButton("combatPreviewLeave", "Preview -", 368, -284, 110, function()
+	combatButton("combatPreviewLeave", "Preview -", 368, -376, 110, function()
 		ns.combatText.Preview("leave")
-		combatMessage:SetText("Preview shown; it fades like a real transition.")
+		combatMessage:SetText("Preview shown; it scrolls and fades like a real transition.")
 	end)
+	UI.Text(label(combatPage, "Motion restarts from the saved position on every transition. Show seconds 0 keeps the label until the next change after it settles. Enter and leave colours are independent.", 10, -440, 486), "muted")
+	UI.Button(f.controls.combatApply, "primary")
 	function f.RefreshCombat()
 		local c = f.controls
 		local s = ns.combatText.Style()
@@ -848,8 +916,14 @@ local function ensureWindow()
 		c.combatOpacity:SetText(tostring(s.opacity))
 		c.combatDuration:SetText(tostring(s.duration))
 		c.combatFade:SetText(tostring(s.fade))
-		for i, key in ipairs({ "combatTextR", "combatTextG", "combatTextB" }) do c[key]:SetText(tostring(s.color[i])) end
+		for i, key in ipairs({ "combatEnterR", "combatEnterG", "combatEnterB" }) do c[key]:SetText(tostring(s.enterColor[i])) end
+		for i, key in ipairs({ "combatLeaveR", "combatLeaveG", "combatLeaveB" }) do c[key]:SetText(tostring(s.leaveColor[i])) end
 		for i, key in ipairs({ "combatBgR", "combatBgG", "combatBgB", "combatBgA" }) do c[key]:SetText(tostring(s.background[i])) end
+		local dirLabel = s.direction == "down" and "Down" or (s.direction == "none" and "None" or "Up")
+		c.combatDir.direction = dirLabel
+		c.combatDir:SetText("Direction: " .. dirLabel)
+		c.combatDistance:SetText(tostring(s.distance))
+		c.combatMotion:SetText(tostring(s.motion))
 		c.combatX:SetText(tostring(s.x))
 		c.combatY:SetText(tostring(s.y))
 		ns.combatText.ApplyStyle()
@@ -862,16 +936,27 @@ local function ensureWindow()
 		ns.weaponTraining.BuildOptionsUI(f)
 	end
 
+	if ns.critSounds then ns.critSounds.BuildOptionsUI(f) end
 	function f.SelectTab(tab)
+		local valid = false
+		for _, item in ipairs(NAVIGATION) do if item[2] == tab then valid = true; break end end
+		if not valid then tab = "settings" end
+		for _, control in pairs(f.controls) do if control.ClearFocus then control:ClearFocus() end end
+		if f.notesEditor then f.notesEditor:ClearFocus() end
 		f.selectedTab = tab
 		page:SetShown(tab == "settings")
 		catalog:SetShown(tab == "spells")
 		notesPage:SetShown(tab == "notes")
 		combatPage:SetShown(tab == "combat")
+		if f.soundsPage then f.soundsPage:SetShown(tab == "sounds") end
 		if f.weaponPage then f.weaponPage:SetShown(tab == "weapons") end
-		-- The weapon reference needs the full width; every other tab keeps the
-		-- right-hand queue preview exactly as before.
-		if f.preview then f.preview:SetShown(tab ~= "weapons") end
+		f.preview:SetShown(tab == "settings" or tab == "spells")
+		local help = HELP[tab]
+		f.helpPanel:SetShown(help ~= nil)
+		if help then
+			f.helpPanel.heading:SetText(help[1]); f.helpPanel.title:SetText(help[2])
+			f.helpPanel.body:SetText(help[3]); f.helpPanel.hint:SetText(help[4])
+		end
 		if tab == "spells" then
 			for _, key in ipairs({ "alpha", "red", "green", "blue" }) do f.controls[key]:ClearFocus() end
 			f.RefreshCatalog()
@@ -879,14 +964,15 @@ local function ensureWindow()
 			f.RefreshNotes()
 		elseif tab == "combat" then
 			f.RefreshCombat()
+		elseif tab == "sounds" then
+			f.RefreshSounds()
 		elseif tab == "weapons" then
 			if f.weaponPage and f.weaponPage.Refresh then f.weaponPage.Refresh() end
 		end
-		f.controls.settingsTab:SetText(tab == "settings" and "[Settings]" or "Settings")
-		f.controls.spellsTab:SetText(tab == "spells" and "[Implemented spells]" or "Implemented spells")
-		f.controls.notesTab:SetText(tab == "notes" and "[Notes]" or "Notes")
-		f.controls.combatTab:SetText(tab == "combat" and "[Combat text]" or "Combat text")
-		if f.controls.weaponTab then f.controls.weaponTab:SetText(tab == "weapons" and "[Weapon training]" or "Weapon training") end
+		for _, item in ipairs(NAVIGATION) do
+			UI.Selected(f.controls[item[1]], tab == item[2])
+			if tab == item[2] then f.pageTitle:SetText(item[3]); f.pageDescription:SetText(item[4]) end
+		end
 	end
 	local function command(text)
 		ns.HandleCommand(text)
@@ -899,14 +985,15 @@ local function ensureWindow()
 		label(page, title, 48, y - 6, 465)
 		c:SetScript("OnClick", function(self) if not refreshing then write(self:GetChecked() and true or false); f.Refresh() end end)
 		c.read = read
+		UI.Checkbox(c)
 		f.controls[key] = c
 	end
-	check("enabled", "Enable helper (healing overlay and next-swing borders)", -62, function() return ns.db.enabled end,
+	check("enabled", "Enable helper (healing overlay and next-swing borders)", -88, function() return ns.db.enabled end,
 		function(v) command("enable " .. (v and "on" or "off")) end)
-	check("approximate", "Approximate tooltip prediction (needed on restricted Forever)", -92,
+	check("approximate", "Approximate tooltip prediction (for restricted Forever)", -120,
 		function() return ns.db.approximatePrediction end, function(v) command("approximate " .. (v and "on" or "off")) end)
-	label(page, "Approximate mode ignores healing absorbs; native overlap may double-count.", 48, -122, 465)
-	check("native", "Inherit EllesmereUI prediction texture and color", -146,
+	UI.Text(label(page, "Approximate mode ignores absorbs and may overlap native healing.", 48, -154, 465), "muted")
+	check("native", "Inherit EllesmereUI prediction texture and color", -178,
 		function() return ns.db.shareNativeStyle end, function(v)
 			if v then command("color native") else
 				local c = ns.db.overlayColor
@@ -914,33 +1001,37 @@ local function ensureWindow()
 			end
 		end)
 	local function edit(key, x, y, width)
-		local e = CreateFrame("EditBox", nil, page, "InputBoxTemplate")
+		local e = CreateFrame("EditBox", nil, page, "BackdropTemplate")
 		e:SetSize(width or 65, 24)
 		e:SetPoint("TOPLEFT", page, "TOPLEFT", x, y)
 		e:SetAutoFocus(false)
 		e:SetMaxLetters(12)
 		e:SetScript("OnEscapePressed", function(self) self:ClearFocus(); f:Hide() end)
+		UI.Input(e)
 		f.controls[key] = e
 		return e
 	end
-	label(page, "Opacity (0-1)", 24, -188, 120)
-	edit("alpha", 150, -183)
-	label(page, "Custom RGB (0-1 each)", 24, -221, 180)
-	edit("red", 210, -216)
-	edit("green", 290, -216)
-	edit("blue", 370, -216)
-	local message = label(page, "", 24, -275)
+	label(page, "Opacity (0-1)", 24, -223, 100)
+	edit("alpha", 128, -218, 60)
+	label(page, "Custom RGB", 218, -223, 104)
+	edit("red", 330, -218, 54)
+	edit("green", 392, -218, 54)
+	edit("blue", 454, -218, 54)
+	local message = UI.Text(label(page, "", 24, -292, 480), "muted")
 	local function button(key, title, x, y, width, action)
-		local parent = (key == "settingsTab" or key == "notesTab" or key == "combatTab" or key == "spellsTab" or key == "weaponTab" or key == "manageTab" or key == "close") and f or page
+		local parent = page
+		if key:match("Tab$") or key == "diagnostics" then parent = f.sidebar
+		elseif key == "preview" or key == "stop" then parent = f.preview
+		elseif key == "close" or key == "headerClose" then parent = f end
 		local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-		b:SetSize(width, 24)
+		b:SetSize(width, parent == f.sidebar and 36 or 26)
 		b:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
 		b:SetText(title)
 		b:SetScript("OnClick", action)
 		flatButton(b)
 		f.controls[key] = b
 	end
-	button("apply", "Apply appearance", 24, -246, 160, function()
+	button("apply", "Apply appearance", 24, -256, 160, function()
 		local c = f.controls
 		local a, r, g, b = tonumber(c.alpha:GetText()), tonumber(c.red:GetText()), tonumber(c.green:GetText()), tonumber(c.blue:GetText())
 		for _, v in ipairs({a or -1, r or -1, g or -1, b or -1}) do
@@ -952,47 +1043,47 @@ local function ensureWindow()
 		message:SetText("Appearance saved. RGB applies only when native style is unchecked.")
 		f.Refresh()
 	end)
-	check("minimap", "Show minimap button (drag to reposition)", -303,
+	UI.Button(f.controls.apply, "primary")
+	check("minimap", "Show minimap button (drag to reposition)", -363,
 		function() return not ns.db.minimapHidden end, function(v) command("minimap " .. (v and "on" or "off")) end)
-	check("exclude", "Advanced: native incoming heals exclude HoTs (verified clients only)", -337,
+	check("exclude", "Advanced: native incoming heals exclude HoTs", -426,
 		function() return ns.db.assumeApiExcludesHoTs end, function(v) command("excludehots " .. (v and "on" or "off")) end)
-	label(page, "Leave off unless verified. Does not unlock restricted values or fix overlap.", 48, -367, 465)
+	UI.Text(label(page, "Leave off unless verified. This does not unlock restricted values or fix overlap.", 48, -458, 465), "muted")
 	check("debug", "Enable debug chat logging", -395, function() return ns.db.debug end,
 		function(v) command("debug " .. (v and "on" or "off")) end)
-	button("preview", "Preview +1000", 24, -435, 145, function() command("test 1000") end)
-	button("stop", "Stop preview", 182, -435, 145, function() command("test off") end)
-	button("diagnostics", "Copy diagnostics", 340, -435, 175, function() ns.OpenDebugWindow() end)
-	local status = label(page, "", 24, -470)
-	label(page, "Preview is session-only; Stop preview to display real healing again.\nManual rank/tick calibration: /euihot help. Changes save immediately.", 24, -495)
-	check("queue", "Highlight genuinely queued next-swing attacks (all supported classes)", -532,
+	button("preview", "Test +1000", 16, -419, 90, function() command("test 1000") end)
+	button("stop", "Stop test", 114, -419, 94, function() command("test off") end)
+	button("diagnostics", "Diagnostics", 8, -386, 148, function() ns.OpenDebugWindow() end)
+	local status = UI.Text(label(f.preview, "", 16, -458, 192), "muted")
+	check("queue", "Highlight genuinely queued next-swing attacks", -532,
 		function() return ns.db.queuedSwingEnabled end, function(v) command("queue " .. (v and "on" or "off")) end)
-	button("queueAppearance", "Next-swing appearance...", 24, -572, 225, function() ns.OpenQueueAppearance() end)
-	button("manageSpells", "Manage spells...", 270, -572, 225, function() ns.OpenSpellEditor() end)
-	button("close", "Close", 420, -606, 95, function() f:Hide() end)
-	-- Top tab strip reflowed to fit the new Weapon training tab (preview stays
-	-- below it and is hidden only while that tab is selected).
-	button("settingsTab", "Settings", 12, -62, 96, function() f.SelectTab("settings") end)
-	button("notesTab", "Notes", 112, -62, 70, function() f.SelectTab("notes") end)
-	button("combatTab", "Combat text", 186, -62, 92, function() f.SelectTab("combat") end)
-	button("spellsTab", "Implemented spells", 282, -62, 160, function() f.SelectTab("spells") end)
-	button("weaponTab", "Weapon training", 446, -62, 130, function() f.SelectTab("weapons") end)
-	button("manageTab", "Manage spells...", 580, -62, 130, function() ns.OpenSpellEditor() end)
+	button("queueAppearance", "Highlight appearance", 24, -568, 225, function() ns.OpenQueueAppearance() end)
+	button("manageSpells", "Manage spells", 270, -568, 225, function() ns.OpenSpellEditor() end)
+	button("close", "Close", 888, -681, 88, function() f:Hide() end)
+	button("headerClose", "X", 948, -22, 28, function() f:Hide() end)
+	for i, item in ipairs(NAVIGATION) do
+		local tab = item[2]
+		button(item[1], item[3], 8, -36 - (i - 1) * 42, 148, function() f.SelectTab(tab) end)
+	end
+	button("manageTab", "Manage spells", 8, -344, 148, function() ns.OpenSpellEditor() end)
 	f.Refresh = function()
 		refreshing = true
 		for _, c in pairs(f.controls) do if c.read then c:SetChecked(c.read()) end end
 		f.controls.alpha:SetText(tostring(ns.db.alpha))
 		local rgb = ns.db.overlayColor
 		for i, key in ipairs({"red", "green", "blue"}) do f.controls[key]:SetText(tostring(rgb[i])) end
-		status:SetText("v" .. ns.version .. (ns.session.fake and " | PREVIEW ACTIVE (not real healing)" or " | Real healing mode"))
+		status:SetText(ns.session.fake and "PREVIEW ACTIVE  /  Not real healing" or "No healing test active")
+		f.sidebarStatus:SetText(ns.db.enabled and "Helper enabled" or "Helper disabled")
 		f.preview.Saved()
 		if f.RefreshNotes then f.RefreshNotes() end
 		if f.RefreshCombat then f.RefreshCombat() end
+		if f.RefreshSounds then f.RefreshSounds() end
 		if f.weaponPage and f.weaponPage.Refresh then f.weaponPage.Refresh() end
 		refreshing = false
 	end
 	f:SetScript("OnShow", function() f.Refresh(); f.SelectTab(f.selectedTab or "settings") end)
 	f:SetScript("OnHide", function()
-		for _, key in ipairs({"alpha", "red", "green", "blue"}) do f.controls[key]:ClearFocus() end
+		for _, control in pairs(f.controls) do if control.ClearFocus then control:ClearFocus() end end
 		if f.notesEditor then f.notesEditor:ClearFocus() end
 	end)
 	if type(UISpecialFrames) == "table" then UISpecialFrames[#UISpecialFrames + 1] = WINDOW end
@@ -1004,6 +1095,7 @@ end
 function ns.OpenOptions(tab)
 	local f = ensureWindow()
 	if not f then ns.print("settings unavailable: this client cannot create frames."); return end
+	UI.FitWindow(f)
 	f.Refresh()
 	f.SelectTab(tab or f.selectedTab or "settings")
 	f:Show()

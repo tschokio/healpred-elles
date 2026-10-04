@@ -294,10 +294,13 @@ end
 -- Text on buttons/frames.
 function FrameMT:SetText(t)
 	self._text = tostring(t or "")
+	if self._buttonFontString then self._buttonFontString:SetText(self._text) end
 	local cb = self._scripts["OnTextChanged"]
 	if cb then cb(self, false) end
 end
 function FrameMT:GetText() return self._text end
+function FrameMT:SetFontString(text) self._buttonFontString = text end
+function FrameMT:GetFontString() return self._buttonFontString end
 
 -- EditBox + ScrollFrame surface. Real clients expose these on the widgets; a
 -- user "typing" is modelled by SetText/Insert firing OnTextChanged.
@@ -359,9 +362,16 @@ function FrameMT:RegisterForDrag(...) self._dragButtons = { ... } end
 function FrameMT:RegisterForClicks(...) self._clickButtons = { ... } end
 function FrameMT:SetChecked(v) self._checked = v end
 function FrameMT:GetChecked() return self._checked end
+function FrameMT:SetCheckedTexture(path)
+	self._checkedTexture = self._checkedTexture or newTexture(self)
+	self._checkedTexture:SetTexture(path)
+end
+function FrameMT:GetCheckedTexture() return self._checkedTexture end
 function FrameMT:SetHighlightTexture(path) self._highlightTexture = path end
 function FrameMT:GetCenter() return 100, 100 end
-function FrameMT:GetEffectiveScale() return 1 end
+function FrameMT:GetEffectiveScale() return self._scale or 1 end
+function FrameMT:SetScale(v) self._scale = v end
+function FrameMT:GetScale() return self._scale or 1 end
 function FrameMT:SetMaxLetters(v) self._maxLetters = v end
 function FrameMT:SetBackdrop(v) self._backdrop = v end
 function FrameMT:SetBackdropColor(...) self._backdropColor = { ... } end
@@ -586,6 +596,7 @@ function Mocks.Reset()
 	_G.EllesmereUI_HoTPredictionDB = nil
 
 	_G.UIParent = newFrame("Frame", "UIParent", nil)
+	_G.UIParent:SetSize(1920, 1080)
 	_G.DEFAULT_CHAT_FRAME = { AddMessage = function(_, msg) Mocks.chat[#Mocks.chat + 1] = msg end }
 	_G.SlashCmdList = {}
 	-- Escape-to-close registry consumed by the client's FrameXML; the debug

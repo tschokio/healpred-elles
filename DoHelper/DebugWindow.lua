@@ -85,14 +85,7 @@ local function ensureDebugWindow()
 	safe(f, "EnableMouse", true)
 	safe(f, "SetFrameStrata", "DIALOG")
 	safe(f, "SetToplevel", true)
-	safe(f, "SetBackdrop", {
-		bgFile = "Interface\\Buttons\\WHITE8X8",
-		edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-		tile = false, edgeSize = 16,
-		insets = { left = 4, right = 4, top = 4, bottom = 4 },
-	})
-	safe(f, "SetBackdropColor", 0.04, 0.05, 0.06, 0.97)
-	safe(f, "SetBackdropBorderColor", 0.25, 0.65, 0.4, 1)
+	ns.ui.Window(f)
 	safe(f, "RegisterForDrag", "LeftButton")
 	safe(f, "SetScript", "OnDragStart", function(self) safe(self, "StartMoving") end)
 	safe(f, "SetScript", "OnDragStop", function(self) safe(self, "StopMovingOrSizing") end)
@@ -100,23 +93,27 @@ local function ensureDebugWindow()
 
 	local title = safe(f, "CreateFontString", nil, "OVERLAY", "GameFontNormalLarge")
 	if title then
-		safe(title, "SetPoint", "TOPLEFT", f, "TOPLEFT", 12, -10)
+		safe(title, "SetPoint", "TOPLEFT", f, "TOPLEFT", 16, -16)
 		safe(title, "SetJustifyH", "LEFT")
 		safe(title, "SetText", TITLE)
+		ns.ui.Text(title, "heading")
 	end
 	local hint = safe(f, "CreateFontString", nil, "OVERLAY", "GameFontHighlightSmall")
 	if hint then
-		safe(hint, "SetPoint", "TOPLEFT", f, "TOPLEFT", 12, -30)
-		safe(hint, "SetPoint", "TOPRIGHT", f, "TOPRIGHT", -12, -30)
+		safe(hint, "SetPoint", "TOPLEFT", f, "TOPLEFT", 16, -42)
+		safe(hint, "SetWidth", 552)
 		safe(hint, "SetJustifyH", "LEFT")
 		safe(hint, "SetText", HINT)
+		ns.ui.Text(hint, "muted")
 	end
 
 	-- ScrollFrame + multiline EditBox: the text is selectable/copyable while
 	-- staying scrollable for a long newline-delimited report.
 	local scroll = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
-	safe(scroll, "SetPoint", "TOPLEFT", f, "TOPLEFT", 12, -52)
-	safe(scroll, "SetPoint", "BOTTOMRIGHT", f, "BOTTOMRIGHT", -32, 42)
+	safe(scroll, "SetSize", 552, 320)
+	safe(scroll, "SetPoint", "TOPLEFT", f, "TOPLEFT", 16, -68)
+	safe(scroll, "SetPoint", "BOTTOMRIGHT", f, "BOTTOMRIGHT", -32, 52)
+	ns.ui.Background(scroll, 0, 0, 552, 320)
 	safe(scroll, "SetClipsChildren", true)
 	safe(scroll, "EnableMouseWheel", true)
 	safe(scroll, "SetScript", "OnMouseWheel", function(self, delta)
@@ -129,7 +126,7 @@ local function ensureDebugWindow()
 	safe(edit, "SetAutoFocus", false)
 	safe(edit, "SetMaxLetters", 0)
 	if edit.SetFont then
-		safe(edit, "SetFont", (STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"), 11, "")
+		safe(edit, "SetFont", ns.ui.FONT, 12, "")
 	end
 	safe(edit, "SetTextInsets", 4, 4, 4, 4)
 	safe(edit, "SetJustifyH", "LEFT")
@@ -143,7 +140,7 @@ local function ensureDebugWindow()
 	-- grows its scroll-child rectangle automatically on every supported client.
 	local measure = safe(f, "CreateFontString", nil, "BACKGROUND", "GameFontHighlightSmall")
 	if measure then
-		safe(measure, "SetFont", STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 11, "")
+		safe(measure, "SetFont", ns.ui.FONT, 12, "")
 		safe(measure, "SetWordWrap", true)
 		safe(measure, "Hide")
 	end
@@ -174,10 +171,11 @@ local function ensureDebugWindow()
 
 	local function button(label, offset, onclick)
 		local b = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-		safe(b, "SetSize", 90, 22)
+		safe(b, "SetSize", 100, 28)
 		safe(b, "SetPoint", "BOTTOMRIGHT", f, "BOTTOMRIGHT", offset, 12)
 		safe(b, "SetText", label)
 		safe(b, "SetScript", "OnClick", onclick)
+		ns.ui.Button(b)
 		return b
 	end
 	button("Select All", -216, function() ns.SelectAllDebugWindow() end)
@@ -208,6 +206,7 @@ function ns.OpenDebugWindow()
 		return nil
 	end
 	ns.RefreshDebugWindow()
+	ns.ui.FitWindow(f)
 	safe(f, "Show")
 	return f
 end

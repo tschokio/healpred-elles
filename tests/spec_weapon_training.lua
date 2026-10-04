@@ -323,7 +323,8 @@ T.register("weapon training: tab is lazy, hides the preview and restores old tab
 		click(f.controls[pair[1]])
 		assert_eq(f.selectedTab, pair[2], pair[1])
 		assert_false(f.weaponPage:IsShown())
-		assert_true(f.preview:IsShown(), "preview restored on " .. pair[2])
+		assert_eq(f.preview:IsShown(), pair[2] == "spells", "only relevant pages show the action preview")
+		assert_eq(f.helpPanel:IsShown(), pair[2] ~= "spells", "notes and combat show contextual help")
 	end
 	click(f.controls.settingsTab)
 	assert_eq(f.selectedTab, "settings")
@@ -993,7 +994,7 @@ end)
 
 T.register("weapon training: DoHelper branding, aliases and legacy settings compatibility", function()
 	local e = Mocks.NewEnv()
-	assert_eq(e.ns.version, "0.10.0")
+	assert_eq(e.ns.version, "0.12.0")
 	assert_eq(SLASH_DOHELPER1, "/dohelper")
 	assert_eq(SLASH_DOHELPER2, "/dh")
 	assert_true(type(SlashCmdList["DOHELPER"]) == "function")
@@ -1030,7 +1031,7 @@ T.register("weapon training: DoHelper branding, aliases and legacy settings comp
 	local toc = ReadFile((_G.__HOT_ROOT or ".") .. "/DoHelper/DoHelper.toc")
 	assert_true(contains(toc, "## Title: DoHelper"))
 	assert_true(not contains(toc, "HoTPrediction:") and not contains(toc, "HoT Prediction"), "TOC title is simply DoHelper")
-	assert_true(contains(toc, "Version: 0.10.0"))
+	assert_true(contains(toc, "Version: 0.12.0"))
 	assert_true(contains(toc, "SavedVariables: EllesmereUI_HoTPredictionDB"))
 	assert_true(contains(toc, "WeaponTraining.lua"))
 
