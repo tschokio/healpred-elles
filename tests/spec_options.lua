@@ -328,6 +328,18 @@ T.register("appearance: re-showing the main window never interleaves into the ed
 	assert_true(Mocks.IsRegionVisible(heading), "editor heading must survive re-showing the main window")
 end)
 
+T.register("appearance: editor created before main settings still stays on top", function()
+	local e = Mocks.NewEnv()
+	local app = e.ns.OpenQueueAppearance()
+	assert_nil(e.ns.optionsWindow)
+	local main = e.ns.OpenOptions()
+	assert_true(main:IsShown() and app:IsShown())
+	assert_true(Mocks.StrataRank(app:GetFrameStrata()) > Mocks.StrataRank(main.preview.border:GetFrameStrata()))
+	for _, l in ipairs(app._fontStrings) do
+		if l:GetText() ~= "" then assert_true(Mocks.IsRegionVisible(l), "later-created main obscures editor label") end
+	end
+end)
+
 T.register("appearance: controls stay actionable while stacked over the main window", function()
 	local e = Mocks.NewEnv()
 	e.ns.OpenOptions()

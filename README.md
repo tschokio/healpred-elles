@@ -40,7 +40,7 @@ StatusBar of its own and secure-hooks native callbacks read-only.
 
 The installed folder is the deliverable; there is no separate zip/binary.
 
-### Updating (to v0.5.4)
+### Updating (to v0.5.5)
 
 Replace the `EllesmereUI_HoTPrediction/` folder in your AddOns directory with the
 new one, then `/reload` (or restart). SavedVariables
@@ -101,6 +101,13 @@ border, next swing/cancel → no border, insufficient-Rage failed press → no b
 and repeat with Cleave, Maul, forms/pages and any macros you use.
 
 ### Settings menu and minimap button (v0.4.0)
+
+**Appearance window stacking fix (v0.5.5):** the next-swing appearance editor
+uses `FULLSCREEN_DIALOG`, above the main settings window's `DIALOG` layer and
+below tooltips. Its controls and preview inherit the higher layer so main-window
+controls/borders cannot interleave into it, even when both windows are shown or
+reopened in a different order. This changes only GUI layering, not settings or
+real queue/healing logic. Mock-tested; in-game visual confirmation is still needed.
 
 **GUI label visibility fix (v0.5.4):** decorative backgrounds now use the parent
 frame's BACKGROUND textures instead of opaque child frames. This restores labels,
