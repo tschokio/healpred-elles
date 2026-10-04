@@ -132,7 +132,7 @@ T.register("options: modern Blizzard AddOns category registers once without buil
 	local registrations = 0
 	Settings = {
 		RegisterCanvasLayoutCategory = function(panel, name)
-			assert_eq(name, "EllesmereUI HoT Prediction")
+			assert_eq(name, "DoHelper")
 			return { panel = panel }
 		end,
 		RegisterAddOnCategory = function() registrations = registrations + 1 end,

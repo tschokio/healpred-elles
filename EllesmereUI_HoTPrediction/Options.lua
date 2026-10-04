@@ -258,12 +258,9 @@ function ns.InitOptions()
 	if not ns.optionsCategoryPanel and CreateFrame and ((Settings and Settings.RegisterCanvasLayoutCategory
 		and Settings.RegisterAddOnCategory) or InterfaceOptions_AddCategory) then
 		local panel = CreateFrame("Frame", nil, UIParent)
-		-- panel.name is the legacy category identifier pinned by the automated
-		-- tests and by existing settings registration; it is kept as a
-		-- compatibility identifier while the visible content says DoHelper.
-		panel.name = "EllesmereUI HoT Prediction"
+		panel.name = "DoHelper"
 		label(panel, "DoHelper", 16, -16)
-		label(panel, "Public name DoHelper; registered under the legacy category 'EllesmereUI HoT Prediction' for settings compatibility. Settings also open via /dohelper options.", 16, -44)
+		label(panel, "Configure healing predictions, queued-swing borders, notes, combat text and the weapon training reference. Settings also open via /dohelper options.", 16, -44)
 		local open = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
 		open:SetSize(180, 26)
 		open:SetPoint("TOPLEFT", panel, "TOPLEFT", 16, -76)
@@ -298,7 +295,6 @@ function ns.InitOptions()
 		if not GameTooltip then return end
 		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
 		GameTooltip:AddLine("DoHelper")
-		GameTooltip:AddLine("Legacy addon: EllesmereUI HoT Prediction", 1, 1, 1)
 		GameTooltip:AddLine("Left-click: settings | Right-click: diagnostics", 1, 1, 1)
 		GameTooltip:AddLine("Drag: move around minimap", 1, 1, 1)
 		GameTooltip:Show()

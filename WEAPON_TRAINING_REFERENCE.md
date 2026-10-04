@@ -167,25 +167,40 @@ Candidate map ids (resolved at runtime; never used blindly):
 | Undercity | 1458 | 90 |
 
 `WeaponTraining.ResolveMap(city)` accepts a candidate only when
-`C_Map.GetMapInfo(id)` returns a table with `mapType == "CITY"` and an English
-`name` matching the city. A wrong type or a localized/renamed name fails closed
-without placing a waypoint. `SetWaypoint(city, xPercent, yPercent)` converts
-0–100 percent to 0–1 (values already 0–1 are accepted), refuses in combat, then:
+`C_Map.GetMapInfo(id)` returns a table with the numeric `Enum.UIMapType.Zone`
+map type (documented value `3`; there is no `CITY` map type), a matching `mapID`,
+and a name matching a known English/known-localized alias (for example
+`Stormwind` / `Stormwind City`, `Sturmwind`, `Eisenschmiede`, `Donnerfels`,
+`Unterstadt`). A wrong type, a mismatched id, or an unknown localized name fails
+closed without placing a waypoint. `SetWaypoint(city, xPercent, yPercent)`
+converts **percent only** to 0–1 (`0.5` → `0.005`, `1` → `0.01`, `100` → `1`),
+refuses in combat, then:
 
-1. uses native `C_Map.SetUserWaypoint(UiMapPoint.CreateFromCoordinates(id, x, y))`
-   when present (optional `C_SuperTrack.SetSuperTrackedUserWaypoint(true)`);
-2. otherwise (or if native returns an explicit `false` / raises) falls back to
-   optional TomTom (`AddWaypoint` / `AddZWaypoint`);
+1. checks optional `C_Map.CanSetUserWaypointOnMap(id)` (fail closed on
+   error/false/restricted) and uses native
+   `C_Map.SetUserWaypoint(UiMapPoint.CreateFromCoordinates(id, x, y))` only when
+   it returns a confirmed `true` (optional
+   `C_SuperTrack.SetSuperTrackedUserWaypoint(true)`);
+2. otherwise (or if native returns nil/false/secret or raises) falls back to
+   optional modern TomTom `TomTom:AddWaypoint(uiMapID, x, y, opts)`, which must
+   return a waypoint UID;
 3. otherwise returns an honest failure that includes the approximate
    coordinates and the resolved map id.
 
-Every external call is `pcall`-protected and secret values are refused. No
-proficiency is learned by clicking anything in this tab.
+`ShowMap(city)` uses the documented global `OpenWorldMap(mapID)`; when the map
+frame is available it verifies `IsShown`/`GetMapID` and fails closed on a no-op
+or the wrong visible map. The guarded `WorldMapFrame` fallback shows a hidden map
+first and then calls `SetMapID` (a real `OnShow` resets the map, so the order
+matters), retries through `C_AddOns.LoadAddOn("Blizzard_WorldMap")` when present,
+and still verifies the frame before claiming success; it never toggles an
+already-open map closed. Every external call is `pcall`-protected and
+secret/restricted values (including error objects) are refused without coercion.
+No proficiency is learned by clicking anything in this tab.
 
 ## Maintainer notes
 
 * `WeaponTraining.lua` is split into static data, the map adapter and a lazy UI
   builder called from `Options.lua`. It adds no timers, events or polling.
-* The historical AddOn folder, SavedVariables name, global frame ids, Blizzard
-  settings category identifier and binding globals are **compatibility
-  identifiers** and are intentionally unchanged.
+* The historical AddOn folder, SavedVariables name, global frame ids and binding
+  globals are **compatibility identifiers** and are intentionally unchanged; the
+  Blizzard settings category is shown as **DoHelper**.

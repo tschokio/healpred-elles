@@ -221,7 +221,7 @@ WT.STARTS = {
 	PALADIN = {
 		HUMAN = { weapons = { "MACE1", "MACE2", "SWORD1", "SWORD2" }, conf = "CLASSIC" },
 		DWARF = { weapons = { "MACE1", "MACE2" }, conf = "CLASSIC" },
-		UNDEAD = { weapons = { "MACE1", "MACE2" }, conf = "CHECK",
+		UNDEAD = { weapons = { "MACE1", "MACE2" }, conf = "CHECK", forever = true,
 			note = "New Forever combination; the starting package is retained from the supplied reference and should be checked in the client." },
 	},
 	HUNTER = {
@@ -230,8 +230,8 @@ WT.STARTS = {
 		DWARF = { weapons = { "GUN" }, conf = "CHECK", rangedOnly = true },
 		ORC = { weapons = { "GUN" }, conf = "CHECK", rangedOnly = true },
 		TAUREN = { weapons = { "GUN" }, conf = "CHECK", rangedOnly = true },
-		HUMAN = { weapons = {}, conf = "UNCONFIRMED",
-			note = "Human hunter starts are unconfirmed in the supplied reference." },
+		HUMAN = { weapons = {}, conf = "UNCONFIRMED", forever = true,
+			note = "Human hunter is a supplied Forever addition; no starting package was supplied." },
 		SKYBORNE_HIGH = { weapons = {}, conf = "UNCONFIRMED",
 			note = "Skyborne starts are unconfirmed." },
 		SKYBORNE_WIND = { weapons = {}, conf = "UNCONFIRMED",
@@ -253,12 +253,12 @@ WT.STARTS = {
 	},
 	PRIEST = {
 		_default = { weapons = { "MACE1", "WAND" }, conf = "CLASSIC" },
-		GNOME = { weapons = { "MACE1", "WAND" }, conf = "CHECK",
-			note = "The new Gnome priest start package must be checked in the client." },
+		GNOME = { weapons = { "MACE1", "WAND" }, conf = "CHECK", forever = true,
+			note = "New Gnome priest Forever combination; the starting package must be checked in the client." },
 	},
 	SHAMAN = {
-		DWARF = { weapons = { "MACE1", "STAFF" }, conf = "CHECK",
-			note = "New Dwarf shaman start; check in the client." },
+		DWARF = { weapons = { "MACE1", "STAFF" }, conf = "CHECK", forever = true,
+			note = "New Dwarf shaman Forever combination; check the starting package in the client." },
 		ORC = { weapons = { "MACE1", "STAFF" }, conf = "CLASSIC" },
 		TAUREN = { weapons = { "MACE1", "STAFF" }, conf = "CLASSIC" },
 		TROLL = { weapons = { "MACE1", "STAFF" }, conf = "CLASSIC" },
@@ -267,15 +267,15 @@ WT.STARTS = {
 	},
 	MAGE = {
 		_default = { weapons = { "STAFF", "WAND" }, conf = "CLASSIC" },
-		ORC = { weapons = { "STAFF", "WAND" }, conf = "CHECK",
-			note = "The new Orc mage start package must be checked in the client." },
+		ORC = { weapons = { "STAFF", "WAND" }, conf = "CHECK", forever = true,
+			note = "New Orc mage Forever combination; the starting package must be checked in the client." },
 		SKYBORNE_HIGH = { weapons = {}, conf = "UNCONFIRMED",
 			note = "Skyborne starts are unconfirmed." },
 	},
 	WARLOCK = {
 		_default = { weapons = { "DAGGER", "WAND" }, conf = "CLASSIC" },
-		TROLL = { weapons = { "DAGGER", "WAND" }, conf = "CHECK",
-			note = "The new Troll warlock start package must be checked in the client." },
+		TROLL = { weapons = { "DAGGER", "WAND" }, conf = "CHECK", forever = true,
+			note = "New Troll warlock Forever combination; the starting package must be checked in the client." },
 	},
 	DRUID = {
 		NIGHTELF = { weapons = { "MACE1", "STAFF" }, conf = "CLASSIC",
@@ -297,7 +297,7 @@ WT.TRAINERS = {
 		cityKey = "Stormwind", district = "Trade District", x = 57.1, y = 57.7,
 		weapons = { "CROSSBOW", "DAGGER", "SWORD1", "SWORD2", "STAFF", "POLEARM" },
 		conf = "CLASSIC", locationApprox = true,
-		note = "Weller's Arsenal is a classic-established location but was NOT supplied; district kept as Trade District." },
+		note = "Weapon master in Stormwind's Trade District." },
 	{ id = "buliwyf", name = "Buliwyf Stonehand", faction = "Alliance", city = "Ironforge",
 		cityKey = "Ironforge", district = "Military Ward", x = 62.2, y = 89.6,
 		weapons = { "FIST", "GUN", "AXE1", "AXE2", "MACE1", "MACE2" },
@@ -346,7 +346,8 @@ WT.GENERAL_NOTES = {
 -- static reference: map ids (classic and modern candidates, resolved at runtime)
 -----------------------------------------------------------------------------
 
--- NEVER used blindly: each candidate is validated through C_Map.GetMapInfo.
+-- Candidate classic/modern city map ids. NEVER used blindly: each candidate is
+-- validated through C_Map.GetMapInfo before a waypoint is placed.
 WT.CITY_MAPS = {
 	Stormwind = { classic = 1453, modern = 84 },
 	Ironforge = { classic = 1455, modern = 87 },
@@ -355,6 +356,33 @@ WT.CITY_MAPS = {
 	["Thunder Bluff"] = { classic = 1456, modern = 88 },
 	Undercity = { classic = 1458, modern = 90 },
 }
+
+-- Accepted English/known localized city names per candidate map. The live
+-- GetMapInfo names use e.g. "Stormwind City"; a truly unknown localization is
+-- refused rather than guessed. Additions here are conservative and documented.
+WT.CITY_ALIASES = {
+	Stormwind = { "Stormwind", "Stormwind City", "Sturmwind", "Sturmwind Stadt" },
+	Ironforge = { "Ironforge", "Eisenschmiede" },
+	Darnassus = { "Darnassus" },
+	Orgrimmar = { "Orgrimmar" },
+	["Thunder Bluff"] = { "Thunder Bluff", "Donnerfels" },
+	Undercity = { "Undercity", "Unterstadt" },
+}
+
+-- Race/class combinations supplied as Forever additions rather than Vanilla.
+WT.FOREVER_NEW = {
+	HUMAN = { HUNTER = true },
+	DWARF = { SHAMAN = true },
+	GNOME = { PRIEST = true },
+	ORC = { MAGE = true },
+	UNDEAD = { PALADIN = true },
+	TROLL = { WARLOCK = true },
+}
+
+function WT.IsForeverChange(raceKey, classKey)
+	local row = WT.FOREVER_NEW[raceKey]
+	return (row and row[classKey]) and true or false
+end
 
 -----------------------------------------------------------------------------
 -- model API (pure data, no widgets)
@@ -476,9 +504,11 @@ function WT.WeaponLine(raceKey, classKey, weaponKey)
 	local starting
 	local start = WT.Starts(raceKey, classKey)
 	if (start.conf == "UNCONFIRMED") or #(start.weapons or {}) == 0 then
-		starting = "starting unknown"
+		starting = start.forever and "new Forever combination; starting unknown" or "starting unknown"
 	elseif WT.IsStarting(raceKey, classKey, weaponKey) then
 		starting = "supplied starting"
+	elseif start.rangedOnly then
+		starting = "starting status unknown (partial data)"
 	else
 		starting = "not a supplied starting weapon"
 	end
@@ -532,10 +562,26 @@ function WT.BuildEntries(raceKey, classKey)
 		startWeapons[#startWeapons + 1] = (WT.WEAPONS[key] and WT.WEAPONS[key].label) or key
 	end
 	local conf = WT.CONF[start.conf] or start.conf or "Unconfirmed"
-	local startLine = #startWeapons > 0
-		and string.format("Supplied starting skills: %s  |  Confidence: %s", table.concat(startWeapons, ", "), conf)
-		or string.format("Starting skills: unknown  |  Confidence: %s", conf)
+	local startLine
+	if #startWeapons > 0 then
+		if start.rangedOnly then
+			startLine = string.format("Partial supplied starting skills (ranged only): %s  |  Confidence: %s",
+				table.concat(startWeapons, ", "), conf)
+		else
+			startLine = string.format("Supplied starting skills: %s  |  Confidence: %s",
+				table.concat(startWeapons, ", "), conf)
+		end
+	else
+		startLine = string.format("Starting skills: unknown  |  Confidence: %s", conf)
+	end
 	text(startLine)
+	if start.rangedOnly then
+		text("Partial starting data: ranged only; other starting skills unknown", { 0.95, 0.82, 0.45 })
+	end
+	if start.forever or WT.IsForeverChange(raceKey, classKey) then
+		text("Supplied Forever change: this race/class combination is new in Forever; supplied details are client-verify.",
+			{ 0.95, 0.72, 0.45 })
+	end
 	if start.note then text(start.note, { 0.75, 0.85, 0.55 }) end
 	if race.faction == nil then
 		text("Skyborne faction and start zone are unconfirmed; trainer names below show both factions.", { 0.95, 0.8, 0.4 })
@@ -569,19 +615,29 @@ end
 -- map adapter (guarded, fails closed)
 -----------------------------------------------------------------------------
 
--- Convert a supplied 0-100 percent coordinate to a 0-1 map coordinate. Values
--- already in 0-1 are accepted as-is. Out-of-range or secret values return nil.
+-- Turn a pcall error result into text without reading or coercing a restricted
+-- (secret) error object. Used for every externally-raised error path.
+local function errorText(err)
+	if ns.isSecret(err) then return "a restricted value" end
+	local ok, s = pcall(tostring, err)
+	if not ok then return "an unprintable error" end
+	return s
+end
+
+-- Convert a supplied 0-100 percent coordinate to a 0-1 map coordinate. Public
+-- SetWaypoint parameters are PERCENT ONLY: 0.5 -> 0.005, 1 -> 0.01, 100 -> 1.
+-- There is no normalized-vs-percent guessing. Out-of-range or secret values
+-- return nil.
 function WT.NormalizeCoord(v)
 	local n = ns.toNumber(v)
 	if n == nil then return nil end
 	if n < 0 or n > 100 then return nil end
-	if n > 1 then n = n / 100 end
-	if n > 1 then n = 1 end
-	return n
+	return n / 100
 end
 
 function WT.MapCandidates(cityKey)
-	local m = cityKey and WT.CITY_MAPS[cityKey]
+	if ns.isSecret(cityKey) or type(cityKey) ~= "string" then return {} end
+	local m = WT.CITY_MAPS[cityKey]
 	if not m then return {} end
 	return {
 		{ mapID = m.classic, source = "classic" },
@@ -589,40 +645,70 @@ function WT.MapCandidates(cityKey)
 	}
 end
 
+-- The numeric Enum.UIMapType value for a zone/city map. Enum may be absent on
+-- older/mocked clients; the documented Zone value is 3 (there is no "CITY"
+-- map type in the client API).
+function WT.ZoneMapType()
+	if type(Enum) == "table" and type(Enum.UIMapType) == "table" then
+		local z = Enum.UIMapType.Zone
+		if type(z) == "number" then return z end
+	end
+	return 3
+end
+
+-- Match a resolved map name against the known English/localized aliases for the
+-- requested city. Every external value is restricted before it is compared.
 local function cityMatches(info, cityKey)
-	if type(info) ~= "table" then return false end
+	if type(info) ~= "table" or ns.isSecret(info) then return false end
 	local name = info.name
 	if ns.isSecret(name) or type(name) ~= "string" then return false end
-	return name:lower() == tostring(cityKey):lower()
+	local aliases = WT.CITY_ALIASES[cityKey]
+	if not aliases then return false end
+	local lname = name:lower()
+	for _, a in ipairs(aliases) do
+		if lname == a:lower() then return true end
+	end
+	return false
 end
 
 -- Resolve a supported map id for a city. Returns (mapID, source, info, reason).
 -- It never returns an unvalidated retail id: each candidate must resolve to a
--- CITY map whose English name matches the requested city. A localized/renamed
--- or unknown client fails closed rather than placing a wrong waypoint.
+-- numeric Zone map (Enum.UIMapType.Zone, documented as 3) whose mapID matches
+-- the candidate and whose name matches a known alias. A localized/renamed or
+-- unknown client fails closed rather than placing a wrong waypoint.
 function WT.ResolveMap(cityKey)
 	local candidates = WT.MapCandidates(cityKey)
 	if #candidates == 0 then
-		return nil, nil, nil, "no known map id for '" .. tostring(cityKey) .. "'"
+		local label = ns.isSecret(cityKey) and "the selected city" or tostring(cityKey)
+		return nil, nil, nil, "no known map id for '" .. label .. "'"
 	end
 	local cMap = C_Map
 	if type(cMap) ~= "table" or type(cMap.GetMapInfo) ~= "function" then
 		return nil, nil, nil, "C_Map.GetMapInfo unavailable on this client; map placement unsupported"
 	end
+	local zone = WT.ZoneMapType()
 	local lastReason
 	for _, cand in ipairs(candidates) do
 		local ok, info = pcall(cMap.GetMapInfo, cand.mapID)
-		if ok and type(info) == "table" and not ns.isSecret(info) then
-			local mapType = info.mapType
-			if ns.isSecret(mapType) then
+		if ok and info ~= nil and not ns.isSecret(info) and type(info) == "table" then
+			if ns.isSecret(info.mapType) then
 				lastReason = "map " .. tostring(cand.mapID) .. ": map data is restricted"
-			elseif mapType ~= "CITY" then
-				lastReason = "map " .. tostring(cand.mapID) .. " is not a city map (type " .. tostring(mapType) .. ")"
+			elseif type(info.mapType) ~= "number" or info.mapType ~= zone then
+				lastReason = "map " .. tostring(cand.mapID) .. " is not a zone/city map (type " ..
+					tostring(info.mapType) .. ")"
+			elseif ns.isSecret(info.mapID) then
+				lastReason = "map " .. tostring(cand.mapID) .. ": map id is restricted"
+			elseif info.mapID ~= nil and info.mapID ~= cand.mapID then
+				lastReason = "map " .. tostring(cand.mapID) .. " resolved with mismatched mapID " ..
+					tostring(info.mapID) .. " (refusing)"
 			elseif cityMatches(info, cityKey) then
 				return cand.mapID, cand.source, info, nil
+			elseif ns.isSecret(info.name) or type(info.name) ~= "string" then
+				lastReason = "map " .. tostring(cand.mapID) ..
+					": name is restricted or unreadable (localized or custom client): refusing a wrong waypoint"
 			else
-				lastReason = "map " .. tostring(cand.mapID) .. " resolved to '" .. tostring(info.name) ..
-					"', not '" .. tostring(cityKey) .. "' (localized or custom client): refusing a wrong waypoint"
+				lastReason = "map " .. tostring(cand.mapID) .. " resolved to '" .. info.name ..
+					"', not a known '" .. tostring(cityKey) .. "' name (localized or custom client): refusing a wrong waypoint"
 			end
 		else
 			lastReason = "map " .. tostring(cand.mapID) .. " did not resolve on this client"
@@ -631,22 +717,41 @@ function WT.ResolveMap(cityKey)
 	return nil, nil, nil, lastReason or "no supported map id resolved"
 end
 
+-- A restricted (secret) combat return counts as locked before any truthy check.
+-- Falls back to the addon's own combat state when the client global is absent.
 local function inCombatLockdown()
-	if type(InCombatLockdown) ~= "function" then return false end
-	local ok, value = pcall(InCombatLockdown)
+	local fn = InCombatLockdown
+	if type(fn) ~= "function" then
+		local api = ns.api
+		if type(api) == "table" and type(api.InCombat) == "function" then
+			local ok, v = pcall(api.InCombat, api)
+			if not ok or ns.isSecret(v) then return true end
+			return v and true or false
+		end
+		return ns.inCombat and true or false
+	end
+	local ok, value = pcall(fn)
 	if not ok then return true end -- an erroring lockdown API fails closed
+	if ns.isSecret(value) then return true end
 	return value and true or false
 end
 
 WT.lastWaypoint = nil
 
--- Place a waypoint for a city. Coordinates are supplied as percent (0-100).
+-- Place a waypoint for a city. Coordinates are supplied as PERCENT (0-100).
 -- Returns (ok, method, message, result). Never claims success on explicit
--- false/error/secret, and never raises.
+-- false/error/secret/nil, and never retains raw secret inputs.
 function WT.SetWaypoint(cityKey, x, y, opts)
 	opts = opts or {}
-	local result = { city = cityKey, x = x, y = y, ok = false }
+	local citySafe = (not ns.isSecret(cityKey) and type(cityKey) == "string") and cityKey or nil
+	local cityLabel = citySafe or "the selected city"
+	local titleSafe = (not ns.isSecret(opts.title) and type(opts.title) == "string") and opts.title or nil
+	local result = { city = citySafe, ok = false }
 	WT.lastWaypoint = result
+
+	local nx, ny = WT.NormalizeCoord(x), WT.NormalizeCoord(y)
+	if nx then result.x = nx * 100 end
+	if ny then result.y = ny * 100 end
 
 	if inCombatLockdown() then
 		result.method, result.message = "combat",
@@ -654,91 +759,197 @@ function WT.SetWaypoint(cityKey, x, y, opts)
 		return false, "combat", result.message, result
 	end
 
-	local nx, ny = WT.NormalizeCoord(x), WT.NormalizeCoord(y)
 	if not nx or not ny then
 		result.method, result.message = "invalid",
-			string.format("Coordinates out of range for %s (expected 0-100 percent); no waypoint placed.", tostring(cityKey))
+			string.format("Coordinates out of range for %s (expected 0-100 percent); no waypoint placed.", cityLabel)
 		return false, "invalid", result.message, result
 	end
-	result.nx, result.ny = nx, ny
 
 	local mapID, source, _info, reason = WT.ResolveMap(cityKey)
 	if not mapID then
 		result.method = "unresolved"
 		result.message = string.format(
 			"Could not resolve a supported %s map id (%s). Approximate coordinates %.1f, %.1f; no waypoint placed.",
-			tostring(cityKey), tostring(reason), nx * 100, ny * 100)
+			cityLabel, tostring(reason), nx * 100, ny * 100)
 		return false, "unresolved", result.message, result
 	end
 	result.mapID, result.mapSource = mapID, source
 
+	local pointTitle = titleSafe or citySafe or "DoHelper waypoint"
+
 	-- Native client API first: C_Map.SetUserWaypoint + UiMapPoint.CreateFromCoordinates.
 	local cMap = C_Map
-	local hasNative = type(cMap) == "table" and type(cMap.SetUserWaypoint) == "function"
+	local nativeReady = type(cMap) == "table" and type(cMap.SetUserWaypoint) == "function"
 		and type(UiMapPoint) == "table" and type(UiMapPoint.CreateFromCoordinates) == "function"
-	if hasNative then
+	local nativeAllowed = nativeReady
+	if nativeReady and type(cMap.CanSetUserWaypointOnMap) == "function" then
+		local canOk, canRes = pcall(cMap.CanSetUserWaypointOnMap, mapID)
+		if not canOk or ns.isSecret(canRes) or canRes ~= true then
+			nativeAllowed = false
+			result.nativeError = canOk and "CanSetUserWaypointOnMap refused this map" or errorText(canRes)
+		end
+	end
+	if nativeAllowed then
 		local pointOk, point = pcall(UiMapPoint.CreateFromCoordinates, mapID, nx, ny)
-		if pointOk and point ~= nil and not ns.isSecret(point) then
+		if pointOk and not ns.isSecret(point) and point ~= nil and type(point) == "table" then
 			local setOk, setRes = pcall(cMap.SetUserWaypoint, point)
-			if setOk and setRes ~= false then
+			if setOk and not ns.isSecret(setRes) and setRes == true then
 				result.ok, result.method = true, "native"
 				result.message = string.format("Set the user waypoint on %s (map %s, %.0f, %.0f).",
-					tostring(cityKey), tostring(mapID), nx * 100, ny * 100)
+					cityLabel, tostring(mapID), nx * 100, ny * 100)
 				if type(C_SuperTrack) == "table" and type(C_SuperTrack.SetSuperTrackedUserWaypoint) == "function" then
 					pcall(C_SuperTrack.SetSuperTrackedUserWaypoint, true)
 				end
 				return true, "native", result.message, result
 			end
-			result.nativeError = setOk and "SetUserWaypoint returned explicit false" or tostring(setRes)
+			if not setOk then
+				result.nativeError = errorText(setRes)
+			elseif ns.isSecret(setRes) then
+				result.nativeError = "SetUserWaypoint returned a restricted value"
+			elseif setRes ~= true then
+				result.nativeError = "SetUserWaypoint did not confirm success (" .. tostring(setRes) .. ")"
+			end
 		else
-			result.nativeError = pointOk and "CreateFromCoordinates returned no usable point" or tostring(point)
+			if not pointOk then
+				result.nativeError = errorText(point)
+			elseif ns.isSecret(point) then
+				result.nativeError = "CreateFromCoordinates returned a restricted point"
+			else
+				result.nativeError = "CreateFromCoordinates returned no usable point"
+			end
 		end
 	end
 
-	-- Optional TomTom support: fall back only when the native API is absent or
-	-- refused. No hard dependency.
-	if type(TomTom) == "table" then
-		local fn = TomTom.AddWaypoint or TomTom.AddZWaypoint
-		if type(fn) == "function" then
-			local okT, resT = pcall(fn, TomTom, mapID, nx, ny, { title = cityKey, from = "DoHelper" })
-			if okT and resT ~= false then
-				result.ok, result.method = true, "tomtom"
-				result.message = string.format("TomTom accepted a waypoint for %s (map %s, %.0f, %.0f).",
-					tostring(cityKey), tostring(mapID), nx * 100, ny * 100)
-				return true, "tomtom", result.message, result
-			end
-			result.tomtomError = okT and "TomTom returned explicit false" or tostring(resT)
+	-- Optional TomTom support: modern AddWaypoint only. A UID (table/string) is
+	-- required for success; nil/false/error/secret is never treated as success.
+	if type(TomTom) == "table" and type(TomTom.AddWaypoint) == "function" then
+		local okT, resT = pcall(TomTom.AddWaypoint, TomTom, mapID, nx, ny,
+			{ title = pointTitle, from = "DoHelper" })
+		if okT and not ns.isSecret(resT) and (type(resT) == "table" or type(resT) == "string") then
+			result.ok, result.method = true, "tomtom"
+			result.message = string.format("TomTom accepted a waypoint for %s (map %s, %.0f, %.0f).",
+				cityLabel, tostring(mapID), nx * 100, ny * 100)
+			return true, "tomtom", result.message, result
+		end
+		if not okT then
+			result.tomtomError = errorText(resT)
+		elseif ns.isSecret(resT) then
+			result.tomtomError = "TomTom returned a restricted value"
+		elseif resT == nil or resT == false then
+			result.tomtomError = "TomTom did not return a waypoint UID"
+		else
+			result.tomtomError = "TomTom returned no recognised UID (" .. type(resT) .. ")"
 		end
 	end
 
 	result.method = "unsupported"
 	result.message = string.format(
 		"No supported waypoint API on this client. %s is approximately %.1f, %.1f (map %s).",
-		tostring(cityKey), nx * 100, ny * 100, tostring(mapID))
+		cityLabel, nx * 100, ny * 100, tostring(mapID))
 	return false, "unsupported", result.message, result
 end
 
 -- Open the world map to a city, guarded like SetWaypoint. The map/waypoint is
 -- only changed by an explicit Show map / Set waypoint action, never by merely
--- selecting a trainer.
+-- selecting a trainer. Uses the documented global OpenWorldMap(mapID); never
+-- toggles an already-open map closed.
+local function openSucceeded(ok, res)
+	if not ok then return false end
+	if ns.isSecret(res) then return false end
+	return res ~= false
+end
+
+-- Read the documented WorldMapFrame postconditions after a map-open attempt.
+-- Returns (checked, ok, reason): 'checked' is true when at least one query was
+-- available; 'ok' false means the visible-map state contradicts the claim and
+-- the attempt must fail closed. Errored or restricted queries fail closed.
+local function checkVisibleMap(wantID)
+	local frame = WorldMapFrame
+	if type(frame) ~= "table" then return false, true, nil end
+	local checked = false
+	if type(frame.IsShown) == "function" then
+		checked = true
+		local ok, shown = pcall(frame.IsShown, frame)
+		if not ok then return true, false, "WorldMapFrame:IsShown errored" end
+		if ns.isSecret(shown) then return true, false, "WorldMapFrame:IsShown is restricted" end
+		if not shown then return true, false, "the world map is not shown" end
+	end
+	if type(frame.GetMapID) == "function" then
+		checked = true
+		local ok, id = pcall(frame.GetMapID, frame)
+		if not ok then return true, false, "WorldMapFrame:GetMapID errored" end
+		if ns.isSecret(id) then return true, false, "WorldMapFrame:GetMapID is restricted" end
+		if ns.toNumber(id) == nil then return true, false, "WorldMapFrame:GetMapID is unreadable" end
+		if id ~= wantID then
+			return true, false, "the visible map is " .. tostring(id) .. ", not " .. tostring(wantID)
+		end
+	end
+	return checked, true, nil
+end
+
 function WT.ShowMap(cityKey)
 	if inCombatLockdown() then
 		return false, "combat", "Combat lockdown: map opening is disabled until combat ends."
 	end
 	local mapID, _source, _info, reason = WT.ResolveMap(cityKey)
+	local label = ns.isSecret(cityKey) and "the selected city" or tostring(cityKey)
 	if not mapID then
-		return false, "unresolved", "Could not resolve a supported map for " .. tostring(cityKey) .. ": " .. tostring(reason)
+		return false, "unresolved", "Could not resolve a supported map for " .. label .. ": " .. tostring(reason)
 	end
-	local cMap = C_Map
-	if type(cMap) == "table" and type(cMap.OpenWorldMap) == "function" then
-		local ok = pcall(cMap.OpenWorldMap, mapID)
-		if ok then return true, "native", "Opened the world map to " .. tostring(cityKey) .. " (map " .. tostring(mapID) .. ")." end
+
+	local successMsg = "Opened the world map to " .. label .. " (map " .. tostring(mapID) .. ")."
+
+	-- Documented global: OpenWorldMap(mapID) returns nil on success. Verify the
+	-- documented frame postconditions when available so a no-op (game-rule
+	-- disabled, not actually opened, wrong map) is never reported as success.
+	local function tryGlobal()
+		if type(OpenWorldMap) ~= "function" then return false end
+		local ok, res = pcall(OpenWorldMap, mapID)
+		if not openSucceeded(ok, res) then return false end
+		local _checked, visibleOk = checkVisibleMap(mapID)
+		if not visibleOk then return false end
+		return true
 	end
-	if type(ToggleWorldMap) == "function" and type(cMap) == "table" and type(cMap.SetMapByID) == "function" then
-		local ok = pcall(function() cMap.SetMapByID(mapID); ToggleWorldMap() end)
-		if ok then return true, "native", "Opened the world map to " .. tostring(cityKey) .. " (map " .. tostring(mapID) .. ")." end
+
+	if tryGlobal() then
+		return true, "native", successMsg
 	end
-	return false, "unsupported", "No supported map-opening API on this client; " .. tostring(cityKey) ..
+
+	-- Fallback: the documented WorldMapFrame. Only usable when it exposes
+	-- SetMapID and Show. Show a hidden map FIRST (guarding returns), then set
+	-- the id because a real OnShow resets the map to the player's current map,
+	-- then verify with IsShown/GetMapID before claiming success.
+	local frame = WorldMapFrame
+	if type(frame) == "table" and type(frame.SetMapID) == "function"
+		and type(frame.Show) == "function" and type(frame.IsShown) == "function"
+		and type(frame.GetMapID) == "function" then
+		local ok, accepted = pcall(function()
+			local shown = frame:IsShown()
+			if ns.isSecret(shown) or type(shown) ~= "boolean" then return false end
+			if not shown then
+				local res = frame:Show()
+				if ns.isSecret(res) or res == false then return false end
+			end
+			local res = frame:SetMapID(mapID)
+			return not ns.isSecret(res) and res ~= false
+		end)
+		if ok and accepted then
+			local _checked, visibleOk = checkVisibleMap(mapID)
+			if visibleOk then
+				return true, "native", successMsg
+			end
+		end
+	end
+
+	-- Last resort: load Blizzard_WorldMap through the documented loader, retry.
+	if type(C_AddOns) == "table" and type(C_AddOns.LoadAddOn) == "function" then
+		pcall(C_AddOns.LoadAddOn, "Blizzard_WorldMap")
+		if tryGlobal() then
+			return true, "native", successMsg
+		end
+	end
+
+	return false, "unsupported", "No supported map-opening API on this client; " .. label ..
 		" is map " .. tostring(mapID) .. ". Use the approximate coordinates instead."
 end
 
@@ -996,6 +1207,10 @@ end
 -----------------------------------------------------------------------------
 
 local DETAIL_NAME = "EllesmereUI_HoTPredictionWeaponTrainer"
+local DETAIL_WIDTH, DETAIL_HEIGHT = 520, 450
+local DETAIL_BODY_HEIGHT = 250
+local DETAIL_BODY_WIDTH = 470
+local STATUS_MAX_CHARS = 260
 
 local function detailText(t)
 	local labels = {}
@@ -1009,19 +1224,27 @@ local function detailText(t)
 		"Weapons taught: " .. table.concat(labels, ", "),
 		"Data confidence: " .. (WT.CONF[t.conf] or t.conf or "Unconfirmed"),
 		"Location: approximate, not exact. " .. WT.SOURCE_NOTE,
+		"Selecting a trainer never changes the map or a waypoint; use the buttons below.",
 	}
 	if t.note then lines[#lines + 1] = "Note: " .. t.note end
-	lines[#lines + 1] = "Selecting a trainer never changes the map or a waypoint; use the buttons below."
 	return table.concat(lines, "\n")
 end
 WT.DetailText = detailText
+
+-- Long status/error text is clamped so it can never grow into the button row.
+local function clampStatus(msg)
+	local s = tostring(msg or "")
+	if #s > STATUS_MAX_CHARS then s = s:sub(1, STATUS_MAX_CHARS - 3) .. "..." end
+	return s
+end
+WT.ClampStatus = clampStatus
 
 function WT.EnsureDetail()
 	if WT.detail then return WT.detail end
 	if type(CreateFrame) ~= "function" then return nil end
 	local f = CreateFrame("Frame", DETAIL_NAME, UIParent, "BackdropTemplate")
 	WT.detail = f
-	f:SetSize(470, 260)
+	f:SetSize(DETAIL_WIDTH, DETAIL_HEIGHT)
 	f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
 	f:SetFrameStrata("FULLSCREEN_DIALOG")
 	f:SetClampedToScreen(true)
@@ -1034,18 +1257,51 @@ function WT.EnsureDetail()
 	f:SetBackdropColor(0.025, 0.035, 0.048, 0.99)
 	f:SetBackdropBorderColor(0.18, 0.38, 0.4, 1)
 
-	local title = label(f, "Weapon trainer", 16, -14, 440)
+	local title = label(f, "Weapon trainer", 16, -14, DETAIL_WIDTH - 32)
 	title:SetFont("Fonts\\FRIZQT__.TTF", 16, "")
 	title:SetTextColor(0.8, 1, 0.96, 1)
 	f.titleLabel = title
 
-	local body = label(f, "", 16, -44, 438)
+	-- Scrollable body: a wrapped FontString inside a clipped scroll child, so a
+	-- long trainer note (e.g. Woo Ping) can never overlap the status/buttons.
+	local bodyScroll = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
+	bodyScroll:SetSize(480, DETAIL_BODY_HEIGHT)
+	bodyScroll:SetPoint("TOPLEFT", f, "TOPLEFT", 16, -42)
+	bodyScroll:EnableMouseWheel(true)
+	local bodyContent = CreateFrame("Frame", nil, bodyScroll)
+	bodyContent:SetSize(DETAIL_BODY_WIDTH, DETAIL_BODY_HEIGHT)
+	bodyScroll:SetScrollChild(bodyContent)
+	local body = label(bodyContent, "", 0, 0, DETAIL_BODY_WIDTH)
+	body:SetWordWrap(true)
 	body:SetTextColor(0.9, 0.94, 0.97, 1)
-	f.body = body
+	bodyScroll:SetScript("OnMouseWheel", function(self, delta)
+		local range = safe(self, "GetVerticalScrollRange") or 0
+		local position = safe(self, "GetVerticalScroll") or 0
+		safe(self, "SetVerticalScroll", math.max(0, math.min(range, position - delta * 40)))
+	end)
+	function f.SetDetailBody(text)
+		body:SetText(text or "")
+		local th = safe(body, "GetStringHeight") or DETAIL_BODY_HEIGHT
+		bodyContent:SetHeight(math.max(DETAIL_BODY_HEIGHT, th + 8))
+		safe(bodyScroll, "UpdateScrollChildRect")
+		safe(bodyScroll, "SetVerticalScroll", 0)
+	end
+	f.bodyScroll, f.bodyContent, f.body = bodyScroll, bodyContent, body
 
-	local status = label(f, "", 16, -196, 438)
+	-- Separate, bounded status area above the button row.
+	local statusBox = CreateFrame("Frame", nil, f)
+	statusBox:SetSize(480, 72)
+	statusBox:SetPoint("TOPLEFT", f, "TOPLEFT", 16, -300)
+	background(statusBox, 0, 0, 480, 72)
+	local status = label(statusBox, "", 10, -6, 460)
+	status:SetWordWrap(true)
 	status:SetTextColor(0.7, 0.88, 0.8, 1)
-	f.status = status
+	safe(status, "SetMaxLines", 4)
+	f.statusBox, f.status = statusBox, status
+
+	local function setStatus(prefix, msg)
+		status:SetText(clampStatus(prefix .. tostring(msg)))
+	end
 
 	local function button(text, x, width, action)
 		local b = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
@@ -1060,13 +1316,13 @@ function WT.EnsureDetail()
 		local t = WT.lastTrainer
 		if not t then return end
 		local ok, _method, msg = WT.ShowMap(t.cityKey or t.city)
-		if status then status:SetText((ok and "Map: " or "Map unavailable: ") .. tostring(msg)) end
+		setStatus(ok and "Map: " or "Map unavailable: ", msg)
 	end)
-	f.waypointButton = button("Set waypoint", 144, 120, function()
+	f.waypointButton = button("Set waypoint", 152, 120, function()
 		local t = WT.lastTrainer
 		if not t then return end
-		local ok, _method, msg = WT.SetWaypoint(t.cityKey or t.city, t.x, t.y)
-		if status then status:SetText((ok and "Waypoint: " or "Waypoint not set: ") .. tostring(msg)) end
+		local ok, _method, msg = WT.SetWaypoint(t.cityKey or t.city, t.x, t.y, { title = t.name })
+		setStatus(ok and "Waypoint: " or "Waypoint not set: ", msg)
 	end)
 	f.closeButton = button("Close", 288, 120, function() f:Hide() end)
 
@@ -1090,7 +1346,7 @@ function WT.OpenTrainer(id)
 	end
 	WT.lastTrainer = t
 	f.titleLabel:SetText(t.name)
-	f.body:SetText(detailText(t))
+	f.SetDetailBody(detailText(t))
 	f.status:SetText("")
 	f:Show()
 	return f

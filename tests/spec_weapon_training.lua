@@ -29,6 +29,70 @@ local function findEntry(entries, fragment)
 	return nil
 end
 
+local function toSet(list)
+	local s = {}
+	for _, v in ipairs(list or {}) do s[v] = true end
+	return s
+end
+
+local function sameMembers(a, b)
+	for k in pairs(a) do if not b[k] then return false end end
+	for k in pairs(b) do if not a[k] then return false end end
+	return true
+end
+
+-----------------------------------------------------------------------------
+-- INDEPENDENT expected data, transcribed from WEAPON_TRAINING_REFERENCE.md /
+-- the supplied document. These MUST NOT be derived from the production
+-- tables, so a bad matrix/weapon/trainer edit is caught.
+-----------------------------------------------------------------------------
+
+local EXPECTED_RACE_CLASSES = {
+	HUMAN = toSet({ "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "MAGE", "WARLOCK" }),
+	DWARF = toSet({ "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAMAN" }),
+	NIGHTELF = toSet({ "WARRIOR", "HUNTER", "ROGUE", "PRIEST", "DRUID" }),
+	GNOME = toSet({ "WARRIOR", "ROGUE", "PRIEST", "MAGE", "WARLOCK" }),
+	ORC = toSet({ "WARRIOR", "HUNTER", "ROGUE", "SHAMAN", "MAGE", "WARLOCK" }),
+	UNDEAD = toSet({ "WARRIOR", "PALADIN", "ROGUE", "PRIEST", "MAGE", "WARLOCK" }),
+	TAUREN = toSet({ "WARRIOR", "HUNTER", "SHAMAN", "DRUID" }),
+	TROLL = toSet({ "WARRIOR", "HUNTER", "ROGUE", "PRIEST", "SHAMAN", "MAGE", "WARLOCK" }),
+	SKYBORNE_HIGH = toSet({ "WARRIOR", "HUNTER", "ROGUE", "MAGE", "DRUID" }),
+	SKYBORNE_WIND = toSet({ "WARRIOR", "HUNTER", "ROGUE", "SHAMAN", "DRUID" }),
+}
+
+local EXPECTED_CLASS_WEAPONS = {
+	WARRIOR = { allowed = toSet({ "AXE1", "AXE2", "SWORD1", "SWORD2", "MACE1", "MACE2",
+		"DAGGER", "FIST", "STAFF", "POLEARM", "BOW", "CROSSBOW", "GUN", "THROWN" }), provisional = {} },
+	PALADIN = { allowed = toSet({ "AXE1", "AXE2", "SWORD1", "SWORD2", "MACE1", "MACE2", "POLEARM" }), provisional = {} },
+	HUNTER = { allowed = toSet({ "AXE1", "AXE2", "SWORD1", "SWORD2", "DAGGER", "FIST",
+		"STAFF", "POLEARM", "BOW", "CROSSBOW", "GUN", "THROWN" }), provisional = {} },
+	ROGUE = { allowed = toSet({ "DAGGER", "THROWN", "SWORD1", "AXE1", "MACE1", "FIST", "BOW", "CROSSBOW", "GUN" }), provisional = {} },
+	PRIEST = { allowed = toSet({ "MACE1", "DAGGER", "STAFF", "WAND" }), provisional = {} },
+	SHAMAN = { allowed = toSet({ "MACE1", "MACE2", "AXE1", "AXE2", "DAGGER", "FIST", "STAFF" }), provisional = {} },
+	MAGE = { allowed = toSet({ "STAFF", "WAND", "DAGGER", "SWORD1" }), provisional = {} },
+	WARLOCK = { allowed = toSet({ "DAGGER", "WAND", "STAFF", "SWORD1" }), provisional = {} },
+	DRUID = { allowed = toSet({ "MACE1", "MACE2", "STAFF", "DAGGER", "FIST" }), provisional = toSet({ "POLEARM" }) },
+}
+
+local EXPECTED_TRAINERS = {
+	woo_ping = { x = 57.1, y = 57.7, city = "Stormwind", district = "Trade District",
+		weapons = toSet({ "CROSSBOW", "DAGGER", "SWORD1", "SWORD2", "STAFF", "POLEARM" }) },
+	buliwyf = { x = 62.2, y = 89.6, city = "Ironforge", district = "Military Ward",
+		weapons = toSet({ "FIST", "GUN", "AXE1", "AXE2", "MACE1", "MACE2" }) },
+	bixi = { x = 62.2, y = 89.6, city = "Ironforge", district = "Military Ward",
+		weapons = toSet({ "CROSSBOW", "DAGGER", "THROWN" }) },
+	ilyenia = { x = 57.6, y = 46.7, city = "Darnassus", district = "Warrior's Terrace",
+		weapons = toSet({ "BOW", "DAGGER", "FIST", "STAFF", "THROWN" }) },
+	sayoc = { x = 81.5, y = 19.6, city = "Orgrimmar", district = "Valley of Honor",
+		weapons = toSet({ "BOW", "DAGGER", "FIST", "AXE1", "AXE2", "STAFF", "THROWN" }) },
+	hanashi = { x = 81.5, y = 19.6, city = "Orgrimmar", district = "Valley of Honor",
+		weapons = toSet({ "BOW", "AXE1", "AXE2", "STAFF", "THROWN" }) },
+	ansekhwa = { x = 40.9, y = 62.7, city = "Thunder Bluff", district = "Lower Rise",
+		weapons = toSet({ "GUN", "MACE1", "MACE2", "STAFF" }) },
+	archibald = { x = 57.3, y = 32.8, city = "Undercity", district = "War Quarter",
+		weapons = toSet({ "CROSSBOW", "DAGGER", "SWORD1", "SWORD2", "POLEARM" }) },
+}
+
 -----------------------------------------------------------------------------
 -- static model
 -----------------------------------------------------------------------------
@@ -40,20 +104,25 @@ T.register("weapon training: every race-class combination is classified and all 
 	assert_eq(#wt.CLASS_ORDER, 9, "all nine classes are present")
 
 	local valid = 0
-	for _, rk in ipairs(wt.RACE_ORDER) do
+	-- Independent expected matrix: 10 race rows, exact 9-class membership.
+	for rk, expectedSet in pairs(EXPECTED_RACE_CLASSES) do
 		local race = wt.RACES_BY_KEY[rk]
 		assert_not_nil(race, "race " .. rk)
 		for _, ck in ipairs(wt.CLASS_ORDER) do
-			local expected = false
-			for _, k in ipairs(race.classes) do if k == ck then expected = true end end
+			local expected = expectedSet[ck] == true
 			assert_eq(wt.IsValidCombo(rk, ck), expected, rk .. " / " .. ck)
 			if expected then valid = valid + 1 end
 		end
+		local actualSet = toSet({})
+		for _, c in ipairs(wt.ClassesForRace(rk)) do actualSet[c.key] = true end
+		assert_true(sameMembers(actualSet, expectedSet), rk .. " class list must match the supplied document")
 		local list = wt.ClassesForRace(rk)
 		assert_true(#list > 0, rk .. " must expose at least one class")
 		for _, c in ipairs(list) do assert_true(wt.IsValidCombo(rk, c.key), "ClassesForRace must only return valid classes") end
 	end
-	assert_true(valid > 0, "some combinations are valid")
+	assert_eq(valid, 56, "exact total number of valid race/class combinations")
+	for rk in pairs(wt.RACES_BY_KEY) do assert_not_nil(EXPECTED_RACE_CLASSES[rk], "unexpected race " .. rk) end
+	assert_eq(#wt.RACE_ORDER, 10, "all ten race rows are present")
 
 	-- Every class is reachable from at least one race.
 	for _, ck in ipairs(wt.CLASS_ORDER) do
@@ -102,16 +171,24 @@ T.register("weapon training: class eligibility, provisional polearm and Forever 
 	assert_not_nil(wand)
 	assert_true(wand.noTrainer, "wand is a default proficiency with no trainer")
 
-	-- Every class's weapons exist in the canonical order with valid statuses.
+	-- Exact independently-transcribed weapon membership for all nine classes.
 	for _, ck in ipairs(wt.CLASS_ORDER) do
+		local expected = EXPECTED_CLASS_WEAPONS[ck]
+		assert_not_nil(expected, "expected weapons missing for " .. ck)
+		local allowed, provisional = {}, {}
 		local seen = {}
 		for _, w in ipairs(wt.WeaponsForClass(ck)) do
 			assert_not_nil(wt.WEAPONS[w.key], "unknown weapon " .. tostring(w.key))
 			assert_true(w.status == "allowed" or w.status == "provisional")
 			assert_false(seen[w.key] == true, "duplicate weapon " .. w.key .. " for " .. ck)
 			seen[w.key] = true
+			if w.status == "provisional" then provisional[w.key] = true else allowed[w.key] = true end
 		end
+		assert_true(sameMembers(allowed, expected.allowed), ck .. " allowed weapons must match the reference")
+		assert_true(sameMembers(provisional, expected.provisional), ck .. " provisional weapons must match the reference")
 	end
+	assert_eq(#wt.CLASS_ORDER, 9, "all nine classes present")
+	for ck in pairs(EXPECTED_CLASS_WEAPONS) do assert_not_nil(wt.CLASSES[ck], "unexpected class " .. ck) end
 end)
 
 T.register("weapon training: starts, partial/unknown data and the Tauren druid example", function()
@@ -210,6 +287,18 @@ T.register("weapon training: eight trainers, faction matching and Skyborne both-
 	-- Wands have no trainer for any caster.
 	assert_eq(#wt.TrainersFor("HUMAN", "MAGE", "WAND"), 0)
 	assert_eq(#wt.TrainersFor("HUMAN", "WARRIOR", "WAND"), 0, "ineligible weapon yields no trainer")
+
+	-- Independent coords/city/district/weapon-set expectations for all eight.
+	for id, exp in pairs(EXPECTED_TRAINERS) do
+		local t = wt.Trainer(id)
+		assert_not_nil(t, "missing trainer " .. id)
+		assert_near(t.x, exp.x, 1e-9, id .. " x")
+		assert_near(t.y, exp.y, 1e-9, id .. " y")
+		assert_eq(t.city, exp.city, id .. " city")
+		assert_eq(t.district, exp.district, id .. " district")
+		assert_true(sameMembers(toSet(t.weapons), exp.weapons), id .. " weapon set")
+	end
+	assert_eq(#wt.AllTrainers(), 8)
 end)
 
 -----------------------------------------------------------------------------
@@ -340,18 +429,111 @@ T.register("weapon training: detail text reports city, district, coordinates and
 	assert_true(contains(txt, "Two-Handed Mace"))
 	assert_true(contains(txt, "Classic-established reference"))
 	assert_true(contains(txt, "not live verified"))
+	-- No developer-facing "what was supplied" note in the Woo Ping detail.
+	assert_false(contains(wt.DetailText(wt.Trainer("woo_ping")), "Weller's Arsenal"))
+	assert_false(contains(wt.DetailText(wt.Trainer("woo_ping")), "NOT supplied"))
+end)
+
+T.register("weapon training: Hunter partial starts and Forever combinations are flagged", function()
+	local e = Mocks.NewEnv()
+	local wt = e.ns.weaponTraining
+
+	-- Hunter ranged-only partial data.
+	local start = wt.Starts("TROLL", "HUNTER")
+	assert_true(start.rangedOnly, "hunter starts are partial (ranged only)")
+	local entries = wt.BuildEntries("TROLL", "HUNTER")
+	assert_not_nil(findEntry(entries, "Partial starting data: ranged only; other starting skills unknown"),
+		"explicit partial-data line is shown")
+	assert_not_nil(findEntry(entries, "Partial supplied starting skills (ranged only)"))
+	-- A non-start weapon in a partial list says status unknown, not "not starting".
+	local axe = findEntry(entries, "One-Handed Axe")
+	assert_not_nil(axe)
+	assert_true(contains(axe.text, "starting status unknown (partial data)"), "partial row qualifier")
+	local bow = findEntry(entries, "Bow")
+	assert_true(contains(bow.text, "supplied starting"))
+
+	-- Human Hunter (no starting package) is a supplied Forever change.
+	assert_true(wt.IsForeverChange("HUMAN", "HUNTER"))
+	assert_not_nil(findEntry(wt.BuildEntries("HUMAN", "HUNTER"), "Supplied Forever change: this race/class"))
+
+	-- All six supplied Forever combos are flagged visibly.
+	for _, pair in ipairs({
+		{ "HUMAN", "HUNTER" }, { "DWARF", "SHAMAN" }, { "GNOME", "PRIEST" },
+		{ "ORC", "MAGE" }, { "TROLL", "WARLOCK" }, { "UNDEAD", "PALADIN" },
+	}) do
+		assert_true(wt.IsForeverChange(pair[1], pair[2]), pair[1] .. "/" .. pair[2] .. " is a Forever change")
+		assert_not_nil(findEntry(wt.BuildEntries(pair[1], pair[2]), "Supplied Forever change: this race/class"),
+			pair[1] .. "/" .. pair[2] .. " flags Forever")
+	end
+	-- A classic combination is not flagged.
+	assert_false(wt.IsForeverChange("TAUREN", "DRUID"))
+	assert_nil(findEntry(wt.BuildEntries("TAUREN", "DRUID"), "Supplied Forever change: this race/class"))
+end)
+
+T.register("weapon training: trainer detail geometry is readable and never overlaps", function()
+	local e = Mocks.NewEnv()
+	local wt = e.ns.weaponTraining
+	local f = wt.OpenTrainer("woo_ping")
+	assert_not_nil(f)
+
+	local body = Mocks.FrameRect(f.bodyScroll)
+	local status = Mocks.FrameRect(f.statusBox)
+	local show = Mocks.FrameRect(f.showMapButton)
+	local wp = Mocks.FrameRect(f.waypointButton)
+	local close = Mocks.FrameRect(f.closeButton)
+
+	-- The body scroll, status area and button row are vertically disjoint.
+	assert_true(body.bottom >= status.top, "body must sit above the status area")
+	assert_true(status.bottom >= show.top and status.bottom >= wp.top and status.bottom >= close.top,
+		"status must sit above the button row")
+	assert_false(Mocks.RectsOverlap(body, status), "body/status overlap")
+	assert_false(Mocks.RectsOverlap(status, show), "status/button overlap")
+	assert_false(Mocks.RectsOverlap(body, show), "body/button overlap")
+
+	-- A long trainer body scrolls rather than overflowing into the status area.
+	f.SetDetailBody(string.rep("A long wrapped trainer note line that keeps growing.\n", 40))
+	assert_true(f.bodyContent:GetHeight() > f.bodyScroll:GetHeight(),
+		"a long body must scroll")
+	local wheel = f.bodyScroll:GetScript("OnMouseWheel")
+	wheel(f.bodyScroll, -1000)
+	assert_eq(f.bodyScroll:GetVerticalScroll(), f.bodyScroll:GetVerticalScrollRange(),
+		"mouse wheel clamps to the bottom")
+	wheel(f.bodyScroll, 1000)
+	assert_eq(f.bodyScroll:GetVerticalScroll(), 0, "mouse wheel clamps to the top")
+
+	-- A long status message is bounded, never overlapping the buttons.
+	wt.lastTrainer = wt.Trainer("woo_ping")
+	assert_true(#wt.ClampStatus(string.rep("x", 2000)) <= 260)
+	C_Map, TomTom = nil, nil
+	click(f.waypointButton)
+	assert_true(#f.status:GetText() <= 260, "status text must be clamped")
+	assert_false(Mocks.RectsOverlap(Mocks.FrameRect(f.statusBox), Mocks.FrameRect(f.showMapButton)))
+
+	-- The waypoint button passes the trainer name as the waypoint title.
+	C_Map = { GetMapInfo = function(id) if id == 1453 then return { mapType = 3, mapID = 1453, name = "Stormwind" } end end }
+	UiMapPoint = nil
+	TomTom = { AddWaypoint = function(_, _, _, _, opts)
+		Mocks.tomtomTitle = opts and opts.title
+		return { uid = "uid-title" }
+	end }
+	click(f.waypointButton)
+	assert_eq(Mocks.tomtomTitle, "Woo Ping", "editor title is the trainer name")
 end)
 
 -----------------------------------------------------------------------------
 -- map adapter
 -----------------------------------------------------------------------------
 
-T.register("weapon training: coordinates normalize and map ids resolve classic and modern only when valid", function()
+T.register("weapon training: coordinates are percent-only and map ids resolve with the numeric Zone enum", function()
 	local e = Mocks.NewEnv()
 	local wt = e.ns.weaponTraining
 
+	-- Percent-only units: no normalized-vs-percent guessing.
 	assert_near(wt.NormalizeCoord(57.1), 0.571, 1e-9)
-	assert_near(wt.NormalizeCoord(0.5), 0.5, 1e-9)
+	assert_near(wt.NormalizeCoord(0.5), 0.005, 1e-9, "0.5 percent")
+	assert_near(wt.NormalizeCoord(1), 0.01, 1e-9, "1 percent")
+	assert_near(wt.NormalizeCoord(100), 1, 1e-9, "100 percent")
+	assert_near(wt.NormalizeCoord(0), 0, 1e-9)
 	assert_nil(wt.NormalizeCoord(-1))
 	assert_nil(wt.NormalizeCoord(150))
 	assert_nil(wt.NormalizeCoord(Mocks.MakeSecret()))
@@ -361,30 +543,59 @@ T.register("weapon training: coordinates normalize and map ids resolve classic a
 	assert_eq(#cands, 2)
 	assert_eq(cands[1].mapID, 1453)
 	assert_eq(cands[2].mapID, 84)
+	assert_eq(#wt.MapCandidates(Mocks.MakeSecret()), 0, "secret city key has no candidates")
 
-	-- Classic client exposes only the classic id.
-	C_Map = { GetMapInfo = function(id) if id == 1453 then return { mapType = "CITY", name = "Stormwind" } end end }
+	-- Classic client exposes only the classic id; the live name is "Stormwind City".
+	C_Map = { GetMapInfo = function(id) if id == 1453 then return { mapType = 3, mapID = 1453, name = "Stormwind City" } end end }
 	local mapID, source = wt.ResolveMap("Stormwind")
 	assert_eq(mapID, 1453)
 	assert_eq(source, "classic")
 
 	-- Modern client exposes only the modern id.
-	C_Map = { GetMapInfo = function(id) if id == 84 then return { mapType = "CITY", name = "Stormwind" } end end }
+	C_Map = { GetMapInfo = function(id) if id == 84 then return { mapType = 3, mapID = 84, name = "Stormwind" } end end }
 	mapID, source = wt.ResolveMap("Stormwind")
 	assert_eq(mapID, 84)
 	assert_eq(source, "modern")
 
-	-- Wrong map type fails closed.
+	-- Enum.UIMapType.Zone is honoured when the client exposes it.
+	Enum = { UIMapType = { Zone = 3 } }
+	C_Map = { GetMapInfo = function(id) if id == 1453 then return { mapType = 3, name = "Stormwind" } end end }
+	mapID = wt.ResolveMap("Stormwind")
+	assert_eq(mapID, 1453)
+
+	-- Non-numeric / wrong numeric map type fails closed (no "CITY" type exists).
 	C_Map = { GetMapInfo = function() return { mapType = "ZONE", name = "Stormwind" } end }
 	local bad, _, _, reason = wt.ResolveMap("Stormwind")
 	assert_nil(bad)
-	assert_true(contains(reason, "not a city"))
-
-	-- Localized / renamed client fails closed rather than placing a wrong waypoint.
-	C_Map = { GetMapInfo = function() return { mapType = "CITY", name = "Sturmwind" } end }
+	assert_true(contains(reason, "not a zone/city"))
+	C_Map = { GetMapInfo = function() return { mapType = 2, name = "Stormwind" } end }
 	bad, _, _, reason = wt.ResolveMap("Stormwind")
 	assert_nil(bad)
-	assert_true(contains(reason, "localized") or contains(reason, "not 'Stormwind'"))
+	assert_true(contains(reason, "not a zone/city"))
+
+	-- A mismatched returned mapID is refused.
+	C_Map = { GetMapInfo = function() return { mapType = 3, mapID = 999, name = "Stormwind" } end }
+	bad, _, _, reason = wt.ResolveMap("Stormwind")
+	assert_nil(bad)
+	assert_true(contains(reason, "mismatched"))
+
+	-- Known localized alias resolves; truly unknown name fails closed.
+	C_Map = { GetMapInfo = function() return { mapType = 3, name = "Eisenschmiede" } end }
+	assert_eq(wt.ResolveMap("Ironforge"), 1455, "German Ironforge alias resolves")
+	C_Map = { GetMapInfo = function() return { mapType = 3, name = "Atlantis" } end }
+	bad, _, _, reason = wt.ResolveMap("Stormwind")
+	assert_nil(bad)
+	assert_true(contains(reason, "localized") or contains(reason, "not a known"))
+
+	-- Restricted map name/mapType never raises, and never resolves.
+	C_Map = { GetMapInfo = function() return { mapType = 3, name = Mocks.MakeSecret() } end }
+	bad, _, _, reason = wt.ResolveMap("Stormwind")
+	assert_nil(bad)
+	assert_true(contains(reason, "localized") or contains(reason, "not a known"))
+	C_Map = { GetMapInfo = function() return { mapType = Mocks.MakeSecret(), name = "Stormwind" } end }
+	bad, _, _, reason = wt.ResolveMap("Stormwind")
+	assert_nil(bad)
+	assert_true(contains(reason, "restricted"))
 
 	-- Missing API yields a useful reason, never an exception.
 	C_Map = nil
@@ -392,19 +603,21 @@ T.register("weapon training: coordinates normalize and map ids resolve classic a
 	assert_nil(bad)
 	assert_true(contains(reason, "GetMapInfo"))
 
-	-- Unknown city fails closed.
+	-- Unknown city / secret city fail closed.
 	bad = wt.ResolveMap("Atlantis")
+	assert_nil(bad)
+	bad = wt.ResolveMap(Mocks.MakeSecret())
 	assert_nil(bad)
 end)
 
-T.register("weapon training: native waypoint success, TomTom fallback, and false/error/secret honesty", function()
+T.register("weapon training: native waypoint requires confirmed true; TomTom requires a UID", function()
 	local e = Mocks.NewEnv()
 	local wt = e.ns.weaponTraining
 
 	-- Native success; coordinates normalized to 0-1 and SuperTrack called.
 	C_Map = {
-		GetMapInfo = function(id) if id == 1453 then return { mapType = "CITY", name = "Stormwind" } end end,
-		SetUserWaypoint = function(point) Mocks.waypoint = point end,
+		GetMapInfo = function(id) if id == 1453 then return { mapType = 3, mapID = 1453, name = "Stormwind" } end end,
+		SetUserWaypoint = function(point) Mocks.waypoint = point; return true end,
 	}
 	UiMapPoint = { CreateFromCoordinates = function(id, x, y) return { uiMapID = id, x = x, y = y } end }
 	C_SuperTrack = { SetSuperTrackedUserWaypoint = function(v) Mocks.superTracked = v end }
@@ -416,20 +629,56 @@ T.register("weapon training: native waypoint success, TomTom fallback, and false
 	assert_eq(Mocks.waypoint.uiMapID, 1453)
 	assert_true(Mocks.superTracked)
 
-	-- Native explicit false falls back to TomTom.
-	Mocks.waypoint, Mocks.superTracked = nil, nil
-	C_Map.SetUserWaypoint = function() return false end
+	-- SetUserWaypoint nil / false / secret are never success (no TomTom fallback).
+	for _, variant in ipairs({
+		{ name = "nil", fn = function() end, err = "did not confirm" },
+		{ name = "false", fn = function() return false end, err = "did not confirm" },
+		{ name = "secret", fn = function() return Mocks.MakeSecret() end, err = "restricted" },
+	}) do
+		Mocks.waypoint, Mocks.superTracked = nil, nil
+		C_Map.SetUserWaypoint = variant.fn
+		TomTom = nil
+		ok, method = wt.SetWaypoint("Stormwind", 57.1, 57.7)
+		assert_false(ok, "SetUserWaypoint " .. variant.name .. " must not report success")
+		assert_eq(method, "unsupported")
+		assert_true(contains(wt.lastWaypoint.nativeError, variant.err), variant.name .. " reason")
+		assert_nil(Mocks.waypoint)
+	end
+
+	-- TomTom returning nil / false / secret is never success.
+	for _, variant in ipairs({
+		{ name = "nil", fn = function() return nil end, err = "UID" },
+		{ name = "false", fn = function() return false end, err = "UID" },
+		{ name = "secret", fn = function() return Mocks.MakeSecret() end, err = "restricted" },
+	}) do
+		C_Map.SetUserWaypoint = function() return false end
+		TomTom = { AddWaypoint = variant.fn }
+		ok, method = wt.SetWaypoint("Stormwind", 57.1, 57.7)
+		assert_false(ok, "TomTom " .. variant.name .. " must not report success")
+		assert_eq(method, "unsupported")
+		assert_true(contains(wt.lastWaypoint.tomtomError, variant.err), variant.name .. " tomtom reason")
+	end
+
+	-- Native false falls back to TomTom, which must return a UID. The trainer
+	-- name is used as the waypoint title.
 	local tomtomCalls = 0
-	TomTom = { AddWaypoint = function(_, id, x, y) tomtomCalls = tomtomCalls + 1; Mocks.waypoint = { uiMapID = id, x = x, y = y }; return true end }
-	ok, method = wt.SetWaypoint("Stormwind", 57.1, 57.7)
+	C_Map.SetUserWaypoint = function() return false end
+	TomTom = { AddWaypoint = function(_, id, x, y, opts)
+		tomtomCalls = tomtomCalls + 1
+		Mocks.tomtomTitle = opts and opts.title
+		Mocks.waypoint = { uiMapID = id, x = x, y = y }
+		return { uid = "uid-1" }
+	end }
+	ok, method = wt.SetWaypoint("Stormwind", 57.1, 57.7, { title = "Woo Ping" })
 	assert_true(ok)
 	assert_eq(method, "tomtom")
 	assert_eq(tomtomCalls, 1)
-	assert_true(contains(wt.lastWaypoint.nativeError, "false"))
+	assert_eq(Mocks.tomtomTitle, "Woo Ping", "trainer name is the waypoint title")
+	assert_true(contains(wt.lastWaypoint.nativeError, "did not confirm"))
 
-	-- Native error + TomTom false: honest failure, no success claim.
+	-- Native error + TomTom error: honest failure, no success claim.
 	C_Map.SetUserWaypoint = function() error("boom") end
-	TomTom.AddWaypoint = function() return false end
+	TomTom.AddWaypoint = function() error("tomtom boom") end
 	Mocks.waypoint = nil
 	ok, method = wt.SetWaypoint("Stormwind", 57.1, 57.7)
 	assert_false(ok)
@@ -438,15 +687,39 @@ T.register("weapon training: native waypoint success, TomTom fallback, and false
 	assert_not_nil(wt.lastWaypoint.tomtomError)
 	assert_nil(Mocks.waypoint)
 
-	-- Secret point is refused and never passed to the client.
+	-- Restricted error objects are never read/coerced: no raise, honest failure.
+	C_Map.SetUserWaypoint = function() error(Mocks.MakeSecret()) end
+	TomTom.AddWaypoint = function() error(Mocks.MakeSecret()) end
+	ok, method = wt.SetWaypoint("Stormwind", 57.1, 57.7)
+	assert_false(ok)
+	assert_eq(method, "unsupported")
+	assert_eq(type(wt.lastWaypoint.nativeError), "string", "restricted native error stays uncoerced")
+	assert_eq(type(wt.lastWaypoint.tomtomError), "string", "restricted TomTom error stays uncoerced")
+	assert_nil(Mocks.waypoint)
+
+	-- CanSetUserWaypointOnMap refusal skips native and falls back to TomTom.
+	C_Map.CanSetUserWaypointOnMap = function() return false end
+	C_Map.SetUserWaypoint = function() Mocks.waypoint = "native-should-not-run"; return true end
+	TomTom = { AddWaypoint = function() return { uid = "uid-can" } end }
+	ok, method = wt.SetWaypoint("Stormwind", 57.1, 57.7)
+	assert_true(ok)
+	assert_eq(method, "tomtom")
+	assert_true(contains(wt.lastWaypoint.nativeError, "CanSetUserWaypointOnMap"))
+	C_Map.CanSetUserWaypointOnMap = nil
+
+	-- Restricted / explicit-false UiMapPoint is refused and never passed on.
 	C_Map.SetUserWaypoint = function() return true end
-	UiMapPoint = { CreateFromCoordinates = function() return Mocks.MakeSecret() end }
 	TomTom = nil
+	UiMapPoint = { CreateFromCoordinates = function() return Mocks.MakeSecret() end }
 	Mocks.waypoint = nil
 	ok, method = wt.SetWaypoint("Stormwind", 57.1, 57.7)
 	assert_false(ok)
 	assert_eq(method, "unsupported")
 	assert_nil(Mocks.waypoint)
+	assert_true(contains(wt.lastWaypoint.nativeError, "restricted"))
+	UiMapPoint = { CreateFromCoordinates = function() return false end }
+	ok = wt.SetWaypoint("Stormwind", 57.1, 57.7)
+	assert_false(ok)
 
 	-- Missing APIs: useful coordinates in the message, not an exception.
 	C_Map, UiMapPoint = nil, nil
@@ -456,19 +729,29 @@ T.register("weapon training: native waypoint success, TomTom fallback, and false
 	assert_true(contains(msg, "57.1"))
 	assert_true(contains(msg, "no waypoint placed"))
 
-	-- Out-of-range coordinates are refused before any API call.
+	-- Out-of-range / secret coordinates are refused before any API call.
 	ok, method = wt.SetWaypoint("Stormwind", 999, 57.7)
 	assert_false(ok)
 	assert_eq(method, "invalid")
+	ok, method = wt.SetWaypoint("Stormwind", Mocks.MakeSecret(), 57.7)
+	assert_false(ok)
+	assert_eq(method, "invalid")
+
+	-- No raw secret input is retained in WT.lastWaypoint.
+	wt.SetWaypoint(Mocks.MakeSecret(), 57.1, 57.7)
+	assert_nil(wt.lastWaypoint.city, "secret city must not be retained")
+	assert_near(wt.lastWaypoint.x, 57.1, 1e-9)
+	wt.SetWaypoint("Stormwind", Mocks.MakeSecret(), Mocks.MakeSecret())
+	assert_nil(wt.lastWaypoint.x, "secret coordinates must not be retained")
+	assert_nil(wt.lastWaypoint.y)
 end)
 
-T.register("weapon training: combat refusal and Show map are guarded", function()
+T.register("weapon training: combat refusal and Show map use the global OpenWorldMap", function()
 	local e = Mocks.NewEnv()
 	local wt = e.ns.weaponTraining
 	C_Map = {
-		GetMapInfo = function(id) if id == 1453 then return { mapType = "CITY", name = "Stormwind" } end end,
-		SetUserWaypoint = function(p) Mocks.waypoint = p end,
-		OpenWorldMap = function(id) Mocks.openedMap = id end,
+		GetMapInfo = function(id) if id == 1453 then return { mapType = 3, mapID = 1453, name = "Stormwind" } end end,
+		SetUserWaypoint = function(p) Mocks.waypoint = p; return true end,
 	}
 	UiMapPoint = { CreateFromCoordinates = function(id, x, y) return { uiMapID = id, x = x, y = y } end }
 
@@ -480,35 +763,233 @@ T.register("weapon training: combat refusal and Show map are guarded", function(
 	-- Combat refuses and leaves the map/waypoint untouched.
 	Mocks.inCombat = true
 	Mocks.waypoint, Mocks.openedMap = nil, nil
-	local before = Mocks.waypoint
+	OpenWorldMap = function(id) Mocks.openedMap = id end
 	ok, method, msg = wt.SetWaypoint("Stormwind", 57.1, 57.7)
 	assert_false(ok)
 	assert_eq(method, "combat")
 	assert_true(contains(msg, "Combat"))
-	assert_eq(Mocks.waypoint, before)
+	assert_nil(Mocks.waypoint)
 	ok, method = wt.ShowMap("Stormwind")
 	assert_false(ok)
 	assert_eq(method, "combat")
 	assert_nil(Mocks.openedMap)
 	Mocks.inCombat = false
 
-	-- Show map works out of combat.
+	-- Show map works out of combat through the GLOBAL OpenWorldMap.
 	ok, method, msg = wt.ShowMap("Stormwind")
 	assert_true(ok)
 	assert_eq(method, "native")
 	assert_eq(Mocks.openedMap, 1453)
 
+	-- OpenWorldMap false / error / secret never reports success.
+	for _, variant in ipairs({
+		{ name = "false", fn = function() return false end },
+		{ name = "error", fn = function() error("no map") end },
+		{ name = "secret", fn = function() return Mocks.MakeSecret() end },
+	}) do
+		OpenWorldMap = variant.fn
+		ok, method, msg = wt.ShowMap("Stormwind")
+		assert_false(ok, "OpenWorldMap " .. variant.name .. " must not report success")
+		assert_eq(method, "unsupported")
+		assert_true(contains(msg, "1453"))
+	end
+
+	-- A visible mismatch fails closed rather than claiming the wrong map.
+	OpenWorldMap = function() end
+	WorldMapFrame = { GetMapID = function() return 999 end }
+	ok = wt.ShowMap("Stormwind")
+	assert_false(ok, "wrong visible map id must fail closed")
+
+	-- A game-rule disabled no-op (map not actually shown) is not called opened.
+	WorldMapFrame = { IsShown = function() return false end }
+	ok = wt.ShowMap("Stormwind")
+	assert_false(ok, "an OpenWorldMap no-op must not report success")
+
+	-- A real visible-map path: shown and the requested map id verified.
+	WorldMapFrame = {
+		IsShown = function() return true end,
+		GetMapID = function() return 1453 end,
+	}
+	ok, method = wt.ShowMap("Stormwind")
+	assert_true(ok, "visible correct map must succeed")
+	assert_eq(method, "native")
+	WorldMapFrame = nil
+
+	-- Fallback shows the WorldMapFrame without toggling an already-open map.
+	OpenWorldMap = nil
+	local shownCalls, setMap = 0, nil
+	WorldMapFrame = {
+		IsShown = function() return true end,
+		Show = function() shownCalls = shownCalls + 1 end,
+		SetMapID = function(_, id) setMap = id end,
+		GetMapID = function() return setMap end,
+	}
+	ok, method = wt.ShowMap("Stormwind")
+	assert_true(ok)
+	assert_eq(method, "native")
+	assert_eq(setMap, 1453)
+	assert_eq(shownCalls, 0, "an already-open map must not be toggled")
+	-- A hidden frame is shown FIRST; a real OnShow resets the map to the
+	-- player's current map, so SetMapID must run after Show to survive it.
+	local state = { shown = false, id = 999 }
+	WorldMapFrame = {
+		IsShown = function(self) return state.shown end,
+		Show = function(self) state.shown = true; state.id = 999 end, -- OnShow reset
+		SetMapID = function(self, id) state.id = id end,
+		GetMapID = function(self) return state.id end,
+	}
+	ok, method = wt.ShowMap("Stormwind")
+	assert_true(ok)
+	assert_eq(method, "native")
+	assert_true(state.shown, "hidden frame is shown")
+	assert_eq(state.id, 1453, "SetMapID after Show must override the OnShow reset")
+
+	-- An incomplete frame lacking SetMapID cannot be used: fail closed.
+	WorldMapFrame = {
+		IsShown = function() return true end,
+		Show = function() end,
+	}
+	ok, method = wt.ShowMap("Stormwind")
+	assert_false(ok, "a frame lacking SetMapID must not report success")
+	assert_eq(method, "unsupported")
+
+	-- A frame whose SetMapID does not take (wrong visible map) fails closed.
+	WorldMapFrame = {
+		IsShown = function() return true end,
+		Show = function() end,
+		SetMapID = function() end,
+		GetMapID = function() return 42 end,
+	}
+	ok = wt.ShowMap("Stormwind")
+	assert_false(ok, "a frame returning the wrong map must fail closed")
+
+	-- A frame whose IsShown errors fails closed instead of raising.
+	WorldMapFrame = {
+		IsShown = function() error("nope") end,
+		Show = function() end,
+		SetMapID = function() end,
+	}
+	ok = wt.ShowMap("Stormwind")
+	assert_false(ok, "an erroring IsShown must fail closed")
+	WorldMapFrame = nil
+
+	-- Last resort: load Blizzard_WorldMap through the documented loader, retry.
+	OpenWorldMap, Mocks.openedMap = nil, nil
+	C_AddOns = { LoadAddOn = function(name)
+		assert_eq(name, "Blizzard_WorldMap")
+		OpenWorldMap = function(id) Mocks.openedMap = id end
+	end }
+	ok, method = wt.ShowMap("Stormwind")
+	assert_true(ok)
+	assert_eq(Mocks.openedMap, 1453)
+	C_AddOns = nil
+
+	-- A restricted combat return counts as locked, and the addon fallback is used
+	-- when the client global is missing.
+	InCombatLockdown = nil
+	e.ns.inCombat = true
+	ok, method = wt.ShowMap("Stormwind")
+	assert_false(ok)
+	assert_eq(method, "combat")
+	e.ns.inCombat = false
+	InCombatLockdown = function() return Mocks.MakeSecret() end
+	ok, method = wt.ShowMap("Stormwind")
+	assert_false(ok)
+	assert_eq(method, "combat")
+
 	-- Resolvable map but no opening API: useful failure, not an exception.
-	C_Map.OpenWorldMap = nil
+	InCombatLockdown = function() return false end
+	OpenWorldMap, WorldMapFrame, C_AddOns = nil, nil, nil
 	ok, method, msg = wt.ShowMap("Stormwind")
 	assert_false(ok)
 	assert_eq(method, "unsupported")
 	assert_true(contains(msg, "1453"))
 end)
 
+T.register("weapon training: ShowMap frame fallback is verified and fails closed", function()
+	local e = Mocks.NewEnv()
+	local wt = e.ns.weaponTraining
+	C_Map = {
+		GetMapInfo = function(id) if id == 1453 then return { mapType = 3, mapID = 1453, name = "Stormwind" } end end,
+	}
+
+	-- A hidden frame whose OnShow resets the map: SetMapID must run after Show.
+	local state = { shown = false, id = 999 }
+	WorldMapFrame = {
+		IsShown = function() return state.shown end,
+		Show = function() state.shown = true; state.id = 999 end,
+		SetMapID = function(_, id) state.id = id end,
+		GetMapID = function() return state.id end,
+	}
+	local ok, method = wt.ShowMap("Stormwind")
+	assert_true(ok)
+	assert_eq(method, "native")
+	assert_true(state.shown)
+	assert_eq(state.id, 1453, "SetMapID after Show overrides the OnShow reset")
+
+	-- An incomplete frame lacking SetMapID must fail closed.
+	WorldMapFrame = { IsShown = function() return true end, Show = function() end }
+	ok, method = wt.ShowMap("Stormwind")
+	assert_false(ok)
+	assert_eq(method, "unsupported")
+
+	-- A frame that returns the wrong map after SetMapID fails closed.
+	WorldMapFrame = {
+		IsShown = function() return true end,
+		Show = function() end,
+		SetMapID = function() end,
+		GetMapID = function() return 7 end,
+	}
+	assert_false(wt.ShowMap("Stormwind"), "wrong returned map must fail closed")
+
+	-- Global OpenWorldMap no-op (not actually shown) is not called opened.
+	OpenWorldMap = function() end
+	WorldMapFrame = { IsShown = function() return false end }
+	assert_false(wt.ShowMap("Stormwind"), "a no-op open must fail closed")
+
+	-- Global OpenWorldMap with a verified visible map is a real success.
+	WorldMapFrame = { IsShown = function() return true end, GetMapID = function() return 1453 end }
+	ok, method = wt.ShowMap("Stormwind")
+	assert_true(ok)
+	assert_eq(method, "native")
+
+	-- An explicit false global return fails closed without claiming success.
+	OpenWorldMap = function() return false end
+	WorldMapFrame = nil
+	ok, method = wt.ShowMap("Stormwind")
+	assert_false(ok)
+	assert_eq(method, "unsupported")
+end)
+
 -----------------------------------------------------------------------------
 -- branding, aliases, legacy settings
 -----------------------------------------------------------------------------
+
+T.register("weapon training: frame setters and unreadable postconditions cannot claim success", function()
+	local e = Mocks.NewEnv()
+	local wt = e.ns.weaponTraining
+	C_Map = { GetMapInfo = function(id)
+		if id == 1453 then return { mapType = 3, mapID = id, name = "Stormwind City" } end
+	end }
+	for _, result in ipairs({ false, Mocks.MakeSecret() }) do
+		WorldMapFrame = {
+			IsShown = function() return true end, Show = function() end,
+			SetMapID = function() return result end, GetMapID = function() return 1453 end,
+		}
+		assert_false(wt.ShowMap("Stormwind"), "rejected setter cannot report an opened map")
+		WorldMapFrame.IsShown = function() return false end
+		WorldMapFrame.Show = function() return result end
+		WorldMapFrame.SetMapID = function() error("must not set after refused show") end
+		assert_false(wt.ShowMap("Stormwind"), "rejected Show cannot report success")
+	end
+	WorldMapFrame = {
+		IsShown = function() return true end, Show = function() end,
+		SetMapID = function() end, GetMapID = function() return nil end,
+	}
+	assert_false(wt.ShowMap("Stormwind"), "nil map query is not confirmation")
+	OpenWorldMap = function() end
+	assert_false(wt.ShowMap("Stormwind"), "global path also refuses unreadable map query")
+end)
 
 T.register("weapon training: DoHelper branding, aliases and legacy settings compatibility", function()
 	local e = Mocks.NewEnv()
@@ -535,19 +1016,20 @@ T.register("weapon training: DoHelper branding, aliases and legacy settings comp
 	e.ns.HandleCommand("help")
 	assert_true(contains(Mocks.chat[before + 1], "[DoHelper]"), "chat prefix is DoHelper")
 
-	-- Legacy category identifier is unchanged (settings-path compatibility).
+	-- Public Blizzard category identifier is now DoHelper (test assertion updated).
 	local captured
 	Settings = {
 		RegisterCanvasLayoutCategory = function(panel, name) captured = name; return { panel = panel } end,
 		RegisterAddOnCategory = function() end,
 	}
 	e.ns.InitOptions()
-	assert_eq(captured, "EllesmereUI HoT Prediction")
+	assert_eq(captured, "DoHelper")
 	Settings = nil
 
 	-- TOC keeps the historical SavedVariables name and ships the new module.
 	local toc = ReadFile((_G.__HOT_ROOT or ".") .. "/EllesmereUI_HoTPrediction/EllesmereUI_HoTPrediction.toc")
-	assert_true(contains(toc, "DoHelper"))
+	assert_true(contains(toc, "## Title: DoHelper"))
+	assert_true(not contains(toc, "HoTPrediction:") and not contains(toc, "HoT Prediction"), "TOC title is simply DoHelper")
 	assert_true(contains(toc, "Version: 0.9.0"))
 	assert_true(contains(toc, "SavedVariables: EllesmereUI_HoTPredictionDB"))
 	assert_true(contains(toc, "WeaponTraining.lua"))
@@ -562,7 +1044,7 @@ T.register("weapon training: legacy settings register once and saved data is pre
 	local added = 0
 	InterfaceOptions_AddCategory = function(panel)
 		added = added + 1
-		assert_eq(panel.name, "EllesmereUI HoT Prediction")
+		assert_eq(panel.name, "DoHelper")
 	end
 	e.ns.InitOptions()
 	e.ns.InitOptions()

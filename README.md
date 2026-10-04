@@ -24,12 +24,12 @@ StatusBar of its own and secure-hooks native callbacks read-only.
 
 **About the name.** `DoHelper` is the public name. The AddOn **folder**
 (`EllesmereUI_HoTPrediction/`), the **SavedVariables** name
-(`EllesmereUI_HoTPredictionDB`), the global frame IDs (`EllesmereUI_HoTPrediction*`),
-the Blizzard settings category identifier (`EllesmereUI HoT Prediction`) and the
-historical global binding functions all stay exactly as before: they are
+(`EllesmereUI_HoTPredictionDB`), the global frame IDs (`EllesmereUI_HoTPrediction*`)
+and the historical global binding functions all stay exactly as before: they are
 compatibility identifiers, not branding. Renaming any of them would relocate
-saved settings or lose data, so the rename is display-only. Both command styles
-work: `/dohelper` (and `/dh`) as well as the historical `/euihot` and `/hotpred`.
+saved settings or lose data, so the rename is display-only. The Blizzard
+settings category is shown as **DoHelper**. Both command styles work:
+`/dohelper` (and `/dh`) as well as the historical `/euihot` and `/hotpred`.
 Adding the Weapon training tab does not change any existing behaviour.
 
 ---
@@ -176,24 +176,42 @@ detail panel.
   confidence label, the start zone → capital route, and one row per eligible
   weapon.
 * **Weapon rows** show `[allowed]` or `[provisional: Forever beta]`, whether the
-  weapon is a **supplied starting** weapon or **starting unknown**, its
-  requirements (level 1, or level 20 for polearms) and an approximate cost.
-  Wands are a default caster proficiency and have **no** trainer. Every
-  eligible weapon shows its trainer(s) as buttons; a Horde race shows only Horde
-  trainers, and a Skyborne race (faction unconfirmed) shows both, clearly noted.
-* **Trainer detail:** clicking a trainer opens one reused panel with the city,
-  district, approximate coordinates, weapons taught and data confidence, plus
-  explicit **Show map** and **Set waypoint** buttons. Selecting a trainer never
-  moves the map. In combat both map actions refuse with an explanatory message.
+  weapon is a **supplied starting** weapon, **starting unknown**, or (for a
+  partial list such as Hunter) **starting status unknown (partial data)**, its
+  requirements (level 1, or level 20 for polearms) and an approximate cost. A
+  partial ranged-only Hunter list is explicitly labelled *Partial starting data:
+  ranged only; other starting skills unknown*, and supplied Forever combinations
+  (Human Hunter, Dwarf Shaman, Gnome Priest, Orc Mage, Troll Warlock, Undead
+  Paladin) are flagged. Wands are a default caster proficiency and have **no**
+  trainer. Every eligible weapon shows its trainer(s) as buttons; a Horde race
+  shows only Horde trainers, and a Skyborne race (faction unconfirmed) shows
+  both, clearly noted.
+* **Trainer detail:** clicking a trainer opens one reused, movable panel with a
+  scrollable body (city, district, approximate coordinates, weapons taught and
+  data confidence) plus a separate bounded status area and explicit **Show map**
+  and **Set waypoint** buttons. Long notes scroll instead of overlapping the
+  status or buttons, and long status messages are clamped. Selecting a trainer
+  never moves the map. In combat both map actions refuse with an explanatory
+  message.
 * **Map safety:** city map ids are resolved at runtime from both the classic
   (e.g. `1453`) and modern (e.g. `84`) candidates through
-  `C_Map.GetMapInfo`, and only accepted when the resolved map is a `CITY` whose
-  name matches. If it cannot be validated, **no waypoint is placed** (no
-  fabricated legacy id). Native `C_Map.SetUserWaypoint` /
-  `UiMapPoint.CreateFromCoordinates` (with optional `C_SuperTrack`) is used
-  first; optional TomTom is used only when the native API is unavailable or
-  refuses. Note that English city-name matching intentionally fails closed on a
-  localized client.
+  `C_Map.GetMapInfo`. A candidate is accepted only when the resolved map has the
+  numeric `Enum.UIMapType.Zone` type (documented value `3`; there is no `CITY`
+  map type), its `mapID` matches the candidate, and its name matches a known
+  English/known-localized alias (`Stormwind`/`Stormwind City`, `Sturmwind`,
+  `Eisenschmiede`, `Donnerfels`, `Unterstadt`, …). If it cannot be validated,
+  **no waypoint is placed** (no fabricated legacy id). Native
+  `C_Map.SetUserWaypoint` / `UiMapPoint.CreateFromCoordinates` (with optional
+  `C_SuperTrack`, and optional `C_Map.CanSetUserWaypointOnMap`) is used first and
+  only counts as success on a confirmed `true`; optional TomTom
+  (`TomTom:AddWaypoint(uiMapID, x, y, opts)`, which must return a waypoint UID)
+  is used only when native is unavailable or refuses. `SetWaypoint` arguments are
+  **percent only** (`0.5` → `0.005`, `100` → `1`); input is never guessed as
+  already-normalized. `Show map` uses the documented global `OpenWorldMap(mapID)`
+  and verifies `WorldMapFrame`'s `IsShown`/`GetMapID` when available, so a no-op
+  or wrong map fails closed; its frame fallback shows a hidden map first and then
+  sets the map id, and it never toggles an already-open map. Unknown localizations
+  fail closed.
 * **Provenance:** every value is labelled *Classic-established reference*,
   *Supplied Forever change*, *Forever beta / provisional*, *Supplied typical /
   verify client*, or *Unconfirmed*. The full data and provenance are documented
@@ -314,7 +332,7 @@ not your spellbook or active auras. Limitations and exclusions (including other
 players' HoTs) are shown explicitly. Browsing does not change settings or start a preview.
 
 * **Left-click the minimap icon** or use `/euihot options` (alias: `/euihot menu`).
-  Also available under Blizzard's **Settings → AddOns → EllesmereUI HoT Prediction**
+  Also available under Blizzard's **Settings → AddOns → DoHelper**
   when the client's settings API is available.
 * **Right-click** the icon for copyable diagnostics. **Drag** it around the minimap;
   the angle is saved. The button follows the minimap's size with a circular path.
@@ -993,10 +1011,11 @@ honestly refuses false/error/secret APIs and combat.
   carries one confidence label; trainers, costs and starting packages must be
   confirmed in the client. Selecting a trainer or a class never learns a
   proficiency and never changes the map.
-* **English city-name matching makes the map adapter fail closed on a localized
-  client**: when `C_Map.GetMapInfo` returns a non-English city name for the
-  candidate ids, no waypoint is placed (the approximate coordinates remain
-  usable). No fabricated legacy area id is ever substituted.
-* The Blizzard settings **category identifier** deliberately stays
-  `EllesmereUI HoT Prediction` for settings compatibility; only the visible
-  content and the chat/tooltip branding say DoHelper.
+* **City-name matching makes the map adapter fail closed on an unknown
+  localization**: a candidate resolves only when `C_Map.GetMapInfo` returns the
+  numeric Zone type, a matching `mapID`, and a known English/known-localized
+  city alias. An unknown localized name places no waypoint (the approximate
+  coordinates remain usable). No fabricated legacy area id is ever substituted.
+* The Blizzard settings **category name** is `DoHelper`; the historical AddOn
+  folder, SavedVariables name, global frame ids and binding globals remain
+  compatibility identifiers.

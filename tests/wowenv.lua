@@ -462,6 +462,22 @@ local function regionAbsRect(r)
 	return x, y - (h or 12), x + w, y
 end
 
+-- Public geometry helpers for layout tests: axis-aligned rects with top > bottom.
+function Mocks.FrameRect(f)
+	local l, b, r, t = frameAbsRect(f)
+	return { left = l, bottom = b, right = r, top = t }
+end
+
+function Mocks.RegionRect(region)
+	local l, b, r, t = regionAbsRect(region)
+	return { left = l, bottom = b, right = r, top = t }
+end
+
+function Mocks.RectsOverlap(a, b)
+	if not a or not b then return false end
+	return a.left < b.right and b.left < a.right and a.bottom < b.top and b.bottom < a.top
+end
+
 local function effectivelyShown(f)
 	while f do
 		if f._shown == false then return false end
@@ -612,6 +628,10 @@ function Mocks.Reset()
 	_G.C_SuperTrack = nil
 	_G.TomTom = nil
 	_G.ToggleWorldMap = nil
+	_G.OpenWorldMap = nil
+	_G.WorldMapFrame = nil
+	_G.C_AddOns = nil
+	_G.Enum = nil
 	_G.UnitGetTotalHealAbsorbs = function()
 		if not Mocks.healAbsorbApiPresent then error("missing heal absorb API") end
 		return Mocks.healAbsorb
