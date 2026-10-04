@@ -12,11 +12,55 @@ local families = {
 	["Heroic Strike"] = { 78, 284, 285, 1608, 11564, 11565, 11566, 11567, 25286, 25242, 29707, 30324, 47449, 47450 },
 	Cleave = { 845, 7369, 11608, 11609, 20569, 25231, 47519, 47520 },
 	["Raptor Strike"] = { 2973, 14260, 14261, 14262, 14263, 14264, 14265, 14266 },
+	Throw = { 2764 }, -- ranged current-action indicator, not a melee queue claim
 }
 for family, ids in pairs(families) do
 	for _, id in ipairs(ids) do spells[id] = family end
 end
 swing.spells = spells -- GUI catalog uses the detector's actual registry.
+swing.baseSpells = {}
+for id, name in pairs(spells) do swing.baseSpells[id] = name end
+
+function swing.RebuildSpells()
+	for id in pairs(spells) do spells[id] = nil end
+	for id, name in pairs(swing.baseSpells) do
+		if not ns.db.removedQueueSpells[id] then spells[id] = name end
+	end
+	for id, name in pairs(ns.db.extraQueueSpells) do
+		if ns.isPositiveInt(id) and id <= 100000000 and id ~= 6603 and id ~= 75 and id ~= 5019
+			and type(name) == "string" and not ns.isSecret(name) and #name <= 80
+			and not name:find("[|\r\n]") and not ns.db.removedQueueSpells[id] then spells[id] = name end
+	end
+end
+
+function swing.EditSpell(op, id, name)
+	if not ns.isPositiveInt(id) or id > 100000000 then return false, "Enter a positive spell ID (up to 100000000)." end
+	if op ~= "add" and op ~= "remove" and op ~= "reset" then return false, "Choose add, remove or reset." end
+	-- Auto Attack / Auto Shot / wand Shoot never mean a queued next-swing ability.
+	if op == "add" and (id == 6603 or id == 75 or id == 5019) then return false, "Auto Attack, Auto Shot and Shoot are not queued abilities." end
+	if op == "add" then
+		if name ~= nil and (ns.isSecret(name) or type(name) ~= "string") then return false, "Invalid name." end
+		name = name and name:gsub("^%s+", ""):gsub("%s+$", "") or ""
+		if #name > 80 or name:find("[|\r\n]") then return false, "Name must be at most 80 characters, without formatting codes." end
+		if name == "" then
+			local get = C_Spell and C_Spell.GetSpellName or GetSpellInfo
+			if type(get) == "function" then
+				local ok, value = pcall(get, id)
+				if ok and not ns.isSecret(value) and type(value) == "string" then name = value end
+			end
+		end
+		if name == "" then name = swing.baseSpells[id] or ("Spell " .. id) end
+		ns.db.extraQueueSpells[id], ns.db.removedQueueSpells[id] = name, nil
+	elseif op == "remove" then
+		ns.db.extraQueueSpells[id] = nil
+		ns.db.removedQueueSpells[id] = true
+	else
+		ns.db.extraQueueSpells[id], ns.db.removedQueueSpells[id] = nil, nil
+	end
+	swing.RebuildSpells()
+	if ns.db.enabled and ns.db.queuedSwingEnabled then swing.Scan() else swing.Hide() end
+	return true, (op == "add" and "Registered " or op == "remove" and "Removed " or "Reset ") .. tostring(id) .. "."
+end
 
 local function api(group, key, legacy)
 	local t = _G[group]
@@ -63,6 +107,8 @@ local function resolve(button)
 end
 
 local function queued(slot, id, kind)
+	-- Custom registration cannot turn an auto-repeat slot into a real queue.
+	if publicBoolean(api("C_ActionBar", "IsAutoRepeatAction", "IsAutoRepeatAction"), slot) == true then return false end
 	local currentAction = api("C_ActionBar", "IsCurrentAction", "IsCurrentAction")
 	local currentSpell = api("C_Spell", "IsCurrentSpell", "IsCurrentSpell")
 	-- A readable false is authoritative; do not override it with a guessed state.
@@ -207,6 +253,7 @@ function swing.Tick()
 end
 
 function swing.SetEnabled()
+	swing.RebuildSpells()
 	if swing.driver then swing.driver:SetScript("OnUpdate", nil) end
 	swing.elapsed, swing.nextScan = 0, nil
 	swing.Hide()

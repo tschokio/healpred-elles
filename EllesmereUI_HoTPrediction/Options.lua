@@ -71,6 +71,92 @@ local function flatButton(b)
 	b:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
 end
 
+function ns.OpenSpellEditor()
+	local f = ns.spellEditorWindow
+	if not f then
+		f = CreateFrame("Frame", "EllesmereUI_HoTPredictionSpellEditor", UIParent, "BackdropTemplate")
+		ns.spellEditorWindow = f
+		f:SetSize(510, 410); f:SetPoint("CENTER"); f:SetFrameStrata(APPEARANCE_STRATA)
+		f:EnableMouse(true)
+		windowStyle(f, "Manage your spells", "Exact spell IDs; changes save immediately.", 510)
+		f.mode = "queue"
+		f.controls = {}
+		f.fieldLabels = {}
+		local function input(key, title, y, width)
+			f.fieldLabels[key] = label(f, title, 24, y - 5, 210)
+			local e = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
+			e:SetSize(width or 240, 24); e:SetPoint("TOPLEFT", f, "TOPLEFT", 240, y)
+			e:SetAutoFocus(false); e:SetMaxLetters(key == "name" and 80 or 12)
+			e:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+			f.controls[key] = e
+		end
+		input("id", "Spell ID (exact rank / aura)", -120)
+		input("name", "Name (optional)", -156)
+		input("interval", "HoT tick interval (seconds)", -192)
+		input("amount", "HoT total healing per tick", -228)
+		f.hint = label(f, "", 24, -268, 462)
+		f.message = label(f, "", 24, -318, 462)
+		local function button(key, title, x, y, width, fn)
+			local b = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+			b:SetSize(width, 24); b:SetPoint("TOPLEFT", f, "TOPLEFT", x, y)
+			b:SetText(title); flatButton(b); b:SetScript("OnClick", fn); f.controls[key] = b
+		end
+		local function mode(value)
+			f.mode = value
+			f.controls.queue:SetText(value == "queue" and "[Action highlight]" or "Action highlight")
+			f.controls.hot:SetText(value == "hot" and "[Player HoT]" or "Player HoT")
+			f.controls.interval:SetShown(value == "hot"); f.controls.amount:SetShown(value == "hot")
+			for _, key in ipairs({"interval", "amount"}) do
+				if value == "hot" then f.fieldLabels[key]:Show() else f.fieldLabels[key]:Hide() end
+			end
+			f.controls.interval:ClearFocus(); f.controls.amount:ClearFocus()
+			f.hint:SetText(value == "queue" and "Highlights only readable current-action state. No press-based guesses. Auto Attack, Auto Shot and Shoot are excluded."
+				or "Use the applied aura ID, not a summon or direct heal. Requires your own readable player aura. Amount is the full tick, including overheal.")
+			f.message:SetText("")
+		end
+		button("queue", "Action highlight", 24, -80, 220, function() mode("queue") end)
+		button("hot", "Player HoT", 260, -80, 220, function() mode("hot") end)
+		local function apply(op)
+			local id = tonumber(f.controls.id:GetText())
+			local name = f.controls.name:GetText()
+			if not ns.isPositiveInt(id) or id > 100000000 then f.message:SetText("Enter a positive spell ID up to 100000000."); return end
+			if #name > 80 or name:find("[|\r\n]") then f.message:SetText("Name must not contain formatting codes or line breaks."); return end
+			if f.mode == "queue" then
+				local ok, message = ns.queuedSwing.EditSpell(op, id, name)
+				f.message:SetText(message)
+				if not ok then return end
+			else
+				local interval, amount = tonumber(f.controls.interval:GetText()), tonumber(f.controls.amount:GetText())
+				if op == "add" then
+					if not ns.isFinite(interval) or interval <= 0 or interval > 300
+						or not ns.isFinite(amount) or amount <= 0 or amount > ns.AMOUNT_OVERRIDE_MAX then
+						f.message:SetText("Enter a tick interval > 0 to 300 and positive per-tick healing; nothing changed."); return
+					end
+				end
+				ns.HandleCommand("spell " .. op .. " " .. id .. " " .. name)
+				if op == "add" then
+					ns.HandleCommand("interval " .. id .. " " .. interval)
+					ns.HandleCommand("amount " .. id .. " " .. amount)
+				end
+				f.message:SetText(op .. " saved for spell " .. id .. ".")
+			end
+			for _, key in ipairs({"id", "name", "interval", "amount"}) do f.controls[key]:ClearFocus() end
+			if ns.optionsWindow then ns.optionsWindow.RefreshCatalog() end
+		end
+		button("add", "Add / update", 24, -366, 126, function() apply("add") end)
+		button("remove", "Remove", 160, -366, 100, function() apply("remove") end)
+		button("reset", "Reset ID", 270, -366, 100, function() apply("reset") end)
+		button("close", "Close", 380, -366, 100, function() f:Hide() end)
+		f:SetScript("OnHide", function()
+			for _, key in ipairs({"id", "name", "interval", "amount"}) do f.controls[key]:ClearFocus() end
+		end)
+		if type(UISpecialFrames) == "table" then UISpecialFrames[#UISpecialFrames + 1] = "EllesmereUI_HoTPredictionSpellEditor" end
+		mode("queue")
+	end
+	f:Show()
+	return f
+end
+
 local function queuePreview(parent, x, y, width, height)
 	local p = panel(parent, x, y, width, height)
 	label(p, "ACTION BUTTON PREVIEW", 16, -18, width - 32):SetTextColor(0.35, 0.88, 0.8, 1)
@@ -420,7 +506,7 @@ local function ensureWindow()
 					heading.status:ClearAllPoints(); heading.status:SetPoint("TOPLEFT", heading, "TOPLEFT", 54, -30)
 				heading.title:SetText(group.name)
 				heading.title:SetTextColor(group.color[1], group.color[2], group.color[3], 1)
-				heading.status:SetText(group.count and (group.count .. " entries reviewed | support & limitations below") or "User-added spell candidates")
+				heading.status:SetText(group.count and (group.count .. " entries reviewed | support & limitations below") or "Shared actions and user-added spell candidates")
 				heading.status:SetTextColor(0.55, 0.66, 0.72, 1)
 				heading.note:SetText(""); heading.ids:SetText(""); heading.details:Hide()
 				heading:SetHeight(52); y = y + 60
@@ -542,7 +628,7 @@ local function ensureWindow()
 	edit("blue", 370, -216)
 	local message = label(page, "", 24, -275)
 	local function button(key, title, x, y, width, action)
-		local parent = (key == "settingsTab" or key == "spellsTab" or key == "close") and f or page
+		local parent = (key == "settingsTab" or key == "spellsTab" or key == "manageTab" or key == "close") and f or page
 		local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
 		b:SetSize(width, 24)
 		b:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
@@ -578,9 +664,11 @@ local function ensureWindow()
 	check("queue", "Highlight genuinely queued next-swing attacks (all supported classes)", -532,
 		function() return ns.db.queuedSwingEnabled end, function(v) command("queue " .. (v and "on" or "off")) end)
 	button("queueAppearance", "Next-swing appearance...", 24, -572, 225, function() ns.OpenQueueAppearance() end)
+	button("manageSpells", "Manage spells...", 270, -572, 225, function() ns.OpenSpellEditor() end)
 	button("close", "Close", 420, -606, 95, function() f:Hide() end)
 	button("settingsTab", "Settings", 18, -62, 130, function() f.SelectTab("settings") end)
 	button("spellsTab", "Implemented spells", 160, -62, 185, function() f.SelectTab("spells") end)
+	button("manageTab", "Manage spells...", 357, -62, 160, function() ns.OpenSpellEditor() end)
 	f.Refresh = function()
 		refreshing = true
 		for _, c in pairs(f.controls) do if c.read then c:SetChecked(c.read()) end end

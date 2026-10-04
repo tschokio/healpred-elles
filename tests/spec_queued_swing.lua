@@ -25,6 +25,47 @@ local function poll(e)
 	if script then script(e.swing.driver, 0.05) end
 end
 
+T.register("queue: Throw and custom IDs require actual state and reject auto-repeat", function()
+	local e = env()
+	local throw = e.button(1, 1, 2764)
+	local custom = e.button(2, 2, 987654)
+	e.swing.Scan()
+	assert_false(border(e, throw):IsShown())
+	Mocks.Fire("UNIT_SPELLCAST_SENT", "player", "target", "cast", 2764)
+	assert_false(border(e, throw):IsShown())
+	e.ns.HandleCommand("queue add 987654 Custom Swing")
+	assert_eq(e.swing.spells[987654], "Custom Swing")
+	assert_nil(e.ns.spells.Meta(987654), "queue registration does not register healing")
+	e.current[1], e.current[2] = true, true
+	e.swing.Refresh()
+	assert_true(border(e, throw):IsShown()); assert_true(border(e, custom):IsShown())
+	_G.IsAutoRepeatAction = function(slot) return slot == 2 end
+	e.swing.Refresh(); assert_false(border(e, custom):IsShown())
+	_G.IsAutoRepeatAction = nil
+	e.current[1], e.current[2] = false, false
+	e.swing.Refresh()
+	assert_false(border(e, throw):IsShown()); assert_false(border(e, custom):IsShown())
+end)
+
+T.register("queue: add remove reset and database reinitialization preserve exact registry", function()
+	local e = env()
+	e.ns.HandleCommand("queue add 987654 Custom Swing")
+	e.ns.HandleCommand("queue remove 2764")
+	e.ns.InitDatabase(); e.swing.SetEnabled()
+	assert_eq(e.swing.spells[987654], "Custom Swing"); assert_nil(e.swing.spells[2764])
+	assert_true(e.ns.BuildSpellCatalog():find("Disabled by your settings: 2764", 1, true) ~= nil)
+	e.ns.HandleCommand("queue reset 2764"); assert_eq(e.swing.spells[2764], "Throw")
+	e.ns.HandleCommand("queue remove 987654"); assert_nil(e.swing.spells[987654])
+	e.ns.HandleCommand("queue reset 987654")
+	assert_nil(e.ns.db.extraQueueSpells[987654]); assert_nil(e.ns.db.removedQueueSpells[987654])
+	for _, id in ipairs({6603, 75, 5019, 0, -1, 1.5, 100000001}) do
+		assert_false(e.swing.EditSpell("add", id, "Invalid"))
+		assert_nil(e.swing.spells[id])
+	end
+	assert_false(e.swing.EditSpell("add", 987654, "|cffffffffbad"))
+	assert_false(e.swing.EditSpell("add", 987654, string.rep("x", 81)))
+end)
+
 T.register("queue: cast attempts and failed resource/range checks never light buttons", function()
 	local e = env({ noCLEU = true })
 	local b = e.button(1, 1, 6807)

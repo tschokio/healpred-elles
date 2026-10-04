@@ -40,7 +40,7 @@ StatusBar of its own and secure-hooks native callbacks read-only.
 
 The installed folder is the deliverable; there is no separate zip/binary.
 
-### Updating (to v0.6.0)
+### Updating (to v0.6.1)
 
 Replace the `EllesmereUI_HoTPrediction/` folder in your AddOns directory with the
 new one, then `/reload` (or restart). SavedVariables
@@ -101,6 +101,43 @@ border, next swing/cancel → no border, insufficient-Rage failed press → no b
 and repeat with Cleave, Maul, forms/pages and any macros you use.
 
 ### Settings menu and minimap button (v0.4.0)
+
+### Throw and custom spell editor (v0.6.1)
+
+**Throw (`2764`)** now gets the same configurable action highlight when the
+client reports a readable current-action/current-spell state. Throw is normally
+a ranged attack, **not a melee next-swing queue**; its catalog card says so.
+No readable state means no highlight. Auto-repeat actions are excluded.
+
+Open `/euihot options` → **Manage spells...** (available from either tab):
+
+* **Action highlight:** enter an exact spell ID and optional name, then **Add / update**.
+  This registers eligibility only; actual readable current-action state is still
+  required. Failed presses never light it. Auto Attack, Auto Shot and Shoot cannot
+  be registered. Custom entries appear under **General / custom** in **All**.
+* **Player HoT:** enter the actual applied aura ID, optional name, tick interval
+  and full per-tick healing amount. This is manual calibration, not automatic
+  discovery or evidence that the spell is a HoT. Requires readable owned player
+  aura timing; another player's aura or a cast attempt is never enough.
+* **Remove** disables that exact ID in the selected mode. **Reset ID** removes
+  that ID's custom settings and restores its built-in definition, if one exists.
+  For HoTs, reset also clears manual amount/interval calibration.
+
+All registrations persist in SavedVariables. Exact ranks must be added separately;
+changes do not affect the other registration mode. Slash equivalents:
+
+```text
+/euihot queue add 2764 Throw
+/euihot queue remove 2764
+/euihot queue reset 2764
+/euihot spell add <auraID> <name>
+/euihot interval <auraID> <seconds>
+/euihot amount <auraID> <healingPerTick>
+/euihot spell remove <auraID>
+/euihot spell reset <auraID>
+```
+
+Mock-tested; in-game rendering/current-action availability still needs verification.
 
 ### All-class spellbook audit and icon catalog (v0.6.0)
 

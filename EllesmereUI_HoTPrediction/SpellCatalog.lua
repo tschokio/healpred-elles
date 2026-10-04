@@ -11,7 +11,7 @@ ns.catalogClasses = {
 	{ key = "PALADIN", name = "Paladin", count = 56, color = { 0.96, 0.55, 0.73 } },
 	{ key = "DRUID", name = "Druid", count = 60, color = { 1, 0.49, 0.04 } },
 	{ key = "SHAMAN", name = "Shaman", count = 56, color = { 0, 0.44, 0.87 } },
-	{ key = "CUSTOM", name = "Custom", color = { 0.7, 0.7, 0.7 } },
+	{ key = "CUSTOM", name = "General / custom", color = { 0.7, 0.7, 0.7 } },
 }
 local families = {
 	Rejuvenation = { "DRUID", "Rejuvenation", "spell_nature_rejuvenation", "Remaining owned HoT ticks on yourself." },
@@ -83,15 +83,20 @@ function ns.GetSpellCatalog()
 		local ids = meta and rows[key].ids or rows[key].disabled
 		ids[#ids + 1] = id
 	end
-	for id, name in pairs(ns.queuedSwing.spells) do
-		local key = "queue:" .. name
+	local queueEntries = {}
+	for id, name in pairs(ns.queuedSwing.baseSpells) do queueEntries[id] = name end
+	for id, name in pairs(ns.queuedSwing.spells) do queueEntries[id] = name end
+	for id, name in pairs(queueEntries) do
+		local key = "queue:" .. (ns.db.extraQueueSpells[id] and ("custom:" .. id) or name)
 		if not rows[key] then
-			local f = queue[name]
+			local f = not ns.db.extraQueueSpells[id] and queue[name]
 			local r = { key = key, class = f and f[1] or "CUSTOM", name = name, icon = f and f[2] or "inv_misc_book_11",
-				status = "Next-swing queue", note = "Real readable current-action/current-spell state only. No border for failed attempts or unavailable state.", ids = {}, disabled = {} }
+				status = name == "Throw" and "Ranged current-action indicator" or "Next-swing queue",
+				note = (name == "Throw" and "Throw is normally ranged, not a melee queue. " or "") .. "Real readable current-action/current-spell state only. No border for failed attempts or unavailable state.", ids = {}, disabled = {} }
 			rows[key] = r; byClass[r.class].rows[#byClass[r.class].rows + 1] = r
 		end
-		rows[key].ids[#rows[key].ids + 1] = id
+		local list = ns.queuedSwing.spells[id] and rows[key].ids or rows[key].disabled
+		list[#list + 1] = id
 	end
 	for i, d in ipairs(deferred) do
 		local r = { key = "review:" .. i, name = d[2], class = d[1], icon = d[3], status = d[4], note = d[5], ids = {}, disabled = {}, deferred = true }

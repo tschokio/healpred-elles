@@ -6,7 +6,7 @@
 local addonName, ns = ...
 
 ns.name = addonName
-ns.version = "0.6.0"
+ns.version = "0.6.1"
 ns.debugEnabled = false
 ns.inCombat = false
 ns.started = false
@@ -164,6 +164,8 @@ ns.DEFAULTS = {
 	queuedSwingThickness = 3,
 	queuedSwingPadding = 3,
 	queuedSwingAlpha = 1,
+	extraQueueSpells = {},         -- exact user-registered action spell IDs/names
+	removedQueueSpells = {},       -- removed defaults/custom IDs; independent of HoTs
 	intervalOverrides = {},        -- [spellID] = seconds (user calibration only)
 	amountOverrides = {},          -- [spellID] = { [stacks] = exact tick total } (user calibration only)
 	extraSpells = {},              -- [spellID] = { name =, family = }
@@ -526,7 +528,7 @@ function ns.HandleCommand(input)
 	if cmd == "help" or cmd == "" then
 		ns.print(HELP)
 		ns.print("settings: /euihot options (or menu) | /euihot minimap on|off; minimap left-click settings, right-click diagnostics, drag to move.")
-		ns.print("next-swing borders: /euihot queue on|off | queue color <r> <g> <b> | queue status")
+		ns.print("next-swing borders: /euihot queue on|off | queue color <r> <g> <b> | queue add|remove|reset <id> [name] | queue status")
 		return
 	elseif cmd == "queue" then
 		local op = (args[1] or "status"):lower()
@@ -540,8 +542,13 @@ function ns.HandleCommand(input)
 			end
 			ns.db.queuedSwingColor = { r, g, b }
 			if ns.queuedSwing then ns.queuedSwing.Refresh() end
+		elseif op == "add" or op == "remove" or op == "reset" then
+			local name = #args > 2 and table.concat(args, " ", 3) or nil
+			local ok, message = ns.queuedSwing.EditSpell(op, tonumber(args[2]), name)
+			ns.print(message)
+			return
 		elseif op ~= "status" then
-			ns.print("usage: /euihot queue on|off | queue color <r> <g> <b> | queue status"); return
+			ns.print("usage: /euihot queue on|off | queue color <r> <g> <b> | queue add|remove|reset <id> [name] | queue status"); return
 		end
 		local s = ns.queuedSwing
 		ns.print(string.format("next-swing enabled=%s buttons=%d highlighted=%d state=%s",
@@ -762,7 +769,7 @@ function ns.HandleCommand(input)
 		local op = (args[1] or ""):lower()
 		local id = parseNumber(args[2])
 		if ns.isPositiveInt(id) and op == "add" then
-			ns.db.extraSpells[id] = { name = args[3] or ("spell " .. id), family = "custom" }
+			ns.db.extraSpells[id] = { name = #args > 2 and table.concat(args, " ", 3) or ("spell " .. id), family = "custom" }
 			ns.db.removedSpells[id] = nil
 			if ns.overlay then ns.overlay.RequestPaint() end
 			ns.print("registered spell " .. id .. ".")
@@ -770,8 +777,13 @@ function ns.HandleCommand(input)
 			ns.db.removedSpells[id] = true
 			if ns.overlay then ns.overlay.RequestPaint() end
 			ns.print("removed spell " .. id .. ".")
+		elseif ns.isPositiveInt(id) and op == "reset" then
+			ns.db.extraSpells[id], ns.db.removedSpells[id] = nil, nil
+			ns.db.amountOverrides[id], ns.db.intervalOverrides[id] = nil, nil
+			if ns.overlay then ns.overlay.RequestPaint() end
+			ns.print("reset spell " .. id .. ".")
 		else
-			ns.print("usage: /euihot spell add|remove <positive spellID> [name]")
+			ns.print("usage: /euihot spell add|remove|reset <positive spellID> [name]")
 		end
 		return
 	elseif cmd == "amountmode" then

@@ -124,7 +124,7 @@ T.register("spell catalog: registry coverage grouped by class includes condition
 		for _, row in ipairs(group.rows) do
 			assert_eq(row.class, group.key)
 			for _, id in ipairs(row.ids) do
-				if row.status == "Next-swing queue" then queueIDs[id] = true else ids[id] = true end
+				if row.key:sub(1, 6) == "queue:" then queueIDs[id] = true else ids[id] = true end
 			end
 		end
 	end
