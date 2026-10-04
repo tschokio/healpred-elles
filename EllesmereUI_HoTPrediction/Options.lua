@@ -2,6 +2,12 @@
 -- The only OnUpdate exists while the user drags the minimap button.
 local addonName, ns = ...
 local WINDOW = "EllesmereUI_HoTPredictionOptions"
+-- The appearance editor is a child of the main settings window in spirit, but a
+-- separate root frame. Both used DIALOG, so the main window's deeper
+-- descendants (e.g. its +10 preview border) sorted above the editor and
+-- interleaved into it. One strata step above DIALOG, still below TOOLTIP,
+-- lifts the whole editor (controls and preview inherit at creation).
+local APPEARANCE_STRATA = "FULLSCREEN_DIALOG"
 
 local function safe(obj, method, ...)
 	if obj and type(obj[method]) == "function" then return obj[method](obj, ...) end
@@ -228,7 +234,7 @@ function ns.OpenQueueAppearance()
 		ns.queueAppearanceWindow = f
 		f:SetSize(770, 420)
 		f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
-		f:SetFrameStrata("DIALOG")
+		f:SetFrameStrata(APPEARANCE_STRATA)
 		f:SetClampedToScreen(true)
 		f:SetMovable(true)
 		f:EnableMouse(true)
@@ -326,6 +332,9 @@ function ns.OpenQueueAppearance()
 		if type(UISpecialFrames) == "table" then UISpecialFrames[#UISpecialFrames + 1] = f:GetName() end
 		f:Hide()
 	end
+	-- Reassert on reuse in case anything touched the root while hidden; the
+	-- already-created descendants keep the strata they inherited.
+	f:SetFrameStrata(APPEARANCE_STRATA)
 	f.Refresh()
 	f:Show()
 	return f
