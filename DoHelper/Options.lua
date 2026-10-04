@@ -19,8 +19,8 @@ local NAVIGATION = {
 }
 local HELP = {
 	notes = { "YOUR NOTEPAD", "A place for reminders", "Use the arrows to switch topics. New topic creates a separate note; edit its title and press Enter to rename it.\n\nYour edits save as you type. The floating window mirrors the active topic.\n\nClick the arrow beside Do to collapse it to a tiny Do ^ toggle. Drag its header to move it.", "Editing locks during combat. Switching topics remains available." },
-	combat = { "COMBAT INDICATOR", "Clear, quiet feedback", "Choose your enter and leave labels, then set the text size, colors and timing.\n\nA duration of 0 keeps the label visible until the next transition.\n\nUse Preview + and Preview - to test without starting combat.\n\nUnlock to drag, then lock again to restore click-through.", "Size, colors and position remain independent of the settings theme." },
-	sounds = { "CUSTOM AUDIO", "Make each crit count", "Place your .ogg or .mp3 file in DoHelper/Sounds before launching WoW.\n\nEnter its local path on the left, then click Apply + Test sound. A blank path uses the built-in raid warning.\n\nUse a cooldown to prevent sound bursts from multi-target hits.", "Automatic playback requires readable crit data. Restricted clients may only support the test." },
+	combat = { "COMBAT INDICATOR", "Clear, quiet feedback", "Choose your enter and leave labels, independent enter/leave colours, the text size and the timing.\n\nDirection and distance scroll the line up or down; 0 distance disables motion. Motion always restarts from the saved position.\n\nA duration of 0 keeps the label until the next transition (after the scroll settles).\n\nUse Preview + and Preview - to test without starting combat. Unlock to drag, then lock again to restore click-through.", "Size, colours and position remain independent of the settings theme." },
+	sounds = { "CUSTOM AUDIO", "Make each crit count", "The bundled default is Interface\\AddOns\\DoHelper\\Sounds\\bam.mp3. Use Cue to switch between bam.mp3 and the built-in raid warning, or type another local .ogg/.mp3 path.\n\nClick Apply + Test sound to preview. Use a cooldown to prevent sound bursts from multi-target hits.\n\nTry crit detection is an explicit, session-only combat-log opt-in; enabling sounds alone never registers anything.", "Registration is not delivery. Restricted clients may only support the test; the counters show what actually arrived." },
 }
 
 local function safe(obj, method, ...)
@@ -816,34 +816,47 @@ local function ensureWindow()
 	combatField("combatDuration", 258, -102, 60)
 	label(combatPage, "Fade seconds", 335, -107, 105)
 	combatField("combatFade", 442, -102, 58)
-	label(combatPage, "Text RGB (0-1)", 10, -143, 120)
-	combatField("combatTextR", 138, -138, 50)
-	combatField("combatTextG", 192, -138, 50)
-	combatField("combatTextB", 246, -138, 50)
-	label(combatPage, "Background RGBA (0-1; alpha 0 = none)", 10, -179, 255)
-	combatField("combatBgR", 272, -174, 48)
-	combatField("combatBgG", 324, -174, 48)
-	combatField("combatBgB", 376, -174, 48)
-	combatField("combatBgA", 428, -174, 48)
-	combatCheck("combatOutline", "Text outline", 18, -212, 140,
+	label(combatPage, "Enter text RGB (0-1)", 10, -143, 150)
+	combatField("combatEnterR", 170, -138, 50)
+	combatField("combatEnterG", 224, -138, 50)
+	combatField("combatEnterB", 278, -138, 50)
+	label(combatPage, "Leave text RGB (0-1)", 10, -177, 150)
+	combatField("combatLeaveR", 170, -172, 50)
+	combatField("combatLeaveG", 224, -172, 50)
+	combatField("combatLeaveB", 278, -172, 50)
+	label(combatPage, "Background RGBA (0-1; alpha 0 = none)", 10, -211, 255)
+	combatField("combatBgR", 272, -206, 48)
+	combatField("combatBgG", 324, -206, 48)
+	combatField("combatBgB", 376, -206, 48)
+	combatField("combatBgA", 428, -206, 48)
+	label(combatPage, "Direction (up / down / none)", 10, -245, 160)
+	local dirButton = combatButton("combatDir", "Direction: Up", 180, -240, 130, function(self)
+		local order = { Up = "Down", Down = "None", None = "Up" }
+		local nextDir = order[self.direction or "Up"] or "Up"
+		self.direction = nextDir
+		self:SetText("Direction: " .. nextDir)
+	end)
+	dirButton.direction = "Up"
+	label(combatPage, "Distance px (0-100)", 10, -279, 130)
+	combatField("combatDistance", 145, -274, 55)
+	label(combatPage, "Motion seconds (0.1-10)", 220, -279, 150)
+	combatField("combatMotion", 375, -274, 55)
+	combatCheck("combatOutline", "Text outline", 18, -308, 140,
 		function() return ns.db.combatText.outline end,
 		function(v) ns.db.combatText.outline = v and true or false; ns.combatText.Refresh() end)
-	combatCheck("combatUnlock", "Unlock to drag (click-through when off)", 200, -212, 300,
+	combatCheck("combatUnlock", "Unlock to drag (click-through when off)", 200, -308, 270,
 		function() return ns.combatText.unlocked end,
 		function(v) ns.combatText.SetUnlocked(v) end)
-	label(combatPage, "Position offset X / Y from screen centre", 10, -252, 250)
-	combatField("combatX", 270, -247, 70)
-	combatField("combatY", 348, -247, 70)
-	local combatMessage = label(combatPage, "", 10, -322, 486)
-	combatButton("combatResetPos", "Center", 428, -247, 72, function()
-		local s = ns.combatText.Style()
-		ns.combatText.SetStyle({ enterText = s.enterText, leaveText = s.leaveText, fontSize = s.fontSize,
-			opacity = s.opacity, duration = s.duration, fade = s.fade, outline = s.outline,
-			color = s.color, background = s.background, x = 0, y = 0 })
-		combatMessage:SetText("Combat text position reset to screen centre.")
-		f.Refresh()
+	label(combatPage, "Position offset X / Y from screen centre", 10, -347, 250)
+	combatField("combatX", 270, -342, 70)
+	combatField("combatY", 348, -342, 70)
+	local combatMessage = label(combatPage, "", 10, -408, 486)
+	combatButton("combatResetPos", "Center", 428, -342, 72, function()
+		local ok, message = ns.combatText.SetPosition(0, 0)
+		combatMessage:SetText(ok and "Combat text position reset to screen centre." or message)
+		f.RefreshCombat()
 	end)
-	combatButton("combatApply", "Apply style", 10, -284, 110, function()
+	combatButton("combatApply", "Apply style", 10, -376, 110, function()
 		local c = f.controls
 		local ok, message = ns.combatText.SetStyle({
 			enterText = c.combatEnter:GetText(),
@@ -853,37 +866,46 @@ local function ensureWindow()
 			duration = tonumber(c.combatDuration:GetText()),
 			fade = tonumber(c.combatFade:GetText()),
 			outline = c.combatOutline:GetChecked() and true or false,
-			color = { tonumber(c.combatTextR:GetText()), tonumber(c.combatTextG:GetText()), tonumber(c.combatTextB:GetText()) },
+			enterColor = { tonumber(c.combatEnterR:GetText()), tonumber(c.combatEnterG:GetText()), tonumber(c.combatEnterB:GetText()) },
+			leaveColor = { tonumber(c.combatLeaveR:GetText()), tonumber(c.combatLeaveG:GetText()), tonumber(c.combatLeaveB:GetText()) },
 			background = { tonumber(c.combatBgR:GetText()), tonumber(c.combatBgG:GetText()), tonumber(c.combatBgB:GetText()), tonumber(c.combatBgA:GetText()) },
+			direction = c.combatDir.direction,
+			distance = tonumber(c.combatDistance:GetText()),
+			motion = tonumber(c.combatMotion:GetText()),
 			x = tonumber(c.combatX:GetText()),
 			y = tonumber(c.combatY:GetText()),
 		})
 		if not ok then combatMessage:SetText(message); return end
 		for _, key in ipairs({ "combatEnter", "combatLeave", "combatFont", "combatOpacity", "combatDuration", "combatFade",
-			"combatTextR", "combatTextG", "combatTextB", "combatBgR", "combatBgG", "combatBgB", "combatBgA", "combatX", "combatY" }) do
+			"combatEnterR", "combatEnterG", "combatEnterB", "combatLeaveR", "combatLeaveG", "combatLeaveB",
+			"combatBgR", "combatBgG", "combatBgB", "combatBgA", "combatDistance", "combatMotion", "combatX", "combatY" }) do
 			c[key]:ClearFocus()
 		end
 		combatMessage:SetText("Combat text style saved.")
 		f.RefreshCombat()
 	end)
-	combatButton("combatResetStyle", "Reset style", 126, -284, 120, function()
+	combatButton("combatResetStyle", "Reset style", 126, -376, 120, function()
 		local d = ns.DEFAULTS.combatText
 		ns.combatText.SetStyle({ enterText = d.enterText, leaveText = d.leaveText, fontSize = d.fontSize,
 			opacity = d.opacity, duration = d.duration, fade = d.fade, outline = d.outline,
 			color = { d.color[1], d.color[2], d.color[3] },
+			enterColor = { d.enterColor[1], d.enterColor[2], d.enterColor[3] },
+			leaveColor = { d.leaveColor[1], d.leaveColor[2], d.leaveColor[3] },
 			background = { d.background[1], d.background[2], d.background[3], d.background[4] },
+			direction = d.direction, distance = d.distance, motion = d.motion,
 			x = d.x, y = d.y })
 		combatMessage:SetText("Default combat text style restored.")
 		f.Refresh() -- re-check the outline box too, not just the numeric fields
 	end)
-	combatButton("combatPreviewEnter", "Preview +", 252, -284, 110, function()
+	combatButton("combatPreviewEnter", "Preview +", 252, -376, 110, function()
 		ns.combatText.Preview("enter")
-		combatMessage:SetText("Preview shown; it fades like a real transition.")
+		combatMessage:SetText("Preview shown; it scrolls and fades like a real transition.")
 	end)
-	combatButton("combatPreviewLeave", "Preview -", 368, -284, 110, function()
+	combatButton("combatPreviewLeave", "Preview -", 368, -376, 110, function()
 		ns.combatText.Preview("leave")
-		combatMessage:SetText("Preview shown; it fades like a real transition.")
+		combatMessage:SetText("Preview shown; it scrolls and fades like a real transition.")
 	end)
+	UI.Text(label(combatPage, "Motion restarts from the saved position on every transition. Show seconds 0 keeps the label until the next change after it settles. Enter and leave colours are independent.", 10, -440, 486), "muted")
 	UI.Button(f.controls.combatApply, "primary")
 	function f.RefreshCombat()
 		local c = f.controls
@@ -894,8 +916,14 @@ local function ensureWindow()
 		c.combatOpacity:SetText(tostring(s.opacity))
 		c.combatDuration:SetText(tostring(s.duration))
 		c.combatFade:SetText(tostring(s.fade))
-		for i, key in ipairs({ "combatTextR", "combatTextG", "combatTextB" }) do c[key]:SetText(tostring(s.color[i])) end
+		for i, key in ipairs({ "combatEnterR", "combatEnterG", "combatEnterB" }) do c[key]:SetText(tostring(s.enterColor[i])) end
+		for i, key in ipairs({ "combatLeaveR", "combatLeaveG", "combatLeaveB" }) do c[key]:SetText(tostring(s.leaveColor[i])) end
 		for i, key in ipairs({ "combatBgR", "combatBgG", "combatBgB", "combatBgA" }) do c[key]:SetText(tostring(s.background[i])) end
+		local dirLabel = s.direction == "down" and "Down" or (s.direction == "none" and "None" or "Up")
+		c.combatDir.direction = dirLabel
+		c.combatDir:SetText("Direction: " .. dirLabel)
+		c.combatDistance:SetText(tostring(s.distance))
+		c.combatMotion:SetText(tostring(s.motion))
 		c.combatX:SetText(tostring(s.x))
 		c.combatY:SetText(tostring(s.y))
 		ns.combatText.ApplyStyle()

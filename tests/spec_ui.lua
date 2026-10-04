@@ -57,7 +57,7 @@ T.register("UI: changing pages and closing clear input focus without changing se
 	click(f.controls.headerClose)
 	assert_false(f.controls.notesTitle:HasFocus())
 	assert_false(f:IsShown())
-	assert_eq(e.ns.db.critSounds.path, "")
+	assert_eq(e.ns.db.critSounds.path, "Interface\\AddOns\\DoHelper\\Sounds\\bam.mp3")
 	assert_eq(e.ns.db.alpha, 0.6)
 end)
 

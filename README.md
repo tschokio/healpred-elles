@@ -62,8 +62,12 @@ so move your data over in one step: with the game closed, rename
 `.../SavedVariables/DoHelper.lua`. The variable name inside the file is
 unchanged (`EllesmereUI_HoTPredictionDB`), so the copied file loads as-is.
 Skipping this step just starts with default settings; it never crashes or
-deletes anything. The fake test value is never persisted, so update with no fake
-active. Verify with `/euihot status` (version line), and, while previewing a
+deletes anything. Existing settings are migrated once (a saved schema marker):
+a custom legacy single combat colour becomes both new enter/leave colours (the
+old default instead gets the new distinct defaults), and a blank crit-sound path
+becomes the bundled `Interface\AddOns\DoHelper\Sounds\bam.mp3`. After that
+migration, a blank path you deliberately choose is preserved. The fake test
+value is never persisted, so update with no fake active. Verify with `/euihot status` (version line), and, while previewing a
 fake, `/euihot teststatus` or the copyable `/euihot window`.
 
 ## Quick start
@@ -131,24 +135,32 @@ input focus. The UI adds no animations or idle timers and never styles vendor
 frames. Your existing settings, custom notes/combat colors and the compact
 `Do ^` notes toggle are preserved. No reinstall or settings reset is required.
 
-### Crit sounds (v0.11.0)
+### Crit sounds (v0.11.0, bam.mp3 default and detection diagnostics in v0.12.0)
 
 Open `/dohelper options` → **Sounds** to enable a sound for your damage and/or
 healing crits. Set a cooldown to avoid overlapping sounds from multi-target hits.
-Blank sound path uses the built-in raid warning. **Apply + Test sound** previews
-playback even while automatic sounds are disabled.
+The bundled default cue is `Interface\AddOns\DoHelper\Sounds\bam.mp3`; the small
+**Cue** button cycles between that file and the built-in raid warning, and the
+manual path field still accepts any local `.ogg`/`.mp3`. A blank path means the
+built-in warning; **Apply + Test sound** previews playback even while automatic
+sounds are disabled. An existing blank path is migrated to `bam.mp3` exactly once
+(a saved schema marker), so a blank you deliberately choose afterwards is kept.
 
-For your own “bam” clip, place an `.ogg` or `.mp3` file in `DoHelper/Sounds/`
-before launching WoW and enter `Interface\AddOns\DoHelper\Sounds\bam.ogg`.
 Use a clip you have permission to use; no Bruce Lee audio is bundled or downloaded.
 External URLs and files outside the game folders cannot be played.
 
 Automatic playback uses only readable, player-sourced critical combat-log events
 (including periodic damage/heals, excluding pets). It respects the existing
 restricted Forever/Midnight combat-log gate and the helper enable setting.
-Enabling sounds does **not** bypass that gate. Registration is not proof of
-delivery; if the client hides crit data, Test can work while automatic playback
-remains unavailable. Master and SFX channels still obey the game's sound settings.
+Enabling sounds does **not** bypass that gate and never registers anything by
+itself: **Try crit detection** is an explicit, session-only opt-in that requests
+the guarded subscription (the same path as `/euihot observe on`). The status
+line reports the honest state — `unsupported`, `blocked`, `rejected`,
+`unverified` (registered but nothing delivered yet), `delivering`, or `verified`
+— plus registered/delivered counters, readable player crits observed and the
+last playback result. Counters are session-only and never saved. Registration is
+not proof: if the client hides crit data, Test can work while automatic playback
+remains unverified. Master and SFX channels still obey the game's sound settings.
 
 ### Notes with topics (v0.7.0, topics in v0.10.0)
 
@@ -185,7 +197,7 @@ Notes are plain player data: no healing math, no vendor files and no idle timers
 Only the floating window's own drag creates a transient `OnUpdate` that the client
 removes on release.
 
-### Combat text (v0.8.0)
+### Combat text (v0.8.0, motion and independent colours in v0.12.0)
 
 A small, centered line that flashes **`+ combat`** when you enter combat and
 **`- combat`** when you leave, so the transition is obvious in the middle of the
@@ -197,14 +209,22 @@ screen.
   it returns to click-through so it never blocks your clicks in combat.
 * **When:** **Show seconds** controls how long each line stays (0 = keep it until
   the next transition). **Fade seconds** fades it out before hiding (0 = no fade).
+* **Scroll:** **Direction** cycles up / down / none, **Distance px** (0-100) sets
+  the travel and **Motion seconds** (0.1-10) its duration. Every transition
+  restarts from the saved position; a duration-0 line scrolls once, settles, and
+  then has no updater at all.
 * **How it looks:** **Enter text** / **Leave text** (up to 40 characters), **font
-  size** (8-60), **Text RGB** and **opacity**, an optional **text outline**, and an
-  optional **background RGBA** (alpha 0 = none). **Apply style** saves; **Reset
-  style** restores defaults; **Reset position** recenters. **Preview +** / **Preview -**
-  show a sample without waiting for combat.
+  size** (8-60), independent **enter / leave text RGB**, **opacity**, an optional
+  **text outline**, and an optional **background RGBA** (alpha 0 = none). Legacy
+  single-colour settings migrate safely: a custom old colour becomes both new
+  colours, while the old default gets the new distinct enter/leave defaults.
+  **Apply style** saves; **Reset style** restores defaults; **Center** recenters
+  without touching the rest of the style. **Preview +** / **Preview -** show a
+  sample in its enter/leave colour without waiting for combat.
 * **Independent:** the indicator has its own event frame, so it keeps working when
   the healing helper is disabled (`/euihot combattext on|off`). It has no idle
-  timer: the only `OnUpdate` exists while a timed line is fading out.
+  timer: the only `OnUpdate` exists while a timed line is fading or a scroll is
+  still running.
 
 ### Weapon training reference (v0.9.0)
 
@@ -589,14 +609,14 @@ All commands are `/euihot ...` (aliases `/hotpred ...`, and `/dohelper ...` /
 | `interval <spellID> off` | Clear the manual interval for one spell. |
 | `amount <spellID> <tickTotal> [stacks]` | Manual per-tick total for an exact stack count (persisted, user-authoritative). Positive finite value, exact total — never multiplied by stacks. Stacks only meaningful for stacking families (Lifebloom). |
 | `amount <spellID> off [stacks]` | Clear the manual amount for one spell (or one stack count). |
-| `observe on\|off` | Session-only CLEU override. `on` requests guarded registration even on a restricted engine; `off` unregisters it. Never persisted. |
+| `observe on\|off` | Session-only CLEU override. `on` requests guarded registration even on a restricted engine; `off` unregisters it. Never persisted. The Sounds tab's **Try crit detection** button is the GUI equivalent. |
 | `spell add\|remove <spellID> [name]` | Register/remove a modified spell/rank ID at runtime. |
 | `amountmode total\|effective` | CLEU adapter assumption (see below); resets learned magnitudes. |
 | `excludehots on\|off` | Explicit excludes-HoTs overlap opt-in (see below). |
 | `notes [show\|hide\|toggle\|collapse\|expand\|list\|new [title]\|delete\|next\|prev\|site <n\|title>]` | Show/hide/toggle the floating notes window, collapse/expand it, and manage the named note topics (list/add/delete/cycle/select). With no argument it opens (shows) the window. |
 | `combattext on\|off` | Enable/disable the centered `+ combat` / `- combat` indicator. |
 | `combattext test [enter\|leave]` | Preview the enter (default) or leave line. |
-| `combattext status` | One line: enabled, font size, show/fade seconds, colour and position. |
+| `combattext status` | One line: enabled, font size, show/fade seconds, direction/distance/motion, enter and leave colours and position. |
 | `reset` | Clear session learning and invalidate the aura cache. |
 
 Settings persist in `EllesmereUI_HoTPredictionDB`. Manual interval/amount
@@ -664,7 +684,9 @@ those engines the addon does **not even attempt** registration by default, and i
 also never registers when the API is missing. `/euihot observe on` requests a
 guarded registration for a user who knows a modified client exposes the event;
 `/euihot observe off` unregisters it. The override is session-only and is not
-written to SavedVariables.
+written to SavedVariables. The Sounds tab's **Try crit detection** button is the
+same explicit, session-only override, with delivery counters and a playback
+result shown in the tab; enabling sounds or reloading never registers anything.
 
 `/euihot status` reports honest capability rather than implying success:
 `function=` (is the API present), `requested=` (did we ask), `registration=`
