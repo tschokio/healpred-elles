@@ -307,3 +307,136 @@ T.register("notes: binding entry point toggles the floating window", function()
 	EllesmereUI_HoTPrediction_ToggleNotes()
 	assert_false(e.ns.notes.window:IsShown())
 end)
+
+T.register("notes: metadata icon texture is configured in TOC", function()
+	local toc = ReadFile((_G.__HOT_ROOT or ".") .. "/DoHelper/DoHelper.toc")
+	assert_not_nil(toc, "TOC file must be readable")
+	assert_true(contains(toc, "## IconTexture: Interface\\Icons\\INV_Misc_Note_01"), "TOC must define note icon texture")
+end)
+
+T.register("notes: style persistence, apply, reset, and atomic validation", function()
+	local e = Mocks.NewEnv()
+	local defaults = e.ns.DEFAULTS.notes
+	assert_not_nil(defaults.titleColor, "defaults has titleColor")
+	assert_not_nil(defaults.borderColor, "defaults has borderColor")
+	assert_not_nil(defaults.editorBackground, "defaults has editorBackground")
+	assert_false(defaults.outline, "default outline is false")
+
+	local initial = e.ns.notes.Style()
+	assert_eq(initial.outline, false)
+	assert_eq(initial.titleColor[1], defaults.titleColor[1])
+	assert_eq(initial.borderColor[1], defaults.borderColor[1])
+	assert_eq(initial.editorBackground[4], defaults.editorBackground[4])
+
+	-- Apply valid full custom style
+	local custom = {
+		width = 450,
+		height = 320,
+		fontSize = 18,
+		outline = true,
+		textColor = { 0.8, 0.85, 0.9 },
+		titleColor = { 0.2, 0.7, 0.6 },
+		borderColor = { 0.3, 0.4, 0.5 },
+		background = { 0.1, 0.12, 0.15, 0.9 },
+		editorBackground = { 0.05, 0.06, 0.08, 0.6 },
+	}
+	local ok, err = e.ns.notes.SetStyle(custom)
+	assert_true(ok, "valid custom style applies successfully")
+
+	local win = e.ns.notes.EnsureWindow()
+	assert_eq(win:GetWidth(), 450)
+	assert_eq(win:GetHeight(), 320)
+	assert_eq(win._backdropColor[4], 0.9)
+	assert_eq(win._borderColor[1], 0.3)
+	assert_eq(win.edit._backdropColor[4], 0.6)
+	assert_eq(win.edit._borderColor[1], 0.3)
+	assert_eq(win.title._color[2], 0.7)
+	local _, winFont, winFlags = win.edit:GetFont()
+	assert_eq(winFont, 18)
+	assert_eq(winFlags, "OUTLINE")
+
+	-- Options tab editor mirrors styling
+	local f = e.ns.OpenOptions()
+	click(f.controls.notesTab)
+	local _, tabFont, tabFlags = f.notesEditor:GetFont()
+	assert_eq(tabFont, 18)
+	assert_eq(tabFlags, "OUTLINE")
+	assert_eq(f.notesEditor._backdropColor[4], 0.6)
+	assert_eq(f.notesEditor._borderColor[1], 0.3)
+
+	-- Atomic validation: invalid entries reject all modifications
+	local badStyles = {
+		{ field = "titleColor", style = { width = 450, height = 320, fontSize = 18, textColor = { 1, 1, 1 }, background = { 0, 0, 0, 1 }, titleColor = { 1, 2, 0 } } },
+		{ field = "borderColor", style = { width = 450, height = 320, fontSize = 18, textColor = { 1, 1, 1 }, background = { 0, 0, 0, 1 }, borderColor = { -1, 0, 0 } } },
+		{ field = "editorBackground", style = { width = 450, height = 320, fontSize = 18, textColor = { 1, 1, 1 }, background = { 0, 0, 0, 1 }, editorBackground = { 0, 0, 0 } } },
+	}
+	for _, tc in ipairs(badStyles) do
+		local okBad, msg = e.ns.notes.SetStyle(tc.style)
+		assert_false(okBad, tc.field .. " must fail validation")
+		-- Stored DB values remained unchanged
+		assert_eq(e.ns.db.notes.width, 450)
+		assert_eq(e.ns.db.notes.outline, true)
+		assert_eq(e.ns.db.notes.titleColor[2], 0.7)
+		assert_eq(e.ns.db.notes.borderColor[1], 0.3)
+		assert_eq(e.ns.db.notes.editorBackground[4], 0.6)
+	end
+
+	-- GUI controls and Reset style
+	click(f.controls.notesReset)
+	assert_eq(e.ns.db.notes.width, defaults.width)
+	assert_eq(e.ns.db.notes.fontSize, defaults.fontSize)
+	assert_eq(e.ns.db.notes.outline, false)
+	assert_eq(e.ns.db.notes.titleColor[1], defaults.titleColor[1])
+	assert_eq(e.ns.db.notes.borderColor[1], defaults.borderColor[1])
+	assert_eq(e.ns.db.notes.editorBackground[4], defaults.editorBackground[4])
+	assert_false(f.controls.notesOutline:GetChecked())
+end)
+
+T.register("notes: visibility open and closed states survive simulated reload", function()
+	local e = Mocks.NewEnv()
+	assert_false(e.ns.db.notes.shown, "default notes.shown is false")
+
+	-- 1. Opening the note sets shown = true
+	local win = e.ns.notes.Open()
+	assert_true(win:IsShown())
+	assert_true(e.ns.db.notes.shown)
+
+	-- Set customized content, collapsed state, and position
+	win.edit:SetText("persisted reminder across reload")
+	e.ns.notes.SetCollapsed(true)
+	e.ns.db.notes.x = 75
+	e.ns.db.notes.y = -120
+
+	-- 2. Simulate reload: PLAYER_LOGIN restores the previously open note
+	e.ns.notes.HandleEvent("PLAYER_LOGIN")
+	assert_true(win:IsShown(), "open note is restored after login")
+	assert_true(e.ns.db.notes.shown)
+	assert_true(e.ns.notes.IsCollapsed(), "collapsed pill state preserved across reload")
+	assert_eq(e.ns.notes.Text(), "persisted reminder across reload", "note text preserved across reload")
+	assert_eq(e.ns.db.notes.x, 75, "position x preserved")
+	assert_eq(e.ns.db.notes.y, -120, "position y preserved")
+
+	-- 3. Exercise direct frame Hide (not notes.Close)
+	win:Hide()
+	assert_false(win:IsShown(), "frame is hidden")
+	assert_false(e.ns.db.notes.shown, "direct frame Hide must synchronize shown to false via OnHide")
+
+	-- 4. Simulate reload while closed: PLAYER_LOGIN leaves it hidden
+	e.ns.notes.HandleEvent("PLAYER_LOGIN")
+	assert_false(win:IsShown(), "previously closed note remains hidden after reload")
+	assert_false(e.ns.db.notes.shown, "shown flag stays false")
+
+	-- 5. Reopen after closed state restores properly
+	e.ns.notes.Open()
+	assert_true(win:IsShown())
+	assert_true(e.ns.db.notes.shown)
+	assert_true(e.ns.notes.IsCollapsed(), "collapsed state still preserved")
+	assert_eq(e.ns.notes.Text(), "persisted reminder across reload", "text still preserved")
+
+	-- 6. Direct frame Show also synchronizes shown to true
+	win:Hide()
+	assert_false(e.ns.db.notes.shown)
+	win:Show()
+	assert_true(win:IsShown())
+	assert_true(e.ns.db.notes.shown, "direct frame Show synchronizes shown to true")
+end)

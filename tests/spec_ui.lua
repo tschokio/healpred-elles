@@ -84,6 +84,38 @@ T.register("UI: notes preserve saved styling and compact dimensions with themed 
 	assert_eq(f.collapse:GetText(), "^")
 end)
 
+T.register("UI: notes page controls fit and do not overlap", function()
+	local e = Mocks.NewEnv()
+	local f = e.ns.OpenOptions()
+	click(f.controls.notesTab)
+	local page = f.notesPage
+	local pageRect = Mocks.FrameRect(page)
+	local keys = {
+		"notesPrev", "notesNext", "notesTitle", "notesNew", "notesDelete",
+		"notesWidth", "notesHeight", "notesOutline",
+		"notesFont", "notesTextR", "notesTextG", "notesTextB",
+		"notesTitleR", "notesTitleG", "notesTitleB",
+		"notesBorderR", "notesBorderG", "notesBorderB",
+		"notesBgR", "notesBgG", "notesBgB", "notesBgA",
+		"notesEditBgR", "notesEditBgG", "notesEditBgB", "notesEditBgA",
+		"notesApply", "notesReset", "notesShow", "notesCollapse", "notesClose",
+	}
+	local rects = {}
+	for _, key in ipairs(keys) do
+		local ctrl = f.controls[key]
+		assert_not_nil(ctrl, "control must exist: " .. key)
+		local r = Mocks.FrameRect(ctrl)
+		assert_true(r.left >= pageRect.left and r.right <= pageRect.right, key .. " stays inside page horizontally")
+		assert_true(r.top <= pageRect.top and r.bottom >= pageRect.bottom, key .. " stays inside page vertically")
+		rects[key] = r
+	end
+	for i = 1, #keys do
+		for j = i + 1, #keys do
+			assert_false(Mocks.RectsOverlap(rects[keys[i]], rects[keys[j]]), keys[i] .. " must not overlap " .. keys[j])
+		end
+	end
+end)
+
 T.register("UI: old enabled critSounds saved settings do not resurrect module, tab, or playback/subscriptions", function()
 	Mocks.Reset()
 	_G.EllesmereUI_HoTPredictionDB = {

@@ -622,7 +622,7 @@ local function ensureWindow()
 	background(notesPage, -3, 4, 516, 492)
 	local notesHeading = label(notesPage, "Notes | saved as you type | editable out of combat", 8, -5, 482)
 	notesHeading:SetTextColor(0.55, 0.75, 0.78, 1)
-	local notesMessage = label(notesPage, "", 10, -416, 486)
+	local notesMessage = label(notesPage, "", 10, -394, 486)
 
 	-- Topic row: every note keeps its own topic ("site"). Prev/next cycle the
 	-- list, the middle field renames the active topic, + / - add and delete.
@@ -667,18 +667,25 @@ local function ensureWindow()
 	local notesEditor = CreateFrame("EditBox", nil, notesPage, "BackdropTemplate")
 	notesEditor:SetMultiLine(true)
 	notesEditor:SetAutoFocus(false)
-	notesEditor:SetSize(486, 158)
-	notesEditor:SetPoint("TOPLEFT", notesPage, "TOPLEFT", 10, -58)
+	notesEditor:SetSize(486, 100)
+	notesEditor:SetPoint("TOPLEFT", notesPage, "TOPLEFT", 10, -54)
 	notesEditor:SetTextInsets(8, 8, 8, 8)
 	notesEditor:SetBackdrop({ bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 })
-	notesEditor:SetBackdropColor(0.02, 0.03, 0.04, 1)
+	notesEditor:SetBackdropColor(0, 0, 0, 0.35)
 	notesEditor:SetBackdropBorderColor(0.2, 0.3, 0.34, 0.9)
 	notesEditor:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 	notesEditor:SetScript("OnTextChanged", function(self) ns.notes.OnEditorChanged(self) end)
 	UI.Input(notesEditor, true)
+	if notesEditor.HookScript then
+		notesEditor:HookScript("OnEditFocusLost", function(self)
+			local s = ns.notes.Style()
+			safe(self, "SetBackdropBorderColor", s.borderColor[1], s.borderColor[2], s.borderColor[3], 1)
+		end)
+	end
 	f.notesEditor = notesEditor
 	ns.notes.tabEditor = notesEditor
-	f.notesHint = label(notesPage, "", 10, -222, 486)
+	ns.notes.tabTitle = notesTitle
+	f.notesHint = label(notesPage, "", 10, -158, 486)
 	ns.notes.tabHint = f.notesHint
 
 	local function noteField(key, x, y, width)
@@ -692,21 +699,55 @@ local function ensureWindow()
 		f.controls[key] = e
 		return e
 	end
-	label(notesPage, "Window width x height (180-900 / 80-800)", 10, -254, 260)
-	noteField("notesWidth", 280, -249, 58)
-	label(notesPage, "x", 344, -254, 12)
-	noteField("notesHeight", 360, -249, 58)
-	label(notesPage, "Font size (8-32)", 10, -284, 150)
-	noteField("notesFont", 150, -279, 58)
-	label(notesPage, "Text RGB (0-1)", 230, -284, 120)
-	noteField("notesTextR", 340, -279, 46)
-	noteField("notesTextG", 392, -279, 46)
-	noteField("notesTextB", 444, -279, 46)
-	label(notesPage, "Background RGB + opacity (0-1)", 10, -314, 240)
-	noteField("notesBgR", 260, -309, 46)
-	noteField("notesBgG", 312, -309, 46)
-	noteField("notesBgB", 364, -309, 46)
-	noteField("notesBgA", 416, -309, 46)
+	local function notesCheck(key, title, x, y, width)
+		local c = CreateFrame("CheckButton", nil, notesPage, "UICheckButtonTemplate")
+		c:SetSize(22, 22)
+		c:SetPoint("TOPLEFT", notesPage, "TOPLEFT", x, y)
+		label(notesPage, title, x + 26, y - 5, width)
+		c:SetScript("OnClick", function(self)
+			local v = self:GetChecked() and true or false
+			if ns.db and ns.db.notes then ns.db.notes.outline = v end
+			ns.notes.ApplyStyle()
+		end)
+		UI.Checkbox(c)
+		f.controls[key] = c
+		return c
+	end
+
+	label(notesPage, "Window width x height (180-900 / 80-800)", 10, -180, 246)
+	noteField("notesWidth", 258, -176, 52)
+	label(notesPage, "x", 314, -180, 10)
+	noteField("notesHeight", 328, -176, 52)
+	notesCheck("notesOutline", "Text outline", 392, -174, 95)
+
+	label(notesPage, "Font size (8-32)", 10, -208, 110)
+	noteField("notesFont", 125, -204, 48)
+	label(notesPage, "Text RGB (0-1)", 195, -208, 95)
+	noteField("notesTextR", 295, -204, 38)
+	noteField("notesTextG", 337, -204, 38)
+	noteField("notesTextB", 379, -204, 38)
+
+	label(notesPage, "Title RGB (0-1)", 10, -236, 110)
+	noteField("notesTitleR", 125, -232, 38)
+	noteField("notesTitleG", 167, -232, 38)
+	noteField("notesTitleB", 209, -232, 38)
+	label(notesPage, "Border RGB (0-1)", 265, -236, 105)
+	noteField("notesBorderR", 375, -232, 38)
+	noteField("notesBorderG", 417, -232, 38)
+	noteField("notesBorderB", 459, -232, 38)
+
+	label(notesPage, "Window background RGBA (0-1)", 10, -264, 215)
+	noteField("notesBgR", 230, -260, 38)
+	noteField("notesBgG", 272, -260, 38)
+	noteField("notesBgB", 314, -260, 38)
+	noteField("notesBgA", 356, -260, 38)
+
+	label(notesPage, "Editor background RGBA (0-1)", 10, -292, 215)
+	noteField("notesEditBgR", 230, -288, 38)
+	noteField("notesEditBgG", 272, -288, 38)
+	noteField("notesEditBgB", 314, -288, 38)
+	noteField("notesEditBgA", 356, -288, 38)
+
 	local function notesButton(key, title, x, y, width, action)
 		local b = CreateFrame("Button", nil, notesPage, "UIPanelButtonTemplate")
 		b:SetSize(width, 24)
@@ -717,37 +758,58 @@ local function ensureWindow()
 		f.controls[key] = b
 		return b
 	end
-	notesButton("notesApply", "Apply style", 10, -346, 120, function()
+	notesButton("notesApply", "Apply style", 10, -322, 120, function()
 		local c = f.controls
 		local ok, message = ns.notes.SetStyle({
 			width = tonumber(c.notesWidth:GetText()),
 			height = tonumber(c.notesHeight:GetText()),
 			fontSize = tonumber(c.notesFont:GetText()),
+			outline = c.notesOutline and c.notesOutline:GetChecked() and true or false,
 			textColor = { tonumber(c.notesTextR:GetText()), tonumber(c.notesTextG:GetText()), tonumber(c.notesTextB:GetText()) },
+			titleColor = { tonumber(c.notesTitleR:GetText()), tonumber(c.notesTitleG:GetText()), tonumber(c.notesTitleB:GetText()) },
+			borderColor = { tonumber(c.notesBorderR:GetText()), tonumber(c.notesBorderG:GetText()), tonumber(c.notesBorderB:GetText()) },
 			background = { tonumber(c.notesBgR:GetText()), tonumber(c.notesBgG:GetText()), tonumber(c.notesBgB:GetText()), tonumber(c.notesBgA:GetText()) },
+			editorBackground = { tonumber(c.notesEditBgR:GetText()), tonumber(c.notesEditBgG:GetText()), tonumber(c.notesEditBgB:GetText()), tonumber(c.notesEditBgA:GetText()) },
 		})
 		if not ok then notesMessage:SetText(message); return end
-		for _, key in ipairs({ "notesWidth", "notesHeight", "notesFont", "notesTextR", "notesTextG", "notesTextB", "notesBgR", "notesBgG", "notesBgB", "notesBgA" }) do c[key]:ClearFocus() end
+		for _, key in ipairs({
+			"notesWidth", "notesHeight", "notesFont",
+			"notesTextR", "notesTextG", "notesTextB",
+			"notesTitleR", "notesTitleG", "notesTitleB",
+			"notesBorderR", "notesBorderG", "notesBorderB",
+			"notesBgR", "notesBgG", "notesBgB", "notesBgA",
+			"notesEditBgR", "notesEditBgG", "notesEditBgB", "notesEditBgA",
+		}) do
+			if c[key] then c[key]:ClearFocus() end
+		end
 		notesMessage:SetText(ns.api.InCombat() and "Style saved. The floating window is read-only in combat." or "Notes style saved.")
 		f.RefreshNotes()
 	end)
-	notesButton("notesReset", "Reset style", 140, -346, 120, function()
+	notesButton("notesReset", "Reset style", 140, -322, 120, function()
 		local d = ns.DEFAULTS.notes
-		ns.notes.SetStyle({ width = d.width, height = d.height, fontSize = d.fontSize,
+		ns.notes.SetStyle({
+			width = d.width,
+			height = d.height,
+			fontSize = d.fontSize,
+			outline = d.outline,
 			textColor = { d.textColor[1], d.textColor[2], d.textColor[3] },
-			background = { d.background[1], d.background[2], d.background[3], d.background[4] } })
+			titleColor = { d.titleColor[1], d.titleColor[2], d.titleColor[3] },
+			borderColor = { d.borderColor[1], d.borderColor[2], d.borderColor[3] },
+			background = { d.background[1], d.background[2], d.background[3], d.background[4] },
+			editorBackground = { d.editorBackground[1], d.editorBackground[2], d.editorBackground[3], d.editorBackground[4] },
+		})
 		notesMessage:SetText("Default notes style restored.")
 		f.RefreshNotes()
 	end)
-	notesButton("notesShow", "Show floating notes", 10, -378, 170, function()
+	notesButton("notesShow", "Show floating notes", 10, -356, 160, function()
 		ns.notes.Open()
 		notesMessage:SetText("Floating notes opened. Drag the title bar to move; Collapse rolls it up.")
 	end)
-	notesButton("notesCollapse", "Collapse / expand", 190, -378, 150, function()
+	notesButton("notesCollapse", "Collapse / expand", 180, -356, 140, function()
 		ns.notes.SetCollapsed(not ns.notes.IsCollapsed())
 		notesMessage:SetText(ns.notes.IsCollapsed() and "Notes collapsed." or "Notes expanded.")
 	end)
-	notesButton("notesClose", "Close", 350, -378, 90, function()
+	notesButton("notesClose", "Close", 330, -356, 90, function()
 		ns.notes.Close()
 		notesMessage:SetText("Floating notes closed.")
 	end)
@@ -757,8 +819,12 @@ local function ensureWindow()
 		local c = f.controls
 		local s = ns.notes.Style()
 		c.notesWidth:SetText(tostring(s.width)); c.notesHeight:SetText(tostring(s.height)); c.notesFont:SetText(tostring(s.fontSize))
+		if c.notesOutline then c.notesOutline:SetChecked(s.outline and true or false) end
 		for i, key in ipairs({ "notesTextR", "notesTextG", "notesTextB" }) do c[key]:SetText(tostring(s.textColor[i])) end
+		for i, key in ipairs({ "notesTitleR", "notesTitleG", "notesTitleB" }) do c[key]:SetText(tostring(s.titleColor[i])) end
+		for i, key in ipairs({ "notesBorderR", "notesBorderG", "notesBorderB" }) do c[key]:SetText(tostring(s.borderColor[i])) end
 		for i, key in ipairs({ "notesBgR", "notesBgG", "notesBgB", "notesBgA" }) do c[key]:SetText(tostring(s.background[i])) end
+		for i, key in ipairs({ "notesEditBgR", "notesEditBgG", "notesEditBgB", "notesEditBgA" }) do c[key]:SetText(tostring(s.editorBackground[i])) end
 		c.notesTitle:SetText(ns.notes.SiteTitle(ns.notes.ActiveId()))
 		ns.notes.ApplyStyle() -- keep the tab editor's font/colour in sync with saved style
 		ns.notes.RefreshText()

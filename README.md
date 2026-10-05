@@ -151,19 +151,31 @@ named **topics**, so unrelated reminders stay separate.
 * **Floating window:** click **Show floating notes**, run `/euihot notes`, or set
   the **Toggle notes window** key binding (Key Bindings → AddOns → DoHelper). The
   window can be dragged by its header and is independent of the settings window.
-* **Collapse / close:** the arrow (`v`/`^`) next to **Do** rolls the window up to
+* **Metadata icon:** the addon uses a built-in note icon (`Interface\Icons\INV_Misc_Note_01`)
+  in `DoHelper.toc` for clear, recognizable identification in Blizzard's AddOn list.
+* **Collapse / close & visibility lifecycle:** the arrow (`v`/`^`) next to **Do** rolls the window up to
   a compact **`Do ^`** pill; click the arrow again to open it. **Close** hides it.
-  Visibility, active topic and the collapsed state persist, so a note you leave
-  open comes back after `/reload`.
+  Visibility (`notes.shown`) synchronizes directly in the floating frame's `OnShow` and `OnHide`
+  handlers (retaining focus cleanup), so closing via the button, slash commands, or a direct frame
+  `Hide` reliably records `false`, and reopening records `true`. On `PLAYER_LOGIN` (and `/reload`),
+  an open note is restored and a closed note remains hidden, preserving collapsed state, screen
+  position, topics/contents and styling.
 * **Edit only out of combat:** the text, the topic title, add and delete controls
   are editable out of combat and become read-only during combat, so the note never
   swallows your keys; cycling topics stays available. It unlocks automatically
   when combat ends.
-* **Styling:** in the Notes tab set window **width/height** (180-900 × 80-800),
-  **font size** (8-32), **text RGB**, and **background RGB + opacity** (0-1 each),
-  then **Apply style**. **Reset style** restores the defaults. Size is set by the
-  width/height fields (not by edge-dragging), so it is deterministic and safe in
-  combat. Styling is shared by every topic.
+* **Styling:** in the Notes tab (`/dohelper options` → **Notes**), configure floating-note styling:
+  - Window **width / height** (180–900 × 80–800)
+  - **Font size** (8–32) and optional **text outline** checkbox
+  - **Text RGB** (0–1 each)
+  - **Title RGB** (0–1 each) for the "Do" header and topic title
+  - **Border RGB** (0–1 each) for window and editor borders
+  - **Window background RGBA** (0–1 each)
+  - **Editor background RGBA** (0–1 each)
+  Click **Apply style** to validate and save all values atomically; invalid inputs are rejected with
+  clear feedback and leave saved settings untouched. **Reset style** restores the full default theme.
+  The Notes tab editor stays synchronized with the floating note's font, text colour, editor
+  background and border styling.
 
 Notes are plain player data: no healing math, no vendor files and no idle timers.
 Only the floating window's own drag creates a transient `OnUpdate` that the client

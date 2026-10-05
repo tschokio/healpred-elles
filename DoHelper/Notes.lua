@@ -32,6 +32,20 @@ notes.MAX_SITES = MAX_SITES
 notes.COLLAPSED_WIDTH = COLLAPSED_WIDTH
 notes.COLLAPSED_HEIGHT = COLLAPSED_HEIGHT
 
+local DEFAULT_TEXT_COLOR = { 0.90, 0.94, 0.98 }
+local DEFAULT_TITLE_COLOR = { 0.32, 0.83, 0.73 }
+local DEFAULT_BORDER_COLOR = { 0.20, 0.30, 0.34 }
+local DEFAULT_BACKGROUND = { 0.05, 0.07, 0.10, 0.85 }
+local DEFAULT_EDITOR_BG = { 0.00, 0.00, 0.00, 0.35 }
+
+if ns.DEFAULTS and ns.DEFAULTS.notes then
+	local d = ns.DEFAULTS.notes
+	d.titleColor = d.titleColor or { DEFAULT_TITLE_COLOR[1], DEFAULT_TITLE_COLOR[2], DEFAULT_TITLE_COLOR[3] }
+	d.borderColor = d.borderColor or { DEFAULT_BORDER_COLOR[1], DEFAULT_BORDER_COLOR[2], DEFAULT_BORDER_COLOR[3] }
+	d.editorBackground = d.editorBackground or { DEFAULT_EDITOR_BG[1], DEFAULT_EDITOR_BG[2], DEFAULT_EDITOR_BG[3], DEFAULT_EDITOR_BG[4] }
+	if d.outline == nil then d.outline = false end
+end
+
 -- Widgets (other than the editors) that must be enabled only out of combat:
 -- the options tab and the floating window both add their topic controls here.
 notes.lockables = {}
@@ -44,6 +58,35 @@ local function clamp(n, lo, hi)
 	if n < lo then return lo end
 	if n > hi then return hi end
 	return n
+end
+
+local function component(t, index, fallback)
+	if type(t) ~= "table" then return fallback end
+	local v = ns.toNumber(t[index])
+	if v == nil or v < 0 or v > 1 then return fallback end
+	return v
+end
+
+local function validRGB(t, name)
+	if type(t) ~= "table" then return nil, (name or "Text") .. " RGB must be 0-1 each." end
+	local out = {}
+	for i = 1, 3 do
+		local v = ns.toNumber(t[i])
+		if not (ns.isFinite(v) and v <= 1) then return nil, (name or "Text") .. " RGB must be 0-1 each." end
+		out[i] = v
+	end
+	return out
+end
+
+local function validRGBA(t, name)
+	if type(t) ~= "table" then return nil, (name or "Background") .. " RGBA must be 0-1 each." end
+	local out = {}
+	for i = 1, 4 do
+		local v = ns.toNumber(t[i])
+		if not (ns.isFinite(v) and v <= 1) then return nil, (name or "Background") .. " RGBA must be 0-1 each." end
+		out[i] = v
+	end
+	return out
 end
 
 local function data()
@@ -310,10 +353,17 @@ end
 -- and loses focus so the player's keys are not swallowed.
 function notes.RefreshEditable()
 	local editable = notes.IsEditable()
+	local s = notes.Style()
 	for _, e in ipairs(notes.Editors()) do
 		if not editable then safe(e, "ClearFocus") end
 		safe(e, "SetEnabled", editable)
-		if e.uiInput then ns.ui.InputState(e) end
+		if e.uiInput then
+			ns.ui.InputState(e)
+			local focused = e.HasFocus and e:HasFocus()
+			if not focused then
+				safe(e, "SetBackdropBorderColor", s.borderColor[1], s.borderColor[2], s.borderColor[3], 1)
+			end
+		end
 	end
 	for _, w in ipairs(notes.lockables) do
 		if not editable then safe(w, "ClearFocus") end
@@ -337,14 +387,43 @@ function notes.Style()
 	local width = ns.isFinite(d.width) and d.width or 320
 	local height = ns.isFinite(d.height) and d.height or 240
 	local fontSize = ns.isFinite(d.fontSize) and d.fontSize or 14
-	local tc = type(d.textColor) == "table" and d.textColor or { 0.90, 0.94, 0.98 }
-	local bg = type(d.background) == "table" and d.background or { 0.05, 0.07, 0.10, 0.85 }
+	local tc = d.textColor
+	local titc = d.titleColor
+	local bc = d.borderColor
+	local bg = d.background
+	local ebg = d.editorBackground
 	return {
 		width = clamp(width, LIMITS.width[1], LIMITS.width[2]),
 		height = clamp(height, LIMITS.height[1], LIMITS.height[2]),
 		fontSize = clamp(fontSize, LIMITS.fontSize[1], LIMITS.fontSize[2]),
-		textColor = { tc[1] or 0.90, tc[2] or 0.94, tc[3] or 0.98 },
-		background = { bg[1] or 0.05, bg[2] or 0.07, bg[3] or 0.10, bg[4] or 0.85 },
+		outline = d.outline and true or false,
+		textColor = {
+			component(tc, 1, DEFAULT_TEXT_COLOR[1]),
+			component(tc, 2, DEFAULT_TEXT_COLOR[2]),
+			component(tc, 3, DEFAULT_TEXT_COLOR[3]),
+		},
+		titleColor = {
+			component(titc, 1, DEFAULT_TITLE_COLOR[1]),
+			component(titc, 2, DEFAULT_TITLE_COLOR[2]),
+			component(titc, 3, DEFAULT_TITLE_COLOR[3]),
+		},
+		borderColor = {
+			component(bc, 1, DEFAULT_BORDER_COLOR[1]),
+			component(bc, 2, DEFAULT_BORDER_COLOR[2]),
+			component(bc, 3, DEFAULT_BORDER_COLOR[3]),
+		},
+		background = {
+			component(bg, 1, DEFAULT_BACKGROUND[1]),
+			component(bg, 2, DEFAULT_BACKGROUND[2]),
+			component(bg, 3, DEFAULT_BACKGROUND[3]),
+			component(bg, 4, DEFAULT_BACKGROUND[4]),
+		},
+		editorBackground = {
+			component(ebg, 1, DEFAULT_EDITOR_BG[1]),
+			component(ebg, 2, DEFAULT_EDITOR_BG[2]),
+			component(ebg, 3, DEFAULT_EDITOR_BG[3]),
+			component(ebg, 4, DEFAULT_EDITOR_BG[4]),
+		},
 	}
 end
 
@@ -360,21 +439,46 @@ function notes.SetStyle(style)
 	if not (ns.isFinite(fontSize) and fontSize >= LIMITS.fontSize[1] and fontSize <= LIMITS.fontSize[2]) then
 		return false, "Font size must be 8-32."
 	end
-	local tc, bg = style.textColor, style.background
-	if type(tc) ~= "table" or type(bg) ~= "table" then return false, "Missing color values." end
-	for i = 1, 3 do
-		local v = ns.toNumber(tc[i])
-		if not (ns.isFinite(v) and v <= 1) then return false, "Text RGB must be 0-1 each." end
+
+	local tc, tcErr = validRGB(style.textColor, "Text")
+	if not tc then return false, tcErr or "Text RGB must be 0-1 each." end
+
+	local bg, bgErr = validRGBA(style.background, "Background")
+	if not bg then return false, bgErr or "Background RGBA must be 0-1 each." end
+
+	local titc, bc, ebg = nil, nil, nil
+	if style.titleColor ~= nil then
+		local err
+		titc, err = validRGB(style.titleColor, "Title")
+		if not titc then return false, err or "Title RGB must be 0-1 each." end
 	end
-	for i = 1, 4 do
-		local v = ns.toNumber(bg[i])
-		if not (ns.isFinite(v) and v <= 1) then return false, "Background RGBA must be 0-1 each." end
+	if style.borderColor ~= nil then
+		local err
+		bc, err = validRGB(style.borderColor, "Border")
+		if not bc then return false, err or "Border RGB must be 0-1 each." end
 	end
+	if style.editorBackground ~= nil then
+		local err
+		ebg, err = validRGBA(style.editorBackground, "Editor background")
+		if not ebg then return false, err or "Editor background RGBA must be 0-1 each." end
+	end
+
+	local outline = nil
+	if style.outline ~= nil then
+		outline = style.outline and true or false
+	end
+
 	local d = data()
 	if not d then return false, "Settings unavailable." end
+
 	d.width, d.height, d.fontSize = width, height, fontSize
-	d.textColor = { ns.toNumber(tc[1]), ns.toNumber(tc[2]), ns.toNumber(tc[3]) }
-	d.background = { ns.toNumber(bg[1]), ns.toNumber(bg[2]), ns.toNumber(bg[3]), ns.toNumber(bg[4]) }
+	d.textColor = tc
+	d.background = bg
+	if titc then d.titleColor = titc end
+	if bc then d.borderColor = bc end
+	if ebg then d.editorBackground = ebg end
+	if outline ~= nil then d.outline = outline end
+
 	notes.ApplyStyle()
 	return true
 end
@@ -385,19 +489,40 @@ end
 
 function notes.ApplyStyle()
 	local s = notes.Style()
+	local fontFlags = s.outline and "OUTLINE" or ""
 	local f = notes.window
 	if f then
 		safe(f, "SetBackdropColor", s.background[1], s.background[2], s.background[3], s.background[4])
+		safe(f, "SetBackdropBorderColor", s.borderColor[1], s.borderColor[2], s.borderColor[3], 1)
 		local collapsed = notes.IsCollapsed()
 		f:SetSize(collapsed and COLLAPSED_WIDTH or s.width, collapsed and COLLAPSED_HEIGHT or s.height)
-		if f.edit then f.edit:SetSize(s.width - 16, notes.EditorHeight(s)) end
-		if f.siteTitle then f.siteTitle:SetSize(math.max(60, s.width - 112), 20) end
-		if f.title then safe(f.title, "SetFont", FONT, 12, "") end
-		if f.siteTitle then safe(f.siteTitle, "SetFont", FONT, 12, "") end
+		if f.edit then
+			f.edit:SetSize(s.width - 16, notes.EditorHeight(s))
+			safe(f.edit, "SetBackdropColor", s.editorBackground[1], s.editorBackground[2], s.editorBackground[3], s.editorBackground[4])
+			safe(f.edit, "SetBackdropBorderColor", s.borderColor[1], s.borderColor[2], s.borderColor[3], 1)
+		end
+		if f.siteTitle then
+			f.siteTitle:SetSize(math.max(60, s.width - 112), 20)
+			safe(f.siteTitle, "SetFont", FONT, 12, "")
+			safe(f.siteTitle, "SetTextColor", s.titleColor[1], s.titleColor[2], s.titleColor[3], 1)
+			safe(f.siteTitle, "SetBackdropBorderColor", s.borderColor[1], s.borderColor[2], s.borderColor[3], 1)
+		end
+		if f.title then
+			safe(f.title, "SetFont", FONT, 12, "")
+			safe(f.title, "SetTextColor", s.titleColor[1], s.titleColor[2], s.titleColor[3], 1)
+		end
 	end
-	if notes.tabEditor then safe(notes.tabEditor, "SetFont", FONT, s.fontSize, "") end
+	if notes.tabEditor then
+		safe(notes.tabEditor, "SetFont", FONT, s.fontSize, fontFlags)
+		safe(notes.tabEditor, "SetBackdropColor", s.editorBackground[1], s.editorBackground[2], s.editorBackground[3], s.editorBackground[4])
+		safe(notes.tabEditor, "SetBackdropBorderColor", s.borderColor[1], s.borderColor[2], s.borderColor[3], 1)
+	end
+	if notes.tabTitle then
+		safe(notes.tabTitle, "SetTextColor", s.titleColor[1], s.titleColor[2], s.titleColor[3], 1)
+		safe(notes.tabTitle, "SetBackdropBorderColor", s.borderColor[1], s.borderColor[2], s.borderColor[3], 1)
+	end
 	for _, e in ipairs(notes.Editors()) do
-		safe(e, "SetFont", FONT, s.fontSize, "")
+		safe(e, "SetFont", FONT, s.fontSize, fontFlags)
 		safe(e, "SetTextColor", s.textColor[1], s.textColor[2], s.textColor[3], 1)
 	end
 	if f and f.hint then
@@ -471,9 +596,24 @@ function notes.EnsureWindow()
 		safe(self, "StopMovingOrSizing")
 		notes.SavePosition()
 	end)
+	local origShow = f.Show
+	f.Show = function(self, ...)
+		local d = data()
+		if d then d.shown = true end
+		if origShow then origShow(self, ...) end
+		local onShow = self._scripts and self._scripts["OnShow"]
+		if onShow then pcall(onShow, self) end
+	end
+	f:SetScript("OnShow", function()
+		local d = data()
+		if d then d.shown = true end
+	end)
 	-- Hiding a focused editor must release focus so it cannot swallow keys while
-	-- the window is closed (Close, Escape or a reload).
+	-- the window is closed (Close, Escape or a reload). Also synchronize shown
+	-- state so direct frame Hide or any UI close accurately updates SavedVariables.
 	f:SetScript("OnHide", function()
+		local d = data()
+		if d then d.shown = false end
 		if f.edit then safe(f.edit, "ClearFocus") end
 		if f.siteTitle then safe(f.siteTitle, "ClearFocus") end
 	end)
@@ -548,6 +688,12 @@ function notes.EnsureWindow()
 	edit:SetScript("OnTextChanged", function(self) notes.OnEditorChanged(self) end)
 	edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 	ns.ui.Input(edit, true)
+	if edit.HookScript then
+		edit:HookScript("OnEditFocusLost", function(self)
+			local s = notes.Style()
+			safe(self, "SetBackdropBorderColor", s.borderColor[1], s.borderColor[2], s.borderColor[3], 1)
+		end)
+	end
 	f.edit = edit
 
 	local hint = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
