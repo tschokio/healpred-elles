@@ -8,8 +8,7 @@ local addonName, ns = ...
 ns.name = addonName
 ns.version = "0.12.0"
 -- Bumped when saved settings need a one-time migration. The marker lives in
--- SavedVariables, so a migration (for example the old blank crit-sound path)
--- runs exactly once and a deliberate later blank choice is preserved.
+-- SavedVariables, so a migration runs exactly once.
 ns.SCHEMA_VERSION = 2
 ns.debugEnabled = false
 ns.inCombat = false
@@ -138,9 +137,7 @@ local function sameRGB(t, ref)
 	return true
 end
 
--- Runs BEFORE applyDefaults, keyed by db.schema. It must never touch a saved
--- value after the marker is written: a blank crit-sound path chosen on purpose
--- later must survive every reload. Never raises on corrupted data.
+-- Runs BEFORE applyDefaults, keyed by db.schema. Never raises on corrupted data.
 function ns.MigrateDatabase(db)
 	if type(db) ~= "table" then return end
 	local version = ns.toNumber(db.schema) or 0
@@ -160,14 +157,6 @@ function ns.MigrateDatabase(db)
 				ct.leaveColor = { legacy[1], legacy[2], legacy[3] }
 			end
 		end
-	end
-
-	-- v1 -> v2 crit sounds: the old blank default becomes the bundled bam.mp3
-	-- exactly once. An explicit custom path is preserved, and after the marker
-	-- a deliberately blank path (built-in raid warning) is preserved too.
-	local cs = db.critSounds
-	if type(cs) == "table" and not ns.isSecret(cs.path) and (cs.path == nil or cs.path == "") then
-		cs.path = ns.DEFAULTS.critSounds.path
 	end
 
 	db.schema = ns.SCHEMA_VERSION
@@ -228,7 +217,6 @@ ns.DEFAULTS = {
 	approximatePrediction = false, -- opt-in: public tooltip/manual estimate, ignores heal absorbs
 	minimapHidden = false,
 	minimapAngle = 225,
-	critSounds = { enabled = false, damage = true, healing = true, path = "Interface\\AddOns\\DoHelper\\Sounds\\bam.mp3", channel = "Master", cooldown = 0.5 },
 	queuedSwingEnabled = true,
 	queuedSwingColor = { 0.0, 1.0, 1.0 }, -- distinct opaque next-swing border
 	queuedSwingThickness = 3,
@@ -526,7 +514,6 @@ function ns.Startup()
 	if ns.learner and ns.learner.Setup then ns.learner.Setup() end
 	if ns.notes and ns.notes.Setup then ns.notes.Setup() end
 	if ns.combatText and ns.combatText.Setup then ns.combatText.Setup() end
-	if ns.critSounds and ns.critSounds.Setup then ns.critSounds.Setup() end
 	ns.SetRuntimeEnabled(ns.db.enabled)
 	ns.unregister("ADDON_LOADED")
 
@@ -1124,13 +1111,6 @@ function ns._BuildStatusReport(includeDebug)
 		tostring(cleuFn), tostring(cap.cleuRequested), tostring(cleuReg), tostring(delivered),
 		cap.cleuError and (" error=" .. tostring(cap.cleuError)) or "")
 	if cap.cleuGateReason then add("cleu gate: %s", tostring(cap.cleuGateReason)) end
-	if ns.critSounds then
-		local diag = ns.critSounds.diagnostics or {}
-		add("crit sounds enabled=%s damage=%s healing=%s path=%s detection=%s delivered=%d playerCrits=%d",
-			tostring(ns.db.critSounds.enabled), tostring(ns.db.critSounds.damage), tostring(ns.db.critSounds.healing),
-			tostring(ns.db.critSounds.path), tostring(ns.critSounds.DetectionState()),
-			ns.toNumber(diag.delivered) or 0, ns.toNumber(diag.playerCrits) or 0)
-	end
 	local CAL = "/euihot interval <id> <seconds> and /euihot amount <id> <tickTotal> [stacks]"
 	if not cleuFn or not cleuReg then
 		add("automatic tick learning unavailable; %s", ns.db.approximatePrediction

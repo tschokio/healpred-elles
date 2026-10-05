@@ -482,7 +482,7 @@ T.register("combat text: combat page controls fit and do not overlap", function(
 	click(f.controls.combatTab)
 	local page = f.combatPage
 	local pageRect = Mocks.FrameRect(page)
-	local keys = { "combatApply", "combatResetStyle", "combatPreviewEnter", "combatPreviewLeave", "combatResetPos", "combatDir" }
+	local keys = { "combatEnabled", "combatApply", "combatResetStyle", "combatPreviewEnter", "combatPreviewLeave", "combatResetPos", "combatDir" }
 	local rects = {}
 	for _, key in ipairs(keys) do
 		local r = Mocks.FrameRect(f.controls[key])
@@ -495,7 +495,7 @@ T.register("combat text: combat page controls fit and do not overlap", function(
 			assert_false(Mocks.RectsOverlap(rects[keys[i]], rects[keys[j]]), keys[i] .. " must not overlap " .. keys[j])
 		end
 	end
-	for _, text in ipairs({ "Direction (up / down / none)", "Distance px (0-100)", "Motion seconds (0.1-10)",
+	for _, text in ipairs({ "Enable combat text", "Direction (up / down / none)", "Distance px (0-100)", "Motion seconds (0.1-10)",
 		"Position offset X / Y from screen centre", "Motion restarts" }) do
 		local l = Mocks.FindFontString(page, text)
 		assert_not_nil(l, "label missing: " .. text)
@@ -504,10 +504,85 @@ T.register("combat text: combat page controls fit and do not overlap", function(
 			assert_false(Mocks.RectsOverlap(lr, rects[key]), text .. " must not overlap " .. key)
 		end
 	end
-	for _, key in ipairs({ "combatDistance", "combatMotion", "combatX", "combatY" }) do
+	for _, key in ipairs({ "combatDistance", "combatMotion", "combatX", "combatY", "combatEnter", "combatLeave" }) do
 		local r = Mocks.FrameRect(f.controls[key])
 		assert_true(r.left >= pageRect.left and r.right <= pageRect.right, key .. " stays inside the page")
+		assert_false(Mocks.RectsOverlap(rects.combatEnabled, r), "combatEnabled must not overlap " .. key)
 	end
+end)
+
+T.register("combat text: enable checkbox toggles state, hides visible line immediately and suppresses transitions", function()
+	local e = Mocks.NewEnv()
+	local ct = e.ns.combatText
+	local f = e.ns.OpenOptions("combat")
+	local cb = f.controls.combatEnabled
+	assert_not_nil(cb, "combatEnabled checkbox exists")
+	assert_true(cb:GetChecked(), "enabled by default")
+
+	-- Show combat text line
+	local textFrame = ct.EnsureFrame()
+	ct.Show("enter")
+	assert_true(textFrame:IsShown(), "text is visible before disabling")
+
+	-- Uncheck checkbox and trigger OnClick (disables visible text immediately)
+	cb:SetChecked(false)
+	cb:GetScript("OnClick")(cb)
+	assert_false(e.ns.db.combatText.enabled, "db updated to false")
+	assert_false(cb:GetChecked(), "checkbox reflects false")
+	assert_false(textFrame:IsShown(), "disables visible text immediately")
+
+	-- Suppresses enter/leave transitions
+	ct.eventFrame:GetScript("OnEvent")(ct.eventFrame, "PLAYER_REGEN_DISABLED")
+	assert_false(textFrame:IsShown(), "enter transition suppressed when disabled")
+	ct.eventFrame:GetScript("OnEvent")(ct.eventFrame, "PLAYER_REGEN_ENABLED")
+	assert_false(textFrame:IsShown(), "leave transition suppressed when disabled")
+
+	-- Keep explicit previews usable when disabled, preserving current behavior
+	click(f.controls.combatPreviewEnter)
+	assert_true(textFrame:IsShown(), "preview + works while disabled")
+	assert_eq(textFrame.label:GetText(), "+ combat")
+	click(f.controls.combatPreviewLeave)
+	assert_true(textFrame:IsShown(), "preview - works while disabled")
+	assert_eq(textFrame.label:GetText(), "- combat")
+
+	-- Re-enable via checkbox
+	cb:SetChecked(true)
+	cb:GetScript("OnClick")(cb)
+	assert_true(e.ns.db.combatText.enabled, "db updated to true")
+	assert_true(cb:GetChecked(), "checkbox reflects true")
+
+	-- Transitions work again
+	ct.eventFrame:GetScript("OnEvent")(ct.eventFrame, "PLAYER_REGEN_DISABLED")
+	assert_true(textFrame:IsShown(), "enter transition works when re-enabled")
+end)
+
+T.register("combat text: checkbox reflects slash-command changes and persists across reloads", function()
+	local e = Mocks.NewEnv()
+	local f = e.ns.OpenOptions("combat")
+	local cb = f.controls.combatEnabled
+	assert_true(cb:GetChecked())
+
+	-- Slash command disables combat text; options checkbox reflects it
+	e.ns.HandleCommand("combattext off")
+	assert_false(e.ns.db.combatText.enabled)
+	assert_false(cb:GetChecked(), "checkbox reflects slash command off")
+
+	-- Slash command enables combat text; options checkbox reflects it
+	e.ns.HandleCommand("combattext on")
+	assert_true(e.ns.db.combatText.enabled)
+	assert_true(cb:GetChecked(), "checkbox reflects slash command on")
+
+	-- Persists across reloads
+	local ns2 = presetEnv({ combatText = { enabled = false } })
+	assert_false(ns2.db.combatText.enabled, "loaded disabled from DB")
+	local f2 = ns2.OpenOptions("combat")
+	assert_false(f2.controls.combatEnabled:GetChecked(), "persisted disabled state reaches checkbox")
+	local textFrame2 = ns2.combatText.EnsureFrame()
+	ns2.combatText.eventFrame:GetScript("OnEvent")(ns2.combatText.eventFrame, "PLAYER_REGEN_DISABLED")
+	assert_false(textFrame2:IsShown(), "transitions remain suppressed after reload")
+	-- Previews still work
+	ns2.combatText.Preview("enter")
+	assert_true(textFrame2:IsShown(), "preview works after reload even when disabled")
 end)
 
 T.register("combat text: status and test commands report and preview", function()

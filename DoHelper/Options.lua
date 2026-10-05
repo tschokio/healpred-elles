@@ -14,13 +14,11 @@ local NAVIGATION = {
 	{ "spellsTab", "spells", "Implemented spells", "Browse class coverage, exact rank IDs and limitations." },
 	{ "notesTab", "notes", "Notes", "Keep your topics separate and style your floating notepad." },
 	{ "combatTab", "combat", "Combat text", "Customize the indicator shown when entering or leaving combat." },
-	{ "soundsTab", "sounds", "Sounds", "Choose an audio cue for readable critical hits and heals." },
 	{ "weaponTab", "weapons", "Weapon training", "Find proficiencies, starting skills and weapon trainers." },
 }
 local HELP = {
 	notes = { "YOUR NOTEPAD", "A place for reminders", "Use the arrows to switch topics. New topic creates a separate note; edit its title and press Enter to rename it.\n\nYour edits save as you type. The floating window mirrors the active topic.\n\nClick the arrow beside Do to collapse it to a tiny Do ^ toggle. Drag its header to move it.", "Editing locks during combat. Switching topics remains available." },
 	combat = { "COMBAT INDICATOR", "Clear, quiet feedback", "Choose your enter and leave labels, independent enter/leave colours, the text size and the timing.\n\nDirection and distance scroll the line up or down; 0 distance disables motion. Motion always restarts from the saved position.\n\nA duration of 0 keeps the label until the next transition (after the scroll settles).\n\nUse Preview + and Preview - to test without starting combat. Unlock to drag, then lock again to restore click-through.", "Size, colours and position remain independent of the settings theme." },
-	sounds = { "CUSTOM AUDIO", "Make each crit count", "The bundled default is Interface\\AddOns\\DoHelper\\Sounds\\bam.mp3. Use Cue to switch between bam.mp3 and the built-in raid warning, or type another local .ogg/.mp3 path.\n\nClick Apply + Test sound to preview. Use a cooldown to prevent sound bursts from multi-target hits.\n\nTry crit detection is an explicit, session-only combat-log opt-in; enabling sounds alone never registers anything.", "Registration is not delivery. Restricted clients may only support the test; the counters show what actually arrived." },
 }
 
 local function safe(obj, method, ...)
@@ -439,6 +437,10 @@ local function ensureWindow()
 	if not CreateFrame then return nil end
 	local f = CreateFrame("Frame", WINDOW, UIParent, "BackdropTemplate")
 	ns.optionsWindow = f
+	local function command(text)
+		ns.HandleCommand(text)
+		if f.Refresh then f.Refresh() end
+	end
 	f:SetSize(1000, 712)
 	f.contentX, f.contentY = 211, -128
 	f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
@@ -770,8 +772,6 @@ local function ensureWindow()
 	combatPage:SetPoint("TOPLEFT", f, "TOPLEFT", f.contentX, f.contentY)
 	f.combatPage = combatPage
 	background(combatPage, -3, 4, 516, 492)
-	local combatHeading = label(combatPage, "Combat text | shown on entering and leaving combat", 8, -5, 482)
-	combatHeading:SetTextColor(0.55, 0.75, 0.78, 1)
 	local function combatField(key, x, y, width, maxLetters)
 		local e = CreateFrame("EditBox", nil, combatPage, "BackdropTemplate")
 		e:SetSize(width or 56, 22)
@@ -804,6 +804,11 @@ local function ensureWindow()
 		f.controls[key] = b
 		return b
 	end
+	combatCheck("combatEnabled", "Enable combat text", 10, -2, 120,
+		function() return ns.db.combatText.enabled end,
+		function(v) command("combattext " .. (v and "on" or "off")) end)
+	local combatHeading = label(combatPage, "|  shown on entering and leaving combat", 165, -7, 320)
+	combatHeading:SetTextColor(0.55, 0.75, 0.78, 1)
 	label(combatPage, "Enter text", 10, -35, 100)
 	combatField("combatEnter", 115, -30, 140, 40)
 	label(combatPage, "Leave text", 270, -35, 90)
@@ -910,6 +915,7 @@ local function ensureWindow()
 	function f.RefreshCombat()
 		local c = f.controls
 		local s = ns.combatText.Style()
+		if c.combatEnabled then c.combatEnabled:SetChecked(ns.db.combatText.enabled and true or false) end
 		c.combatEnter:SetText(s.enterText)
 		c.combatLeave:SetText(s.leaveText)
 		c.combatFont:SetText(tostring(s.fontSize))
@@ -936,7 +942,6 @@ local function ensureWindow()
 		ns.weaponTraining.BuildOptionsUI(f)
 	end
 
-	if ns.critSounds then ns.critSounds.BuildOptionsUI(f) end
 	function f.SelectTab(tab)
 		local valid = false
 		for _, item in ipairs(NAVIGATION) do if item[2] == tab then valid = true; break end end
@@ -948,7 +953,6 @@ local function ensureWindow()
 		catalog:SetShown(tab == "spells")
 		notesPage:SetShown(tab == "notes")
 		combatPage:SetShown(tab == "combat")
-		if f.soundsPage then f.soundsPage:SetShown(tab == "sounds") end
 		if f.weaponPage then f.weaponPage:SetShown(tab == "weapons") end
 		f.preview:SetShown(tab == "settings" or tab == "spells")
 		local help = HELP[tab]
@@ -964,8 +968,6 @@ local function ensureWindow()
 			f.RefreshNotes()
 		elseif tab == "combat" then
 			f.RefreshCombat()
-		elseif tab == "sounds" then
-			f.RefreshSounds()
 		elseif tab == "weapons" then
 			if f.weaponPage and f.weaponPage.Refresh then f.weaponPage.Refresh() end
 		end
@@ -973,10 +975,6 @@ local function ensureWindow()
 			UI.Selected(f.controls[item[1]], tab == item[2])
 			if tab == item[2] then f.pageTitle:SetText(item[3]); f.pageDescription:SetText(item[4]) end
 		end
-	end
-	local function command(text)
-		ns.HandleCommand(text)
-		f.Refresh()
 	end
 	local function check(key, title, y, read, write)
 		local c = CreateFrame("CheckButton", nil, page, "UICheckButtonTemplate")
@@ -1077,7 +1075,6 @@ local function ensureWindow()
 		f.preview.Saved()
 		if f.RefreshNotes then f.RefreshNotes() end
 		if f.RefreshCombat then f.RefreshCombat() end
-		if f.RefreshSounds then f.RefreshSounds() end
 		if f.weaponPage and f.weaponPage.Refresh then f.weaponPage.Refresh() end
 		refreshing = false
 	end

@@ -1,6 +1,6 @@
 ## Interface: 120000, 120001, 120005, 120007, 120100, 16001
 ## Title: DoHelper
-## Notes: Healing predictions, queued next-swing borders, multi-topic notes, combat text, crit sounds and a weapon training reference. Addon folder is DoHelper; the SavedVariables name is kept for data compatibility.
+## Notes: Healing predictions, queued next-swing borders, multi-topic notes, combat text and a weapon training reference. Addon folder is DoHelper; the SavedVariables name is kept for data compatibility.
 ## Author: ai-job
 ## Version: 0.12.0
 ## SavedVariables: EllesmereUI_HoTPredictionDB
@@ -20,7 +20,6 @@ QueuedSwing.lua
 SpellCatalog.lua
 Notes.lua
 CombatText.lua
-CritSounds.lua
 DebugWindow.lua
 WeaponTraining.lua
 Options.lua
