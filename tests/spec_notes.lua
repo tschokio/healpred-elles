@@ -366,9 +366,13 @@ T.register("notes: style persistence, apply, reset, and atomic validation", func
 
 	-- Atomic validation: invalid entries reject all modifications
 	local badStyles = {
-		{ field = "titleColor", style = { width = 450, height = 320, fontSize = 18, textColor = { 1, 1, 1 }, background = { 0, 0, 0, 1 }, titleColor = { 1, 2, 0 } } },
-		{ field = "borderColor", style = { width = 450, height = 320, fontSize = 18, textColor = { 1, 1, 1 }, background = { 0, 0, 0, 1 }, borderColor = { -1, 0, 0 } } },
-		{ field = "editorBackground", style = { width = 450, height = 320, fontSize = 18, textColor = { 1, 1, 1 }, background = { 0, 0, 0, 1 }, editorBackground = { 0, 0, 0 } } },
+		{ field = "titleColor > 1", style = { width = 450, height = 320, fontSize = 18, textColor = { 1, 1, 1 }, background = { 0, 0, 0, 1 }, titleColor = { 1, 2, 0 } } },
+		{ field = "borderColor < 0", style = { width = 450, height = 320, fontSize = 18, textColor = { 1, 1, 1 }, background = { 0, 0, 0, 1 }, borderColor = { -1, 0, 0 } } },
+		{ field = "editorBackground missing component", style = { width = 450, height = 320, fontSize = 18, textColor = { 1, 1, 1 }, background = { 0, 0, 0, 1 }, editorBackground = { 0, 0, 0 } } },
+		{ field = "editorBackground < 0", style = { width = 450, height = 320, fontSize = 18, textColor = { 1, 1, 1 }, background = { 0, 0, 0, 1 }, editorBackground = { 0, 0, 0, -0.5 } } },
+		{ field = "textColor NaN", style = { width = 450, height = 320, fontSize = 18, textColor = { 0, 0/0, 0 }, background = { 0, 0, 0, 1 } } },
+		{ field = "textColor inf", style = { width = 450, height = 320, fontSize = 18, textColor = { 0, 1/0, 0 }, background = { 0, 0, 0, 1 } } },
+		{ field = "textColor non-table", style = { width = 450, height = 320, fontSize = 18, textColor = "invalid", background = { 0, 0, 0, 1 } } },
 	}
 	for _, tc in ipairs(badStyles) do
 		local okBad, msg = e.ns.notes.SetStyle(tc.style)
@@ -381,7 +385,31 @@ T.register("notes: style persistence, apply, reset, and atomic validation", func
 		assert_eq(e.ns.db.notes.editorBackground[4], 0.6)
 	end
 
-	-- GUI controls and Reset style
+	-- Outline checkbox: live apply, Apply synchronization, and Reset
+	local outlineCb = f.controls.notesOutline
+	assert_true(outlineCb:GetChecked(), "outline checkbox reflects true from custom style")
+	outlineCb:SetChecked(false)
+	click(outlineCb)
+	assert_false(e.ns.db.notes.outline, "unchecking outline applies live to db")
+	local _, _, offWinFlags = win.edit:GetFont()
+	local _, _, offTabFlags = f.notesEditor:GetFont()
+	assert_eq(offWinFlags, "", "floating editor drops outline live")
+	assert_eq(offTabFlags, "", "tab editor drops outline live")
+
+	outlineCb:SetChecked(true)
+	click(outlineCb)
+	assert_true(e.ns.db.notes.outline, "checking outline applies live to db")
+	local _, _, onWinFlags = win.edit:GetFont()
+	local _, _, onTabFlags = f.notesEditor:GetFont()
+	assert_eq(onWinFlags, "OUTLINE", "floating editor gains outline live")
+	assert_eq(onTabFlags, "OUTLINE", "tab editor gains outline live")
+
+	-- Apply style preserves the checked outline
+	click(f.controls.notesApply)
+	assert_true(e.ns.db.notes.outline, "Apply preserves outline state")
+	assert_true(outlineCb:GetChecked(), "outline checkbox stays checked after Apply")
+
+	-- GUI controls and Reset style restores defaults
 	click(f.controls.notesReset)
 	assert_eq(e.ns.db.notes.width, defaults.width)
 	assert_eq(e.ns.db.notes.fontSize, defaults.fontSize)
@@ -389,7 +417,11 @@ T.register("notes: style persistence, apply, reset, and atomic validation", func
 	assert_eq(e.ns.db.notes.titleColor[1], defaults.titleColor[1])
 	assert_eq(e.ns.db.notes.borderColor[1], defaults.borderColor[1])
 	assert_eq(e.ns.db.notes.editorBackground[4], defaults.editorBackground[4])
-	assert_false(f.controls.notesOutline:GetChecked())
+	assert_false(outlineCb:GetChecked(), "Reset restores unchecked outline box")
+	local _, _, resetWinFlags = win.edit:GetFont()
+	local _, _, resetTabFlags = f.notesEditor:GetFont()
+	assert_eq(resetWinFlags, "", "floating editor drops outline after Reset")
+	assert_eq(resetTabFlags, "", "tab editor drops outline after Reset")
 end)
 
 T.register("notes: visibility open and closed states survive simulated reload", function()
@@ -433,10 +465,19 @@ T.register("notes: visibility open and closed states survive simulated reload", 
 	assert_true(e.ns.notes.IsCollapsed(), "collapsed state still preserved")
 	assert_eq(e.ns.notes.Text(), "persisted reminder across reload", "text still preserved")
 
-	-- 6. Direct frame Show also synchronizes shown to true
+	-- 6. Native OnShow script synchronizes shown to true
 	win:Hide()
 	assert_false(e.ns.db.notes.shown)
 	win:Show()
+	local onShow = win:GetScript("OnShow")
+	assert_not_nil(onShow, "floating frame registers native OnShow script")
+	onShow(win)
+	assert_true(e.ns.db.notes.shown, "native OnShow synchronizes shown to true")
+
+	-- 7. notes.Open also synchronizes shown to true and opens frame
+	win:Hide()
+	assert_false(e.ns.db.notes.shown)
+	e.ns.notes.Open()
 	assert_true(win:IsShown())
-	assert_true(e.ns.db.notes.shown, "direct frame Show synchronizes shown to true")
+	assert_true(e.ns.db.notes.shown, "notes.Open restores shown state")
 end)

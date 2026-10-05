@@ -706,8 +706,12 @@ local function ensureWindow()
 		label(notesPage, title, x + 26, y - 5, width)
 		c:SetScript("OnClick", function(self)
 			local v = self:GetChecked() and true or false
-			if ns.db and ns.db.notes then ns.db.notes.outline = v end
-			ns.notes.ApplyStyle()
+			if ns.notes and ns.notes.SetOutline then
+				ns.notes.SetOutline(v)
+			else
+				if ns.db and ns.db.notes then ns.db.notes.outline = v end
+				if ns.notes and ns.notes.ApplyStyle then ns.notes.ApplyStyle() end
+			end
 		end)
 		UI.Checkbox(c)
 		f.controls[key] = c

@@ -71,8 +71,15 @@ local function validRGB(t, name)
 	if type(t) ~= "table" then return nil, (name or "Text") .. " RGB must be 0-1 each." end
 	local out = {}
 	for i = 1, 3 do
-		local v = ns.toNumber(t[i])
-		if not (ns.isFinite(v) and v <= 1) then return nil, (name or "Text") .. " RGB must be 0-1 each." end
+		local raw = t[i]
+		if raw == nil then return nil, (name or "Text") .. " RGB must be 0-1 each." end
+		local v = tonumber(raw)
+		if v == nil or (type(raw) ~= "number" and type(raw) ~= "string") or ns.isSecret(raw) then
+			return nil, (name or "Text") .. " RGB must be 0-1 each."
+		end
+		if v ~= v or v == math.huge or v == -math.huge or v < 0 or v > 1 then
+			return nil, (name or "Text") .. " RGB must be 0-1 each."
+		end
 		out[i] = v
 	end
 	return out
@@ -82,12 +89,20 @@ local function validRGBA(t, name)
 	if type(t) ~= "table" then return nil, (name or "Background") .. " RGBA must be 0-1 each." end
 	local out = {}
 	for i = 1, 4 do
-		local v = ns.toNumber(t[i])
-		if not (ns.isFinite(v) and v <= 1) then return nil, (name or "Background") .. " RGBA must be 0-1 each." end
+		local raw = t[i]
+		if raw == nil then return nil, (name or "Background") .. " RGBA must be 0-1 each." end
+		local v = tonumber(raw)
+		if v == nil or (type(raw) ~= "number" and type(raw) ~= "string") or ns.isSecret(raw) then
+			return nil, (name or "Background") .. " RGBA must be 0-1 each."
+		end
+		if v ~= v or v == math.huge or v == -math.huge or v < 0 or v > 1 then
+			return nil, (name or "Background") .. " RGBA must be 0-1 each."
+		end
 		out[i] = v
 	end
 	return out
 end
+
 
 local function data()
 	if not ns.db then return nil end
@@ -541,6 +556,14 @@ function notes.SetCollapsed(value)
 	notes.ApplyCollapsed()
 end
 
+function notes.SetOutline(value)
+	local d = data()
+	if not d then return end
+	d.outline = value and true or false
+	notes.ApplyStyle()
+end
+
+
 function notes.ApplyCollapsed()
 	local f = notes.window
 	if not f then return end
@@ -596,14 +619,6 @@ function notes.EnsureWindow()
 		safe(self, "StopMovingOrSizing")
 		notes.SavePosition()
 	end)
-	local origShow = f.Show
-	f.Show = function(self, ...)
-		local d = data()
-		if d then d.shown = true end
-		if origShow then origShow(self, ...) end
-		local onShow = self._scripts and self._scripts["OnShow"]
-		if onShow then pcall(onShow, self) end
-	end
 	f:SetScript("OnShow", function()
 		local d = data()
 		if d then d.shown = true end
