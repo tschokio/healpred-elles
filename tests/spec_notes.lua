@@ -373,6 +373,10 @@ T.register("notes: style persistence, apply, reset, and atomic validation", func
 		{ field = "textColor NaN", style = { width = 450, height = 320, fontSize = 18, textColor = { 0, 0/0, 0 }, background = { 0, 0, 0, 1 } } },
 		{ field = "textColor inf", style = { width = 450, height = 320, fontSize = 18, textColor = { 0, 1/0, 0 }, background = { 0, 0, 0, 1 } } },
 		{ field = "textColor non-table", style = { width = 450, height = 320, fontSize = 18, textColor = "invalid", background = { 0, 0, 0, 1 } } },
+		{ field = "textColor secret component (RGB)", style = { width = 450, height = 320, fontSize = 18, textColor = { 1, Mocks.MakeSecret(), 0 }, background = { 0, 0, 0, 1 } } },
+		{ field = "borderColor secret component (RGB)", style = { width = 450, height = 320, fontSize = 18, textColor = { 1, 1, 1 }, background = { 0, 0, 0, 1 }, borderColor = { Mocks.MakeSecret(), 0.5, 0.5 } } },
+		{ field = "background secret component (RGBA)", style = { width = 450, height = 320, fontSize = 18, textColor = { 1, 1, 1 }, background = { 0, 0, 0, Mocks.MakeSecret() } } },
+		{ field = "editorBackground secret component (RGBA)", style = { width = 450, height = 320, fontSize = 18, textColor = { 1, 1, 1 }, background = { 0, 0, 0, 1 }, editorBackground = { 0.1, Mocks.MakeSecret(), 0.3, 0.9 } } },
 	}
 	for _, tc in ipairs(badStyles) do
 		local okBad, msg = e.ns.notes.SetStyle(tc.style)
@@ -480,4 +484,66 @@ T.register("notes: visibility open and closed states survive simulated reload", 
 	e.ns.notes.Open()
 	assert_true(win:IsShown())
 	assert_true(e.ns.db.notes.shown, "notes.Open restores shown state")
+end)
+
+T.register("notes: secret color values in RGB and RGBA are refused and preserve saved style", function()
+	local e = Mocks.NewEnv()
+	local initial = e.ns.notes.Style()
+
+	-- Secret in RGB component (textColor, borderColor, titleColor)
+	local badRGB = {
+		width = 400, height = 300, fontSize = 16,
+		textColor = { 1, Mocks.MakeSecret(), 0 },
+		background = { 0, 0, 0, 1 },
+	}
+	local ok, msg = e.ns.notes.SetStyle(badRGB)
+	assert_false(ok, "secret RGB component must fail validation")
+	assert_eq(msg, "Text RGB must be 0-1 each.")
+	assert_eq(e.ns.db.notes.width, e.ns.DEFAULTS.notes.width, "saved style unchanged")
+
+	local badBorder = {
+		width = 400, height = 300, fontSize = 16,
+		textColor = { 1, 1, 1 },
+		background = { 0, 0, 0, 1 },
+		borderColor = { 0.2, 0.2, Mocks.MakeSecret() },
+	}
+	ok, msg = e.ns.notes.SetStyle(badBorder)
+	assert_false(ok, "secret border RGB component must fail validation")
+	assert_eq(msg, "Border RGB must be 0-1 each.")
+
+	-- Secret in RGBA component (background, editorBackground)
+	local badRGBA = {
+		width = 400, height = 300, fontSize = 16,
+		textColor = { 1, 1, 1 },
+		background = { 0, 0, 0, Mocks.MakeSecret() },
+	}
+	ok, msg = e.ns.notes.SetStyle(badRGBA)
+	assert_false(ok, "secret background RGBA component must fail validation")
+	assert_eq(msg, "Background RGBA must be 0-1 each.")
+
+	local badEditBg = {
+		width = 400, height = 300, fontSize = 16,
+		textColor = { 1, 1, 1 },
+		background = { 0, 0, 0, 1 },
+		editorBackground = { Mocks.MakeSecret(), 0.1, 0.2, 0.8 },
+	}
+	ok, msg = e.ns.notes.SetStyle(badEditBg)
+	assert_false(ok, "secret editorBackground RGBA component must fail validation")
+	assert_eq(msg, "Editor background RGBA must be 0-1 each.")
+
+	-- Secret style table and secret color tables themselves
+	assert_false(e.ns.notes.SetStyle(Mocks.MakeSecret()), "secret style table fails")
+	assert_false(e.ns.notes.SetStyle({
+		width = 400, height = 300, fontSize = 16,
+		textColor = Mocks.MakeSecret(),
+		background = { 0, 0, 0, 1 },
+	}), "secret textColor table fails")
+
+	-- Saved style was completely untouched throughout
+	local current = e.ns.notes.Style()
+	assert_eq(current.width, initial.width)
+	assert_eq(current.textColor[1], initial.textColor[1])
+	assert_eq(current.background[4], initial.background[4])
+	assert_eq(current.borderColor[1], initial.borderColor[1])
+	assert_eq(current.editorBackground[4], initial.editorBackground[4])
 end)

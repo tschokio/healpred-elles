@@ -61,24 +61,28 @@ local function clamp(n, lo, hi)
 end
 
 local function component(t, index, fallback)
-	if type(t) ~= "table" then return fallback end
-	local v = ns.toNumber(t[index])
-	if v == nil or v < 0 or v > 1 then return fallback end
+	if ns.isSecret(t) or type(t) ~= "table" then return fallback end
+	local raw = t[index]
+	if ns.isSecret(raw) then return fallback end
+	if raw == nil then return fallback end
+	if type(raw) ~= "number" and type(raw) ~= "string" then return fallback end
+	local v = tonumber(raw)
+	if v == nil or v < 0 or v > 1 or v ~= v or v == math.huge or v == -math.huge then return fallback end
 	return v
 end
 
 local function validRGB(t, name)
-	if type(t) ~= "table" then return nil, (name or "Text") .. " RGB must be 0-1 each." end
+	local err = (name or "Text") .. " RGB must be 0-1 each."
+	if ns.isSecret(t) or type(t) ~= "table" then return nil, err end
 	local out = {}
 	for i = 1, 3 do
 		local raw = t[i]
-		if raw == nil then return nil, (name or "Text") .. " RGB must be 0-1 each." end
+		if ns.isSecret(raw) then return nil, err end
+		if raw == nil then return nil, err end
+		if type(raw) ~= "number" and type(raw) ~= "string" then return nil, err end
 		local v = tonumber(raw)
-		if v == nil or (type(raw) ~= "number" and type(raw) ~= "string") or ns.isSecret(raw) then
-			return nil, (name or "Text") .. " RGB must be 0-1 each."
-		end
-		if v ~= v or v == math.huge or v == -math.huge or v < 0 or v > 1 then
-			return nil, (name or "Text") .. " RGB must be 0-1 each."
+		if v == nil or v ~= v or v == math.huge or v == -math.huge or v < 0 or v > 1 then
+			return nil, err
 		end
 		out[i] = v
 	end
@@ -86,17 +90,17 @@ local function validRGB(t, name)
 end
 
 local function validRGBA(t, name)
-	if type(t) ~= "table" then return nil, (name or "Background") .. " RGBA must be 0-1 each." end
+	local err = (name or "Background") .. " RGBA must be 0-1 each."
+	if ns.isSecret(t) or type(t) ~= "table" then return nil, err end
 	local out = {}
 	for i = 1, 4 do
 		local raw = t[i]
-		if raw == nil then return nil, (name or "Background") .. " RGBA must be 0-1 each." end
+		if ns.isSecret(raw) then return nil, err end
+		if raw == nil then return nil, err end
+		if type(raw) ~= "number" and type(raw) ~= "string" then return nil, err end
 		local v = tonumber(raw)
-		if v == nil or (type(raw) ~= "number" and type(raw) ~= "string") or ns.isSecret(raw) then
-			return nil, (name or "Background") .. " RGBA must be 0-1 each."
-		end
-		if v ~= v or v == math.huge or v == -math.huge or v < 0 or v > 1 then
-			return nil, (name or "Background") .. " RGBA must be 0-1 each."
+		if v == nil or v ~= v or v == math.huge or v == -math.huge or v < 0 or v > 1 then
+			return nil, err
 		end
 		out[i] = v
 	end
@@ -443,7 +447,7 @@ function notes.Style()
 end
 
 function notes.SetStyle(style)
-	if type(style) ~= "table" then return false, "No style values supplied." end
+	if ns.isSecret(style) or type(style) ~= "table" then return false, "No style values supplied." end
 	local width, height, fontSize = ns.toNumber(style.width), ns.toNumber(style.height), ns.toNumber(style.fontSize)
 	if not (ns.isFinite(width) and width >= LIMITS.width[1] and width <= LIMITS.width[2]) then
 		return false, "Width must be 180-900."
