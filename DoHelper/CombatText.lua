@@ -210,8 +210,7 @@ function combat.SetStyle(style)
 	if motion ~= nil then d.motion = motion end
 	if enterText then d.enterText = enterText end
 	if leaveText then d.leaveText = leaveText end
-	if style.enabled ~= nil then d.enabled = style.enabled and true or false end
-	combat.Refresh()
+	combat.ApplyStyle()
 	return true
 end
 

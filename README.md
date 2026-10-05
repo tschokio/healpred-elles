@@ -131,7 +131,8 @@ width. Manage spells and Diagnostics remain accessible in the sidebar.
 Settings and dialogs fit smaller screens when opened. Escape and Close release
 input focus. The UI adds no animations or idle timers and never styles vendor
 frames. Your existing settings, custom notes/combat colors and the compact
-`Do ^` notes toggle are preserved. No reinstall or settings reset is required.
+`Do ^` notes toggle are preserved. BAM/crit sounds and the Sounds tab were
+removed, keeping old saved settings inert. No reinstall or settings reset is required.
 
 ### Notes with topics (v0.7.0, topics in v0.10.0)
 
@@ -658,7 +659,7 @@ those engines the addon does **not even attempt** registration by default, and i
 also never registers when the API is missing. `/euihot observe on` requests a
 guarded registration for a user who knows a modified client exposes the event;
 `/euihot observe off` unregisters it. The override is session-only and is not
-written to SavedVariables; reloading never registers anything.
+written to SavedVariables.
 
 `/euihot status` reports honest capability rather than implying success:
 `function=` (is the API present), `requested=` (did we ask), `registration=`
