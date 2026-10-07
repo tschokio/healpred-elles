@@ -23,5 +23,6 @@ Notes.lua
 CombatText.lua
 DebugWindow.lua
 WeaponTraining.lua
+Camping.lua
 Graphics.lua
 Options.lua

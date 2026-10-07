@@ -110,6 +110,21 @@ The existing `ellesmereUI/` reference folder is not changed by this feature.
 
 The installed folder is the deliverable; there is no separate zip/binary.
 
+### Camping item tooltip reference
+
+DoHelper adds a small English **camping reference** section to item tooltips for
+exactly the researched WoW Forever camping item IDs. Scaled benefits use your
+freshly-read character level when it is safely available; otherwise the section
+labels the level-60 reference rather than guessing. It describes reference
+benefits, not an active buff, and does not replace native item text. The
+annotation hooks are independent of healing prediction. Install/update the
+`DoHelper/` folder and `/reload`; no setting or command is required. Utility
+features are labelled separately from buffs, and shared camp requirements are
+not presented as effects of every item. See
+[`CAMPING_REFERENCE.md`](CAMPING_REFERENCE.md) for the full catalog, formulas,
+source links and known limitations. Mock-tested only; live WoW tooltips have not
+been verified.
+
 ### Updating (to v0.12.0)
 
 Since v0.10.0 the AddOn folder is `DoHelper/` (and the TOC is
