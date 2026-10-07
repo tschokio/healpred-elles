@@ -106,6 +106,50 @@ local function linesFor(id, level)
 	return out
 end
 
+-- Placed-object tooltips intentionally stay to two lines: the benefit at the
+-- viewer's level, then the buff it replaces (if any). The longer item-reference
+-- tooltip remains available on the item itself.
+local function compactLinesFor(id, level)
+	id = safeNumber(id)
+	local item = id and ITEMS[id]
+	if not item then return nil end
+	level = safeNumber(level)
+	if not level or level % 1 ~= 0 or level < 1 or level > 60 then level = nil end
+	local benefit
+	if item.kind == "kit" then
+		benefit = "Up to " .. item.slots .. " additional camp features"
+	elseif item.perk == "lute" then
+		local lo = level and (level < 10 and 1 or math.floor(level / 10) * 10) or 60
+		local armor = ({[1]=28,[10]=71,[20]=114,[30]=163,[40]=211,[50]=260,[60]=308})[lo]
+		local stats = ({[1]=0,[10]=2,[20]=4,[30]=7,[40]=9,[50]=12,[60]=13})[lo]
+		benefit = string.format("%s+%d Armor%s", level and ("At level " .. level .. ": ") or "Level-60 reference: ", armor, stats > 0 and (", +" .. stats .. " all stats") or "")
+		if lo >= 30 then benefit = benefit .. ", all resistances (amount unknown)" end
+	elseif item.perk == "critical" then
+		benefit = "+2% critical strike chance (spells and attacks)"
+	elseif item.perk == "fishing" then
+		benefit = "+8% stats"
+	elseif item.perk == "rested" then
+		benefit = "Rested XP up to 5% of a level"
+	elseif item.perk then
+		local value
+		if level then
+			for _, bracket in ipairs(item.perk.brackets) do
+				if level >= bracket[1] and level <= bracket[2] then value = bracket[3]; break end
+			end
+		end
+		if value then
+			benefit = string.format("At level %d: +%d %s", level, value, item.unit or "melee Attack Power")
+		else
+			local last = item.perk.brackets[#item.perk.brackets]
+			benefit = string.format("Level-60 reference: +%d %s", last[3], item.unit or "melee Attack Power")
+		end
+		if id == 279972 or id == 279943 or id == 279959 then benefit = benefit .. " (Horde only)" end
+	else
+		benefit = item.utility and item.utility:gsub("%.$", "") or "No direct buff listed"
+	end
+	return {benefit, "Exclusive with: " .. (item.exclusive or "none listed")}
+end
+
 local allowedNames = {GameTooltip=true, ItemRefTooltip=true, ShoppingTooltip1=true, ShoppingTooltip2=true, ShoppingTooltip3=true}
 local states = setmetatable({}, {__mode="k"})
 local hooked = setmetatable({}, {__mode="k"})
@@ -255,13 +299,13 @@ local function decorateWorld(tip,data,typedObject,refresh)
 		if not objectType or safeNumber(field(data,"type"))~=objectType then return end
 	end
 	local id=worldObjectId(data,tip)
-	local lines=id and linesFor(id,currentLevel())
+	local lines=id and compactLinesFor(id,currentLevel())
 	if not lines then states[tip]=nil; return end
 	local state=states[tip]
 	if state and state.world and state.id==id and state.done then return end
 	local add=field(tip,"AddLine")
 	if type(add)~="function" then return end
-	local ok=pcall(function() for _,line in ipairs(lines) do add(tip,line,1,1,1,true) end end)
+	local ok=pcall(function() for _,line in ipairs(lines) do add(tip,line,1,1,1,false) end end)
 	if ok then
 		states[tip]={id=id,world=true,done=true}
 		-- Legacy SetWorldCursor has already called Show before our posthook.
@@ -347,4 +391,4 @@ if type(CreateFrame)=="function" then
 	end
 end
 
-ns.Camping = { ITEMS = ITEMS, OBJECT_IDS=OBJECT_IDS, LinesFor = linesFor, Decorate = decorate, Install = install }
+ns.Camping = { ITEMS = ITEMS, OBJECT_IDS=OBJECT_IDS, LinesFor = linesFor, CompactLinesFor = compactLinesFor, Decorate = decorate, Install = install }

@@ -2,7 +2,7 @@
 ## Title: DoHelper
 ## Notes: Healing predictions, queued next-swing borders, multi-topic notes, combat text, camping tooltips and a weapon training reference. Addon folder is DoHelper; the SavedVariables name is kept for data compatibility.
 ## Author: ai-job
-## Version: 0.12.1
+## Version: 0.12.2
 ## IconTexture: Interface\Icons\INV_Misc_Note_01
 ## SavedVariables: EllesmereUI_HoTPredictionDB
 ## Dependencies: EllesmereUIUnitFrames

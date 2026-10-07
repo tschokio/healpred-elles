@@ -177,16 +177,19 @@ T.register("camping world objects use current Object tooltip identity and exact 
 		assert_not_nil(posts[4]); assert_eq(m.OBJECT_IDS[528996],279978)
 		local function fire(data) posts[4](tip,data) end
 		fire({id=528996,lines={}})
-		local n=#tip.lines; assert_true(n>0,"verified Camp Tent world object should add real tooltip lines")
+		local n=#tip.lines; assert_eq(n,2,"placed-object tooltip should contain only two rows")
 		assert_true(contains(table.concat(tip.lines," "),"Rested XP up to 5%"))
+		assert_true(contains(tip.lines[2],"Exclusive with: none listed"))
 		fire({id=528996,lines={}}); assert_eq(#tip.lines,n,"modern postcall duplicate")
 		cleared(tip); tip.lines={}; setLevel(14)
 		fire({id=0,lines={{leftText="|cffffcc00Lodestone|r"}}})
-		assert_true(contains(table.concat(tip.lines," "),"At your level (14): +20"),"name fallback must not interpret Object id as itemID")
+		assert_eq(#tip.lines,2)
+		assert_true(contains(tip.lines[1],"At level 14: +20 melee Attack Power"),"name fallback must not interpret Object id as itemID")
+		assert_true(contains(tip.lines[2],"Exclusive with: Blessing of Might"))
 		for id,item in pairs(m.ITEMS) do
 			if item.kind~="kit" then
 				cleared(tip); tip.lines={}; fire({id=0,lines={{leftText=item.name}}})
-				assert_true(#tip.lines>0,"exact world-name fallback for "..item.name.." ("..id..")")
+				assert_eq(#tip.lines,2,"exact world-name fallback has exactly two rows for "..item.name.." ("..id..")")
 			end
 		end
 		cleared(tip); tip.lines={}; fire({id=123456,lines={{leftText="Lodestone"}}}); assert_true(#tip.lines>0,"foreign placer/no inventory does not gate world object")
@@ -275,10 +278,10 @@ T.register("camping text-only legacy world setter reflows after Show and exclude
 		if self.title then self:Show() else self.shown=false; hooks.OnHide(self) end
 	end
 	withCamping(function(_,setLevel)
-		tip:SetWorldCursor(); assert_true(#tip.lines>0); assert_eq(tip.shows,2,"posthook reflows already-shown native tooltip")
+		tip:SetWorldCursor(); assert_eq(#tip.lines,2); assert_eq(tip.shows,2,"posthook reflows already-shown native tooltip")
 		assert_true(contains(table.concat(tip.lines," "),"Rested XP up to 5%"))
 		tip.title="Lodestone"; setLevel(22); tip:SetWorldCursor()
-		assert_true(contains(table.concat(tip.lines," "),"(22): +32")); assert_eq(tip.shows,4)
+		assert_true(contains(tip.lines[1],"At level 22: +32 melee Attack Power")); assert_true(contains(tip.lines[2],"Exclusive with: Blessing of Might")); assert_eq(tip.shows,4)
 		tip.title="Camp Tent"; tip.unitName="Camp Tent"; tip.unit="mouseover"; tip:SetWorldCursor(); assert_eq(#tip.lines,0)
 		tip.unitName=nil; tip.unit=nil; tip.itemName="Camp Tent"; tip.itemLink="item:279978"; tip:SetWorldCursor(); assert_eq(#tip.lines,0)
 		tip.itemName=nil; tip.itemLink=nil; tip.title={secret=true}; tip:SetWorldCursor(); assert_eq(#tip.lines,0)
@@ -290,5 +293,26 @@ T.register("camping text-only legacy world setter reflows after Show and exclude
 			local original=obj[method]
 			obj[method]=function(self,...) original(self,...); cb(self,...) end
 		end
+	end)
+end)
+
+T.register("camping compact object reference contains only benefit and exclusive rows",function()
+	withCamping(function(m)
+		local function rows(id,level)
+			local result=m.CompactLinesFor(id,level)
+			assert_eq(#result,2,"expected exactly two object tooltip rows")
+			return result
+		end
+		local tent=rows(279978,14)
+		assert_eq(tent[1],"Rested XP up to 5% of a level")
+		assert_eq(tent[2],"Exclusive with: none listed")
+		local lodestone=rows(279960,14)
+		assert_eq(lodestone[1],"At level 14: +20 melee Attack Power")
+		assert_eq(lodestone[2],"Exclusive with: Blessing of Might")
+		assert_eq(rows(279960,60)[1],"At level 60: +90 melee Attack Power")
+		assert_eq(rows(279956,14)[1],"At level 14: +10 Mana/5 sec")
+		assert_eq(rows(279979,14)[1],"+2% critical strike chance (spells and attacks)")
+		assert_true(contains(rows(279976,14)[1],"+71 Armor, +2 all stats"))
+		assert_eq(rows(279950,14)[1],"Allows purchasing reagents")
 	end)
 end)
