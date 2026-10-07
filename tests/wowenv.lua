@@ -240,7 +240,13 @@ function FrameMT:SetMinMaxValues(a, b)
 	self._min, self._max = a, b
 end
 function FrameMT:GetMinMaxValues() return self._min, self._max end
-function FrameMT:SetValue(v) self._value = v end
+function FrameMT:SetValue(v)
+	self._value = v
+	if self._type == "Slider" and self._scripts.OnValueChanged then self._scripts.OnValueChanged(self, v) end
+end
+function FrameMT:SetValueStep(v) self._valueStep = v end
+function FrameMT:SetObeyStepOnDrag(v) self._obeyStep = v end
+function FrameMT:SetThumbTexture(v) self._thumbTexture = v end
 function FrameMT:GetValue() return self._value end
 function FrameMT:SetStatusBarColor(r, g, b) self._color = { r, g, b } end
 function FrameMT:GetStatusBarColor() return self._color[1], self._color[2], self._color[3] end

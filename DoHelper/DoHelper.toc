@@ -23,4 +23,5 @@ Notes.lua
 CombatText.lua
 DebugWindow.lua
 WeaponTraining.lua
+Graphics.lua
 Options.lua

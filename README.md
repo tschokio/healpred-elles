@@ -35,6 +35,66 @@ behaviour.
 
 ---
 
+## Graphics and scenery controls
+
+Open `/dohelper options` (or click the minimap button), then choose **Graphics**.
+Six sliders plus numeric fields, a sharpening checkbox and a reflection-mode
+button control the eight CVars below. Changes are **drafts** until you click
+**Apply graphics**. **Your scenery preset** stages the eight values supplied
+below; you can lower or raise them before applying. Nothing changes on login,
+while moving a slider, or when opening this tab. Apply is blocked in combat.
+
+| CVar | Control range | Scenery preset | Effect / reverse direction |
+| --- | --- | --- | --- |
+| `groundEffectDensity` | 16–256 | 256 | Higher: denser grass, flowers and rocks; lower: less clutter. |
+| `groundEffectFade` | 0–600, practical range | 370 | Higher: ground clutter fades later; lower: earlier. Coordinate with clutter distance. |
+| `groundEffectDist` | 32–600 | 500 | Higher: ground clutter renders farther away; lower: nearer. |
+| `lodObjectFadeScale` | 50–300, community range | 200 | Higher: distant objects remain visible longer; lower: fade sooner. |
+| `lodObjectCullSize` | 1–100, community range | 8 | **Lower** retains smaller objects; higher culls more objects. |
+| `terrainLodDist` | 128–5248 | 1000 | Higher: detailed terrain extends farther; lower: earlier detail reduction. |
+| `ResampleAlwaysSharpen` | 0 / 1 | 1 | 1 enables always-on resample sharpening; 0 reverses it. |
+| `reflectionMode` | 0–3 | 3 | 0 screen-space; 1 sky; 2 sky + terrain; 3 also large world objects/buildings. 0 is not necessarily "off". |
+
+These are bounded UI ranges, **not guaranteed limits for every Forever/retail
+build**. Defaults and actual behavior depend on the client and other graphics
+options. An existing value outside the range is shown exactly and left alone
+unless edited. Unsupported/unreadable CVars show **N/A**, are disabled, and are
+omitted from exports. No arbitrary CVar names or scripts can be executed here.
+Higher detail can reduce FPS; sharper images/reflections depend on resampling,
+water detail and the client. Some effects may need a zone change or game restart.
+
+**Read current** discards the draft and rereads the game. **Stage game defaults**
+uses the client's `GetCVarDefault` values where available, keeping the draft for
+unavailable defaults; click Apply afterward. **Restore original** restores values
+captured immediately before this tab first changed each CVar in the current
+login. That backup is session-only and disappears on `/reload` or logout.
+Export before experimenting if you want a lasting backup. The game manages CVar
+persistence; DoHelper does not reapply or force them after login. Blizzard's
+graphics presets, raid/dungeon settings or other addons may overwrite them.
+
+Application validates the entire draft first and checks CVar readback. A refusal,
+clamp or unconfirmed write triggers a best-effort rollback. The status explicitly
+warns if rollback cannot be confirmed; always check current values in that case.
+
+### Export graphics settings
+
+Click **Export current**, then **Select all**, then **Ctrl+C**. Send the text to
+friends, who can run each `/console name value` line separately in WoW chat.
+Exports contain current readable game values, **not unapplied drafts**, and are
+also useful as a manual backup. The copy field is never executed or imported;
+editing it cannot change game settings. There is no automatic chat transmission,
+clipboard access or graphics-engine restart.
+
+Research references (ranges are historical/client-dependent):
+[ground density](https://warcraft.wiki.gg/wiki/CVar_groundEffectDensity),
+[ground distance](https://warcraft.wiki.gg/wiki/CVar_groundEffectDist),
+[terrain detail](https://warcraft.wiki.gg/wiki/CVar_terrainLodDist),
+[reflection modes](https://warcraft.wiki.gg/wiki/CVar_reflectionMode),
+[CVar inventory](https://warcraft.wiki.gg/wiki/Console_variables),
+[Blizzard forum fade-distance guidance](https://us.forums.blizzard.com/en/wow/t/console-variables/196219),
+and [community object-LOD ranges](https://www.reddit.com/r/wow/comments/902f8e/console_cvar_settings_to_push_wows_detail_a/).
+The existing `ellesmereUI/` reference folder is not changed by this feature.
+
 ## Install
 
 1. Copy the folder `DoHelper/` into your client's AddOns directory, e.g.

@@ -15,6 +15,7 @@ local NAVIGATION = {
 	{ "notesTab", "notes", "Notes", "Keep your topics separate and style your floating notepad." },
 	{ "combatTab", "combat", "Combat text", "Customize the indicator shown when entering or leaving combat." },
 	{ "weaponTab", "weapons", "Weapon training", "Find proficiencies, starting skills and weapon trainers." },
+	{ "graphicsTab", "graphics", "Graphics", "Tune world scenery, sharpening and reflections, then share your console settings." },
 }
 local HELP = {
 	notes = { "YOUR NOTEPAD", "A place for reminders", "Use the arrows to switch topics. New topic creates a separate note; edit its title and press Enter to rename it.\n\nYour edits save as you type. The floating window mirrors the active topic.\n\nClick the arrow beside Do to collapse it to a tiny Do ^ toggle. Drag its header to move it.", "Editing locks during combat. Switching topics remains available." },
@@ -1011,6 +1012,7 @@ local function ensureWindow()
 	if ns.weaponTraining and ns.weaponTraining.BuildOptionsUI then
 		ns.weaponTraining.BuildOptionsUI(f)
 	end
+	if ns.graphics then ns.graphics.BuildOptionsUI(f) end
 
 	function f.SelectTab(tab)
 		local valid = false
@@ -1024,6 +1026,7 @@ local function ensureWindow()
 		notesPage:SetShown(tab == "notes")
 		combatPage:SetShown(tab == "combat")
 		if f.weaponPage then f.weaponPage:SetShown(tab == "weapons") end
+		if f.graphicsPage then f.graphicsPage:SetShown(tab == "graphics") end
 		f.preview:SetShown(tab == "settings" or tab == "spells")
 		local help = HELP[tab]
 		f.helpPanel:SetShown(help ~= nil)
@@ -1040,6 +1043,8 @@ local function ensureWindow()
 			f.RefreshCombat()
 		elseif tab == "weapons" then
 			if f.weaponPage and f.weaponPage.Refresh then f.weaponPage.Refresh() end
+		elseif tab == "graphics" then
+			if f.graphicsPage then f.graphicsPage.Refresh() end
 		end
 		for _, item in ipairs(NAVIGATION) do
 			UI.Selected(f.controls[item[1]], tab == item[2])
