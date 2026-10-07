@@ -6,7 +6,7 @@
 local addonName, ns = ...
 
 ns.name = addonName
-ns.version = "0.12.0"
+ns.version = "0.12.1"
 -- Bumped when saved settings need a one-time migration. The marker lives in
 -- SavedVariables, so a migration runs exactly once.
 ns.SCHEMA_VERSION = 2

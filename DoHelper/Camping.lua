@@ -1,4 +1,4 @@
--- WoW Forever camping item reference tooltips. Exact item IDs only.
+-- WoW Forever camping references on item and placed-world-object tooltips.
 local _, ns = ...
 
 local function safeNumber(value)
@@ -110,6 +110,15 @@ local allowedNames = {GameTooltip=true, ItemRefTooltip=true, ShoppingTooltip1=tr
 local states = setmetatable({}, {__mode="k"})
 local hooked = setmetatable({}, {__mode="k"})
 local processorRegistered = false
+local objectProcessorRegistered = false
+local worldHooked = setmetatable({}, {__mode="k"})
+local worldCue = setmetatable({}, {__mode="k"})
+local worldNames = {}
+for id,item in pairs(ITEMS) do
+	if item.kind ~= "kit" then worldNames[item.name:lower()] = id end
+end
+-- Verified Camp Tent summon object (spell 1307230).
+local OBJECT_IDS = {[528996]=279978}
 local function isAllowed(tip)
 	if type(tip) ~= "table" and type(tip) ~= "userdata" then return false end
 	if type(ns)=="table" and type(ns.isSecret)=="function" then
@@ -135,6 +144,38 @@ local function field(obj,key)
 			if not secretOk or secret then return nil end
 		end
 		return v
+end
+local function plainName(value)
+	if type(ns)=="table" and type(ns.isSecret)=="function" then
+		local ok,secret=pcall(ns.isSecret,value); if not ok or secret then return nil end
+	end
+	if type(value)~="string" then return nil end
+	value=value:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):match("^%s*(.-)%s*$")
+	if value=="" then return nil end
+	return value
+end
+local function worldObjectId(data,tip)
+	if ns.isSecret(data) then return nil end
+	local id=safeNumber(field(data,"id"))
+	local mapped=id and OBJECT_IDS[id]
+	if mapped then return mapped end
+	local lines=field(data,"lines")
+	if type(lines)=="table" then
+		-- Only the native title is identity, never body text or an owner's name.
+		local name=plainName(field(field(lines,1),"leftText"))
+		return name and worldNames[name:lower()] or nil
+	end
+	-- Modern data is authoritative even when its title is inaccessible.
+	if data ~= nil then return nil end
+	if tip then
+		local text=_G.GameTooltipTextLeft1
+		local getText=field(text,"GetText")
+		if type(getText)=="function" then
+			local ok,name=pcall(getText,text)
+			if ok then name=plainName(name); if name then return worldNames[name:lower()] end end
+		end
+	end
+	return nil
 end
 local function readItemId(tip, data)
 	-- Modern TooltipData uses id, not itemID. A supplied identity is authoritative.
@@ -174,24 +215,125 @@ local function decorate(tip,data)
 	if ok then states[tip]={id=id,done=true} end
 end
 
+local function worldInfo(tip,primary)
+	local getInfo=field(tip,primary and "GetPrimaryTooltipInfo" or "GetProcessingTooltipInfo")
+	if type(getInfo)~="function" then getInfo=field(tip,"GetPrimaryTooltipInfo") end
+	if type(getInfo)~="function" and primary then getInfo=field(tip,"GetProcessingTooltipInfo") end
+	if type(getInfo)=="function" then
+		local ok,info=pcall(getInfo,tip)
+		return ok and info or nil, true
+	end
+	return nil, false
+end
+local function worldDataIsCurrent(tip)
+	local info,modern=worldInfo(tip)
+	if modern then return field(info,"getterName")=="GetWorldCursor" end
+	-- Legacy setters can also display units. Never use their title as an object.
+	for _,method in ipairs({"GetItem","GetSpell","GetUnit"}) do
+		local fn=field(tip,method)
+		if type(fn)=="function" then
+			local ok,name,identity=pcall(fn,tip)
+			if not ok or ns.isSecret(name) or ns.isSecret(identity) or name~=nil or identity~=nil then return false end
+		end
+	end
+	-- Older clients may expose only the setter and rendered text. The setter
+	-- itself is the world-origin signal; if an owner is available, constrain it.
+	if not worldCue[tip] then return false end
+	local getOwner=field(tip,"GetOwner")
+	if type(getOwner)=="function" then
+		local ok,owner=pcall(getOwner,tip)
+		if not ok or ns.isSecret(owner) or (owner and owner~=_G.UIParent and owner~=_G.WorldFrame) then return false end
+	end
+	return true
+end
+local function decorateWorld(tip,data,typedObject,refresh)
+	if not isAllowed(tip) or _G.GameTooltip~=tip or not worldDataIsCurrent(tip) then return end
+	if ns.isSecret(data) then return end
+	if typedObject and data == nil then return end
+	if data ~= nil and not typedObject then
+		local objectType=Enum and Enum.TooltipDataType and safeNumber(Enum.TooltipDataType.Object)
+		if not objectType or safeNumber(field(data,"type"))~=objectType then return end
+	end
+	local id=worldObjectId(data,tip)
+	local lines=id and linesFor(id,currentLevel())
+	if not lines then states[tip]=nil; return end
+	local state=states[tip]
+	if state and state.world and state.id==id and state.done then return end
+	local add=field(tip,"AddLine")
+	if type(add)~="function" then return end
+	local ok=pcall(function() for _,line in ipairs(lines) do add(tip,line,1,1,1,true) end end)
+	if ok then
+		states[tip]={id=id,world=true,done=true}
+		-- Legacy SetWorldCursor has already called Show before our posthook.
+		-- Reflow only an existing visible tooltip, with state set before recursion.
+		if refresh then
+			local isShown=field(tip,"IsShown")
+			local shownOk,shown=false,false
+			if type(isShown)=="function" then shownOk,shown=pcall(isShown,tip) end
+			local show=field(tip,"Show")
+			if shownOk and not ns.isSecret(shown) and shown==true and type(show)=="function" then pcall(show,tip) end
+		end
+	end
+end
+local function hookWorld(tip)
+	if not isAllowed(tip) or _G.GameTooltip~=tip or worldHooked[tip] then return end
+	worldHooked[tip]=true
+	if type(tip.HookScript)=="function" then
+		pcall(tip.HookScript,tip,"OnShow",function(self)
+			if self~=_G.GameTooltip then return end
+			local info,modern=worldInfo(self,true)
+			if modern then
+				if field(info,"getterName")=="GetWorldCursor" then
+					local data=field(info,"tooltipData")
+					if data then pcall(decorateWorld,self,data) end
+				end
+			else pcall(decorateWorld,self) end
+		end)
+		pcall(tip.HookScript,tip,"OnHide",function(self) states[self]=nil; worldCue[self]=nil end)
+	end
+	if type(hooksecurefunc)=="function" and type(tip.SetWorldCursor)=="function" then
+		pcall(hooksecurefunc,tip,"SetWorldCursor",function(self)
+			if self~=_G.GameTooltip then return end
+			worldCue[self]=true
+			local api=C_TooltipInfo
+			local getter=api and field(api,"GetWorldCursor")
+			if type(getter)=="function" then
+				local ok,data=pcall(getter)
+				if ok and not ns.isSecret(data) and data then pcall(decorateWorld,self,data,false,true) else states[self]=nil; worldCue[self]=nil end
+			else
+				local _,modern=worldInfo(self)
+				if not modern then pcall(decorateWorld,self,nil,false,true) end
+			end
+		end)
+	end
+end
+
 local function hookTip(tip)
 	if not isAllowed(tip) or hooked[tip] then return end
 	if type(tip.HookScript)=="function" then
 		-- Modern clients removed OnTooltipSetItem; clearing is still needed even
 		-- when that legacy hook is refused, for same-item rebuilds.
 		pcall(tip.HookScript,tip,"OnTooltipSetItem",function(self) pcall(decorate,self) end)
-		local ok=pcall(tip.HookScript,tip,"OnTooltipCleared",function(self) states[self]=nil end)
+		local ok=pcall(tip.HookScript,tip,"OnTooltipCleared",function(self) states[self]=nil; worldCue[self]=nil end)
 		if ok then hooked[tip]=true end
 	end
 end
 local function install()
 	for name in pairs(allowedNames) do hookTip(_G[name]) end
+	hookWorld(_G.GameTooltip)
 	local processor=TooltipDataProcessor
 	if not processorRegistered and type(processor)=="table" and type(processor.AddTooltipPostCall)=="function" then
 		local itemType = Enum and Enum.TooltipDataType and Enum.TooltipDataType.Item
 		if safeNumber(itemType) then
 			local ok,result=pcall(processor.AddTooltipPostCall,itemType,function(tip,data) pcall(decorate,tip,data) end)
 			if ok and result ~= false then processorRegistered=true end
+		end
+	end
+	if not objectProcessorRegistered and type(processor)=="table" and type(processor.AddTooltipPostCall)=="function" then
+		local objectType=Enum and Enum.TooltipDataType and Enum.TooltipDataType.Object
+		if safeNumber(objectType) then
+			local ok,result=pcall(processor.AddTooltipPostCall,objectType,function(tip,data) pcall(decorateWorld,tip,data,true) end)
+			if ok and result~=false then objectProcessorRegistered=true end
 		end
 	end
 end
@@ -205,4 +347,4 @@ if type(CreateFrame)=="function" then
 	end
 end
 
-ns.Camping = { ITEMS = ITEMS, LinesFor = linesFor, Decorate = decorate, Install = install }
+ns.Camping = { ITEMS = ITEMS, OBJECT_IDS=OBJECT_IDS, LinesFor = linesFor, Decorate = decorate, Install = install }

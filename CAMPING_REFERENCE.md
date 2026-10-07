@@ -1,14 +1,29 @@
 # WoW Forever camping tooltip reference
 
-DoHelper displays a compact, additive English reference on item tooltips for
-the exact item IDs below. It does not inspect item names, claim that a benefit
-is currently active, or replace the game's native tooltip. Scaled results are
+DoHelper displays a compact, additive English reference when hovering researched
+placed camping objects in the world (including another player's Camp Tent), and
+retains the item-tooltip reference for compatibility. The verified Camp Tent
+summon object ID is mapped directly; other world objects use exact readable
+English names from this catalog, not substring guesses. It does not claim that a
+benefit is currently active or replace native tooltip text. Scaled results are
 labelled **At your level (N)** and use a fresh hover-time player-level read.
-Unknown, secret, invalid, or out-of-range levels get a clearly labelled
+World identity must be exposed by the client. Hidden/secret names, unknown
+objects, and non-English names without a verified object-ID mapping fail closed;
+item tooltips continue to use exact item IDs. No ownership, inventory, or
+profession prerequisite is imposed for a placed object. Unknown, secret,
+invalid, or out-of-range levels get a clearly labelled
 **Level-60 reference** instead. These are item baseline values, not values
 modified by talents, legacy perks, other effects, or current active buffs.
 
 ## Sources and scope
+
+* Camp Tent world identity: [placement spell 1307230](https://www.wowhead.com/forever/spell=1307230/camp-tent)
+  summons game object **528996**. Modern hooks use `Enum.TooltipDataType.Object`
+  and the `GetWorldCursor` tooltip path; a secure `SetWorldCursor` posthook
+  supports older clients with only rendered titles. Unit/player/pet tooltips
+  are deliberately excluded; reagent and repair bot NPC tooltips are not covered
+  by this object-only path. No custom tooltip frame, idle polling or network
+  requests are added.
 
 * Guide: [Camping Overview, WoW Forever](https://www.wowhead.com/forever/guide/camping-overview-unlock-rewards), updated 2026-09-22; reviewed 2026-10-07.
 * Item expression cross-check: `https://nether.wowhead.com/forever/tooltip/item/ID`
@@ -83,7 +98,8 @@ by 50%). These are intentionally **not applied** to tooltip numbers because
 character-specific Legacy ranks and modified outputs are not known. Native
 tooltip skill requirements remain untouched.
 
-Exact-ID coverage is deliberately conservative. No name matching, network
-requests, inferred faction variants, guessed bonus durations, numeric
+World name fallback is exact-name-only and bounded to known catalog names.
+Object data IDs are never treated as item IDs; only Camp Tent's verified object
+ID is mapped. No network requests, inferred faction variants, guessed bonus durations, numeric
 resistances, engineering vendor inheritance, or unverified cooking/food stat
 amounts are used.

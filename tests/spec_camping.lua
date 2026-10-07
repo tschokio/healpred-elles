@@ -1,7 +1,7 @@
 -- Focused, local-mock coverage for exact-ID camping tooltip annotations.
 local function contains(s, part) return type(s)=="string" and s:find(part,1,true)~=nil end
 local function withCamping(fn, configure)
-	local names={"Enum","TooltipDataProcessor","GameTooltip","ItemRefTooltip","ShoppingTooltip1","ShoppingTooltip2","ShoppingTooltip3","UnitLevel","CreateFrame"}
+	local names={"Enum","TooltipDataProcessor","GameTooltip","ItemRefTooltip","ShoppingTooltip1","ShoppingTooltip2","ShoppingTooltip3","UnitLevel","CreateFrame","C_TooltipInfo","GameTooltipTextLeft1","hooksecurefunc","UIParent","WorldFrame"}
 	local old={}
 	for _,k in ipairs(names) do old[k]=_G[k] end
 	local level=14
@@ -9,7 +9,7 @@ local function withCamping(fn, configure)
 	_G.CreateFrame=nil
 	_G.GameTooltip=nil; _G.ItemRefTooltip=nil; _G.ShoppingTooltip1=nil; _G.ShoppingTooltip2=nil; _G.ShoppingTooltip3=nil
 	_G.TooltipDataProcessor=nil
-	_G.Enum={TooltipDataType={Item=0}}
+	_G.Enum={TooltipDataType={Item=0,Object=4}}
 	if configure then configure() end
 	local ns={isSecret=function(v) return type(v)=="table" and v.secret==true end,toNumber=function(v) if type(v)=="table" and v.secret then return nil end; return type(v)=="number" and v or nil end}
 	assert(load(ReadFile(__HOT_ROOT.."/DoHelper/Camping.lua"),"@Camping.lua"))("DoHelper",ns)
@@ -164,5 +164,131 @@ T.register("camping hook registration failures and secret data fail safely",func
 	end,function()
 		_G.TooltipDataProcessor={AddTooltipPostCall=function() error("no modern hook") end}
 		_G.GameTooltip=tip
+	end)
+end)
+
+T.register("camping world objects use current Object tooltip identity and exact native name",function()
+	local posts={}; local cleared,shown,hidden
+	local tip={lines={},info={getterName="GetWorldCursor"}}
+	function tip:HookScript(name,cb) if name=="OnTooltipCleared" then cleared=cb elseif name=="OnShow" then shown=cb elseif name=="OnHide" then hidden=cb end end
+	function tip:GetProcessingTooltipInfo() return self.info end
+	function tip:AddLine(s) self.lines[#self.lines+1]=s end
+	withCamping(function(m,setLevel)
+		assert_not_nil(posts[4]); assert_eq(m.OBJECT_IDS[528996],279978)
+		local function fire(data) posts[4](tip,data) end
+		fire({id=528996,lines={}})
+		local n=#tip.lines; assert_true(n>0,"verified Camp Tent world object should add real tooltip lines")
+		assert_true(contains(table.concat(tip.lines," "),"Rested XP up to 5%"))
+		fire({id=528996,lines={}}); assert_eq(#tip.lines,n,"modern postcall duplicate")
+		cleared(tip); tip.lines={}; setLevel(14)
+		fire({id=0,lines={{leftText="|cffffcc00Lodestone|r"}}})
+		assert_true(contains(table.concat(tip.lines," "),"At your level (14): +20"),"name fallback must not interpret Object id as itemID")
+		for id,item in pairs(m.ITEMS) do
+			if item.kind~="kit" then
+				cleared(tip); tip.lines={}; fire({id=0,lines={{leftText=item.name}}})
+				assert_true(#tip.lines>0,"exact world-name fallback for "..item.name.." ("..id..")")
+			end
+		end
+		cleared(tip); tip.lines={}; fire({id=123456,lines={{leftText="Lodestone"}}}); assert_true(#tip.lines>0,"foreign placer/no inventory does not gate world object")
+		cleared(tip); tip.lines={}; fire({id=999,lines={{leftText="Camp Tent Item"}}}); assert_eq(#tip.lines,0,"non-exact names stay untouched")
+		tip.info={getterName="GetItem"}; fire({id=528996,lines={{leftText="Camp Tent"}}}); assert_eq(#tip.lines,0,"item link never enters world-object path")
+		cleared(tip); tip.lines={}; tip.info={getterName="GetUnit"}; fire({id=528996,lines={}}); assert_eq(#tip.lines,0,"unit/player/pet tooltips excluded")
+		tip.info={getterName="GetWorldCursor"}; cleared(tip); tip.lines={}; fire({id=999,lines={{leftText={secret=true}}}}); assert_eq(#tip.lines,0,"secret name excluded")
+		assert_not_nil(shown); assert_not_nil(hidden)
+	end,function()
+		_G.GameTooltip=tip
+		_G.TooltipDataProcessor={AddTooltipPostCall=function(kind,cb) posts[kind]=cb end}
+	end)
+end)
+
+T.register("camping legacy world setter path is scoped, deduplicated, and clears on reuse",function()
+	local posts={}; local hooks={}; local clear
+	local tip={lines={},info={getterName="GetWorldCursor"}}
+	function tip:HookScript(name,cb) if name=="OnTooltipCleared" then clear=cb else hooks[name]=cb end end
+	function tip:GetProcessingTooltipInfo() return self.info end
+	function tip:AddLine(s) self.lines[#self.lines+1]=s end
+	function tip:SetWorldCursor() end
+	local hookFunc=function(obj,method,cb) assert_eq(obj,tip); assert_eq(method,"SetWorldCursor"); hooks.setter=cb end
+	withCamping(function()
+		assert_not_nil(hooks.setter)
+		-- The real setter is the world-origin cue; plain callback or arbitrary UI tooltip is not.
+		_G.C_TooltipInfo={GetWorldCursor=function() return {type=4,id=528996,lines={}} end}
+		hooks.setter(tip); local n=#tip.lines; assert_true(n>0,"legacy world setter adds reference")
+		hooks.setter(tip); assert_eq(#tip.lines,n,"setter and later OnShow/postcall do not duplicate")
+		clear(tip); tip.lines={}; tip.info={getterName="GetItem"}; hooks.setter(tip); assert_eq(#tip.lines,0)
+		_G.C_TooltipInfo.GetWorldCursor=function() return nil end; tip.info={getterName="GetWorldCursor"}; hooks.setter(tip); assert_eq(#tip.lines,0,"nil cursor must not reuse stale identity")
+		tip.GetProcessingTooltipInfo=nil; tip.GetPrimaryTooltipInfo=nil; tip.GetOwner=function() return _G.UIParent end
+		_G.C_TooltipInfo=nil; _G.GameTooltipTextLeft1={GetText=function() return "Lodestone" end}
+		tip.lines={}; hooks.setter(tip); assert_true(#tip.lines>0,"legacy setter plus world owner/native title decorates")
+	end,function()
+		_G.GameTooltip=tip; _G.hooksecurefunc=hookFunc; _G.UIParent={}
+		_G.TooltipDataProcessor={AddTooltipPostCall=function(kind,cb) posts[kind]=cb end}
+	end)
+end)
+
+T.register("camping modern world fallback never uses secret titles, body text or unit names",function()
+	local post,hooks={},{ }
+	local tip={lines={},info={getterName="GetWorldCursor"}}
+	function tip:HookScript(name,cb) hooks[name]=cb end
+	function tip:GetProcessingTooltipInfo() return self.info end
+	function tip:GetPrimaryTooltipInfo() return self.info end
+	function tip:AddLine(s) self.lines[#self.lines+1]=s end
+	withCamping(function()
+		_G.GameTooltipTextLeft1={GetText=function() return "Camp Tent" end}
+		local function check(data,expected)
+			hooks.OnTooltipCleared(tip); tip.lines={}; tip.info.tooltipData=data
+			post[4](tip,data); hooks.OnShow(tip)
+			if expected then assert_true(#tip.lines>0) else assert_eq(#tip.lines,0) end
+		end
+		check({secret=true},false)
+		check({type=4,lines={{leftText={secret=true}},{leftText="Camp Tent"}}},false)
+		check({type=4,lines={{leftText="Unrelated Object"},{leftText="Camp Tent"}}},false)
+		check({type=4,id=279978},false) -- itemID must never be a world ID
+		check({type=4,lines={{leftText="Camp Tent"}}},true)
+		local n=#tip.lines; hooks.OnShow(tip); assert_eq(#tip.lines,n)
+		hooks.OnHide(tip); tip.lines={}; hooks.OnShow(tip); assert_true(#tip.lines>0)
+		-- A world unit can have an identical name; Object postcall is NOT invoked.
+		hooks.OnTooltipCleared(tip); tip.lines={}
+		tip.info.tooltipData={type=2,id=528996,lines={{leftText="Camp Tent"}}}
+		hooks.OnShow(tip); assert_eq(#tip.lines,0)
+		tip.info={getterName="GetItemByID",tooltipData={type=0,id=279978}}
+		hooks.OnShow(tip); assert_eq(#tip.lines,0)
+	end,function()
+		_G.GameTooltip=tip
+		_G.TooltipDataProcessor={AddTooltipPostCall=function(kind,cb) post[kind]=cb end}
+	end)
+end)
+
+T.register("camping text-only legacy world setter reflows after Show and excludes units",function()
+	local hooks={}
+	local tip={lines={},shown=false,shows=0,title="Camp Tent"}
+	function tip:HookScript(name,cb) hooks[name]=cb end
+	function tip:GetOwner() return _G.WorldFrame end
+	function tip:GetUnit() return self.unitName,self.unit end
+	function tip:GetItem() return self.itemName,self.itemLink end
+	function tip:GetSpell() return nil end
+	function tip:AddLine(s) self.lines[#self.lines+1]=s end
+	function tip:IsShown() return self.shown end
+	function tip:Show() self.shown=true; self.shows=self.shows+1; if hooks.OnShow then hooks.OnShow(self) end end
+	function tip:SetWorldCursor()
+		self.lines={}; hooks.OnTooltipCleared(self)
+		if self.title then self:Show() else self.shown=false; hooks.OnHide(self) end
+	end
+	withCamping(function(_,setLevel)
+		tip:SetWorldCursor(); assert_true(#tip.lines>0); assert_eq(tip.shows,2,"posthook reflows already-shown native tooltip")
+		assert_true(contains(table.concat(tip.lines," "),"Rested XP up to 5%"))
+		tip.title="Lodestone"; setLevel(22); tip:SetWorldCursor()
+		assert_true(contains(table.concat(tip.lines," "),"(22): +32")); assert_eq(tip.shows,4)
+		tip.title="Camp Tent"; tip.unitName="Camp Tent"; tip.unit="mouseover"; tip:SetWorldCursor(); assert_eq(#tip.lines,0)
+		tip.unitName=nil; tip.unit=nil; tip.itemName="Camp Tent"; tip.itemLink="item:279978"; tip:SetWorldCursor(); assert_eq(#tip.lines,0)
+		tip.itemName=nil; tip.itemLink=nil; tip.title={secret=true}; tip:SetWorldCursor(); assert_eq(#tip.lines,0)
+		tip.title=nil; tip:SetWorldCursor(); assert_eq(#tip.lines,0); assert_false(tip.shown)
+	end,function()
+		_G.GameTooltip=tip; _G.WorldFrame={}; _G.C_TooltipInfo=nil
+		_G.GameTooltipTextLeft1={GetText=function() return tip.title end}
+		_G.hooksecurefunc=function(obj,method,cb)
+			local original=obj[method]
+			obj[method]=function(self,...) original(self,...); cb(self,...) end
+		end
 	end)
 end)
