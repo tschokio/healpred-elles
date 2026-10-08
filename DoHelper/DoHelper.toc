@@ -26,3 +26,4 @@ WeaponTraining.lua
 Camping.lua
 Graphics.lua
 Options.lua
+ActionBarPressed.lua
