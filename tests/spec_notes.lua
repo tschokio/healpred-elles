@@ -428,6 +428,28 @@ T.register("notes: style persistence, apply, reset, and atomic validation", func
 	assert_eq(resetTabFlags, "", "tab editor drops outline after Reset")
 end)
 
+T.register("notes: skin migration preserves saved custom colors but themes defaults", function()
+	Mocks.Reset()
+	_G.EllesmereUI_HoTPredictionDB = {
+		schema = 2,
+		notes = { textColor = { 1, 0.5, 0.2 }, titleColor = { 0.8, 0.3, 0.1 } },
+	}
+	Mocks.BuildEUF()
+	local custom = Mocks.LoadAddon()
+	Mocks.Fire("ADDON_LOADED", "DoHelper")
+	assert_false(custom.notes.UsesSkinColors(), "existing custom note colors remain independent")
+	assert_eq(custom.db.notes.textColor[1], 1)
+	assert_eq(custom.db.schema, 3)
+
+	Mocks.Reset()
+	_G.EllesmereUI_HoTPredictionDB = { schema = 2, notes = { text = "old reminder" } }
+	Mocks.BuildEUF()
+	local defaults = Mocks.LoadAddon()
+	Mocks.Fire("ADDON_LOADED", "DoHelper")
+	assert_true(defaults.notes.UsesSkinColors(), "default notes adopt the whole-addon skin")
+	assert_eq(defaults.db.notes.text, "old reminder")
+end)
+
 T.register("notes: visibility open and closed states survive simulated reload", function()
 	local e = Mocks.NewEnv()
 	assert_false(e.ns.db.notes.shown, "default notes.shown is false")

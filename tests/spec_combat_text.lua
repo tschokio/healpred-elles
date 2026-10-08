@@ -228,7 +228,7 @@ T.register("combat text: legacy colour migrates into both new colours and the ol
 	assert_eq(s.enterColor[3], 0.3)
 	assert_eq(s.leaveColor[1], 0.1, "a custom legacy colour is preserved for leave")
 	assert_eq(s.leaveColor[3], 0.3)
-	assert_eq(ns.db.schema, 2, "the migration marker is written")
+	assert_eq(ns.db.schema, 3, "the migration marker is written")
 
 	local ns2 = presetEnv({ combatText = { color = { 1.0, 0.9, 0.3 } } })
 	local s2 = ns2.combatText.Style()

@@ -6,10 +6,10 @@
 local addonName, ns = ...
 
 ns.name = addonName
-ns.version = "0.12.2"
+ns.version = "0.12.3"
 -- Bumped when saved settings need a one-time migration. The marker lives in
 -- SavedVariables, so a migration runs exactly once.
-ns.SCHEMA_VERSION = 2
+ns.SCHEMA_VERSION = 3
 ns.debugEnabled = false
 ns.inCombat = false
 ns.started = false
@@ -142,6 +142,26 @@ function ns.MigrateDatabase(db)
 	if type(db) ~= "table" then return end
 	local version = ns.toNumber(db.schema) or 0
 	if version >= ns.SCHEMA_VERSION then return end
+	if version < 3 then
+		local note = type(db.notes) == "table" and db.notes or nil
+		if note and note.useSkinColors == nil then
+			local function matches(value, reference, count)
+				if ns.isSecret(value) then return false end
+				if type(value) ~= "table" then return value == nil end
+				for i = 1, count do
+					local n = ns.toNumber(value[i])
+					if n == nil or math.abs(n - reference[i]) > 1e-9 then return false end
+				end
+				return true
+			end
+			local custom = not matches(note.textColor, { 0.90, 0.94, 0.98 }, 3)
+				or not matches(note.titleColor, { 0.32, 0.83, 0.73 }, 3)
+				or not matches(note.borderColor, { 0.20, 0.30, 0.34 }, 3)
+				or not matches(note.background, { 0.05, 0.07, 0.10, 0.85 }, 4)
+				or not matches(note.editorBackground, { 0, 0, 0, 0.35 }, 4)
+			note.useSkinColors = not custom
+		end
+	end
 
 	-- v1 -> v2 combat text: the single legacy `color` becomes both new colours
 	-- only when it was genuinely custom. The old default gets the new distinct
@@ -206,7 +226,7 @@ function ns.initCapabilities()
 end
 
 ns.DEFAULTS = {
-	schema = 2,                    -- migration marker; never edit by hand
+	schema = 3,                    -- migration marker; never edit by hand
 	enabled = true,
 	debug = false,
 	skipRLConfirm = false,        -- use the native /reload command instead of EllesmereUI's /rl prompt
@@ -240,6 +260,7 @@ ns.DEFAULTS = {
 		nextSiteId = 1,
 		shown = false,             -- reopen the floating window after a reload
 		collapsed = false,         -- rolled up to the compact "Do ^" pill
+		useSkinColors = true,       -- follow the addon-wide palette unless customized
 		width = 320,
 		height = 240,
 		fontSize = 14,
@@ -247,6 +268,9 @@ ns.DEFAULTS = {
 		background = { 0.05, 0.07, 0.10, 0.85 },
 		x = 0, y = 0,              -- saved offset from the screen center
 	},
+	uiSkin = "classic",
+	uiSkinBase = "classic",
+	uiSkinCustom = {},
 	-- Small centered "+ combat" / "- combat" line shown on combat transitions.
 	-- Independent of the healing helper; its own event frame drives it.
 	-- enterColor / leaveColor are independent; `color` remains as the legacy
@@ -511,6 +535,7 @@ function ns.Startup()
 
 	ns.resetSession()
 	ns.InitDatabase()
+	if ns.ui and ns.ui.ApplySavedSkin then ns.ui.ApplySavedSkin() end
 	if ns.InitOptions then ns.InitOptions() end
 
 	ns.initCapabilities()

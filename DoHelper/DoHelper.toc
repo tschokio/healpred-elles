@@ -1,8 +1,8 @@
 ## Interface: 120000, 120001, 120005, 120007, 120100, 16001
 ## Title: DoHelper
-## Notes: Healing predictions, queued next-swing borders, multi-topic notes, combat text, camping tooltips and a weapon training reference. Addon folder is DoHelper; the SavedVariables name is kept for data compatibility.
+## Notes: Healing predictions, queued next-swing borders, multi-topic notes, addon-wide skins, combat text, camping tooltips and a weapon training reference. Addon folder is DoHelper; the SavedVariables name is kept for data compatibility.
 ## Author: ai-job
-## Version: 0.12.2
+## Version: 0.12.3
 ## IconTexture: Interface\Icons\INV_Misc_Note_01
 ## SavedVariables: EllesmereUI_HoTPredictionDB
 ## Dependencies: EllesmereUIUnitFrames

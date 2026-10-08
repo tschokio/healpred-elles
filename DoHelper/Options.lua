@@ -16,12 +16,14 @@ local NAVIGATION = {
 	{ "combatTab", "combat", "Combat text", "Customize the indicator shown when entering or leaving combat." },
 	{ "weaponTab", "weapons", "Weapon training", "Find proficiencies, starting skills and weapon trainers." },
 	{ "graphicsTab", "graphics", "Graphics", "Tune world scenery, sharpening and reflections, then share your console settings." },
+	{ "skinsTab", "skins", "Skins", "Choose a whole-addon palette or customize its key colors." },
 	{ "chatTab", "chat", "Chat items", "Optional item-link tooltips and repeat-click previews in chat." },
 }
 local HELP = {
 	notes = { "YOUR NOTEPAD", "A place for reminders", "Use the arrows to switch topics. New topic creates a separate note; edit its title and press Enter to rename it.\n\nYour edits save as you type. The floating window mirrors the active topic.\n\nClick the arrow beside Do to collapse it to a tiny Do ^ toggle. Drag its header to move it.", "Editing locks during combat. Switching topics remains available." },
 	combat = { "COMBAT INDICATOR", "Clear, quiet feedback", "Choose your enter and leave labels, independent enter/leave colours, the text size and the timing.\n\nDirection and distance scroll the line up or down; 0 distance disables motion. Motion always restarts from the saved position.\n\nA duration of 0 keeps the label until the next transition (after the scroll settles).\n\nUse Preview + and Preview - to test without starting combat. Unlock to drag, then lock again to restore click-through.", "Size, colours and position remain independent of the settings theme." },
 	chat = { "CHAT ITEM LINKS", "Optional item-link helpers", "Enable a tooltip when hovering item links in Blizzard chat frames. You can also make a second click on the same item link close its native item preview.\n\nBoth options apply to Blizzard chat frames and are independent of EllesmereUI code.", "Both settings are off by default." },
+	skins = { "ADDON SKIN", "A look that fits your game", "Choose a Classic parchment, Ember, Neutral charcoal or Original teal preset. Changes apply across addon panels and notes. The Notes tab can either follow the selected addon skin or keep its own custom colors.", "Use Custom colors below to tune accent, window, panel, text and border RGB values." },
 }
 
 local function safe(obj, method, ...)
@@ -164,8 +166,7 @@ local function queuePreview(parent, x, y, width, height, healing)
 	b:SetSize(48, 48)
 	b:SetPoint("TOP", p, "TOP", 0, -118)
 	b:SetBackdrop({ bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 })
-	b:SetBackdropColor(0.015, 0.02, 0.025, 1)
-	b:SetBackdropBorderColor(0.3, 0.36, 0.4, 1)
+	UI.Surface(b, UI.colors.input)
 	local icon = b:CreateTexture(nil, "ARTWORK")
 	icon:SetTexture("Interface\\Icons\\Ability_Druid_Maul")
 	safe(icon, "SetAllPoints", b)
@@ -176,7 +177,7 @@ local function queuePreview(parent, x, y, width, height, healing)
 	border:SetFrameLevel(b:GetFrameLevel() + 10)
 	local state = label(p, "", 16, -205, width - 32)
 	local details = label(p, "", 16, -238, width - 32)
-	label(p, "Sample only. No real casts or queues.\n48px icon; actual size follows EllesmereUI.", 16, -278, width - 32):SetTextColor(0.55, 0.66, 0.72, 1)
+	UI.Text(label(p, "Sample only. No real casts or queues.\n48px icon; actual size follows EllesmereUI.", 16, -278, width - 32), "muted")
 	if healing then
 		UI.Rect(p, 16, -338, width - 32, 1, UI.colors.border)
 		UI.Label(p, "HEALING OVERLAY TEST", 16, -356, width - 32, "section")
@@ -499,7 +500,7 @@ local function ensureWindow()
 	background(chatPage, 12, -54, 516, 190)
 	background(catalog, -3, 4, 516, 492)
 	local catalogHeading = label(catalog, "503 spellbook entries reviewed | select a class", 8, -5, 482)
-	catalogHeading:SetTextColor(0.55, 0.75, 0.78, 1)
+	UI.Text(catalogHeading, "muted")
 	local scroll = CreateFrame("ScrollFrame", nil, catalog, "UIPanelScrollFrameTemplate")
 	scroll:SetSize(476, 412)
 	scroll:SetPoint("TOPLEFT", catalog, "TOPLEFT", 0, -74)
@@ -528,6 +529,10 @@ local function ensureWindow()
 				row.status = label(row, "", 54, -30, 394)
 				row.note = label(row, "", 10, -56, 442)
 				row.ids = label(row, "", 10, -90, 442)
+				UI.Text(row.title)
+				UI.Text(row.status, "muted")
+				UI.Text(row.note, "muted")
+				UI.Text(row.ids, "muted")
 				row.details = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
 				row.details:SetSize(84, 22)
 				row.details:SetPoint("TOPRIGHT", row, "TOPRIGHT", -10, -10)
@@ -553,7 +558,7 @@ local function ensureWindow()
 				heading.title:SetText(group.name)
 				heading.title:SetTextColor(group.color[1], group.color[2], group.color[3], 1)
 				heading.status:SetText(group.count and (group.count .. " entries reviewed | support & limitations below") or "Shared actions and user-added spell candidates")
-				heading.status:SetTextColor(0.55, 0.66, 0.72, 1)
+				UI.Text(heading.status, "muted")
 				heading.note:SetText(""); heading.ids:SetText(""); heading.details:Hide()
 				heading:SetHeight(52); y = y + 60
 				for _, entry in ipairs(group.rows) do
@@ -566,14 +571,14 @@ local function ensureWindow()
 						if ok and not ns.isSecret(value) and (type(value) == "string" or type(value) == "number") then path = value end
 					end
 					row.icon:SetTexture(path)
-					row.title:SetText(entry.name); row.title:SetTextColor(0.92, 0.95, 0.97, 1)
+					row.title:SetText(entry.name); UI.Text(row.title)
 					local top = math.max(32, row.title:GetStringHeight() + 16)
 					row.status:ClearAllPoints(); row.status:SetPoint("TOPLEFT", row, "TOPLEFT", 54, -top)
 					row.status:SetText(entry.status .. (#entry.ids == 0 and #entry.disabled > 0 and " - disabled" or ""))
 					row.status:SetTextColor(entry.deferred and 0.95 or 0.35, entry.deferred and 0.72 or 0.88, entry.deferred and 0.4 or 0.8, 1)
 					local noteY = top + row.status:GetStringHeight() + 12
 					row.note:ClearAllPoints(); row.note:SetPoint("TOPLEFT", row, "TOPLEFT", 10, -noteY)
-					row.note:SetText(entry.note); row.note:SetTextColor(0.65, 0.72, 0.76, 1)
+					row.note:SetText(entry.note); UI.Text(row.note, "muted")
 					local height = noteY + row.note:GetStringHeight() + 12
 					local hasIDs = #entry.ids > 0 or #entry.disabled > 0
 					row.details:SetShown(hasIDs)
@@ -582,7 +587,7 @@ local function ensureWindow()
 						local ids = #entry.ids > 0 and ("IDs: " .. ns.CatalogIDs(entry.ids)) or ""
 						if #entry.disabled > 0 then ids = ids .. "\nDisabled by your settings: " .. ns.CatalogIDs(entry.disabled) end
 						row.ids:ClearAllPoints(); row.ids:SetPoint("TOPLEFT", row, "TOPLEFT", 10, -height)
-						row.ids:SetText(ids); row.ids:SetTextColor(0.55, 0.75, 0.78, 1)
+						row.ids:SetText(ids); UI.Text(row.ids, "muted")
 						height = height + row.ids:GetStringHeight() + 12
 					else row.ids:SetText("") end
 					row:SetHeight(height); y = y + height + 8
@@ -629,7 +634,7 @@ local function ensureWindow()
 	f.notesPage = notesPage
 	background(notesPage, -3, 4, 516, 492)
 	local notesHeading = label(notesPage, "Notes | saved as you type | editable out of combat", 8, -5, 482)
-	notesHeading:SetTextColor(0.55, 0.75, 0.78, 1)
+	UI.Text(notesHeading, "muted")
 	local notesMessage = label(notesPage, "", 10, -394, 486)
 
 	-- Topic row: every note keeps its own topic ("site"). Prev/next cycle the
@@ -686,7 +691,7 @@ local function ensureWindow()
 	UI.Input(notesEditor, true)
 	if notesEditor.HookScript then
 		notesEditor:HookScript("OnEditFocusLost", function(self)
-			local s = ns.notes.Style()
+			local s = ns.notes.EffectiveColors(ns.notes.Style())
 			safe(self, "SetBackdropBorderColor", s.borderColor[1], s.borderColor[2], s.borderColor[3], 1)
 		end)
 	end
@@ -714,7 +719,10 @@ local function ensureWindow()
 		label(notesPage, title, x + 26, y - 5, width)
 		c:SetScript("OnClick", function(self)
 			local v = self:GetChecked() and true or false
-			if ns.notes and ns.notes.SetOutline then
+			if key == "notesFollowSkin" then
+				ns.notes.SetUseSkinColors(v)
+				if f.RefreshNotes then f.RefreshNotes() end
+			elseif ns.notes and ns.notes.SetOutline then
 				ns.notes.SetOutline(v)
 			else
 				if ns.db and ns.db.notes then ns.db.notes.outline = v end
@@ -759,6 +767,7 @@ local function ensureWindow()
 	noteField("notesEditBgG", 272, -288, 38)
 	noteField("notesEditBgB", 314, -288, 38)
 	noteField("notesEditBgA", 356, -288, 38)
+	notesCheck("notesFollowSkin", "Use whole-addon skin colors", 10, -320, 250)
 
 	local function notesButton(key, title, x, y, width, action)
 		local b = CreateFrame("Button", nil, notesPage, "UIPanelButtonTemplate")
@@ -770,7 +779,7 @@ local function ensureWindow()
 		f.controls[key] = b
 		return b
 	end
-	notesButton("notesApply", "Apply style", 10, -322, 120, function()
+	notesButton("notesApply", "Apply style", 10, -350, 120, function()
 		local c = f.controls
 		local ok, message = ns.notes.SetStyle({
 			width = tonumber(c.notesWidth:GetText()),
@@ -797,7 +806,7 @@ local function ensureWindow()
 		notesMessage:SetText(ns.api.InCombat() and "Style saved. The floating window is read-only in combat." or "Notes style saved.")
 		f.RefreshNotes()
 	end)
-	notesButton("notesReset", "Reset style", 140, -322, 120, function()
+	notesButton("notesReset", "Reset style", 140, -350, 120, function()
 		local d = ns.DEFAULTS.notes
 		ns.notes.SetStyle({
 			width = d.width,
@@ -810,18 +819,19 @@ local function ensureWindow()
 			background = { d.background[1], d.background[2], d.background[3], d.background[4] },
 			editorBackground = { d.editorBackground[1], d.editorBackground[2], d.editorBackground[3], d.editorBackground[4] },
 		})
+		ns.notes.SetUseSkinColors(true)
 		notesMessage:SetText("Default notes style restored.")
 		f.RefreshNotes()
 	end)
-	notesButton("notesShow", "Show floating notes", 10, -356, 160, function()
+	notesButton("notesShow", "Show floating notes", 10, -384, 160, function()
 		ns.notes.Open()
 		notesMessage:SetText("Floating notes opened. Drag the title bar to move; Collapse rolls it up.")
 	end)
-	notesButton("notesCollapse", "Collapse / expand", 180, -356, 140, function()
+	notesButton("notesCollapse", "Collapse / expand", 180, -384, 140, function()
 		ns.notes.SetCollapsed(not ns.notes.IsCollapsed())
 		notesMessage:SetText(ns.notes.IsCollapsed() and "Notes collapsed." or "Notes expanded.")
 	end)
-	notesButton("notesClose", "Close", 330, -356, 90, function()
+	notesButton("notesClose", "Close", 330, -384, 90, function()
 		ns.notes.Close()
 		notesMessage:SetText("Floating notes closed.")
 	end)
@@ -830,13 +840,15 @@ local function ensureWindow()
 	function f.RefreshNotes()
 		local c = f.controls
 		local s = ns.notes.Style()
+		local colors = ns.notes.EffectiveColors(s)
 		c.notesWidth:SetText(tostring(s.width)); c.notesHeight:SetText(tostring(s.height)); c.notesFont:SetText(tostring(s.fontSize))
 		if c.notesOutline then c.notesOutline:SetChecked(s.outline and true or false) end
-		for i, key in ipairs({ "notesTextR", "notesTextG", "notesTextB" }) do c[key]:SetText(tostring(s.textColor[i])) end
-		for i, key in ipairs({ "notesTitleR", "notesTitleG", "notesTitleB" }) do c[key]:SetText(tostring(s.titleColor[i])) end
-		for i, key in ipairs({ "notesBorderR", "notesBorderG", "notesBorderB" }) do c[key]:SetText(tostring(s.borderColor[i])) end
-		for i, key in ipairs({ "notesBgR", "notesBgG", "notesBgB", "notesBgA" }) do c[key]:SetText(tostring(s.background[i])) end
-		for i, key in ipairs({ "notesEditBgR", "notesEditBgG", "notesEditBgB", "notesEditBgA" }) do c[key]:SetText(tostring(s.editorBackground[i])) end
+		if c.notesFollowSkin then c.notesFollowSkin:SetChecked(ns.notes.UsesSkinColors()) end
+		for i, key in ipairs({ "notesTextR", "notesTextG", "notesTextB" }) do c[key]:SetText(tostring(colors.textColor[i])) end
+		for i, key in ipairs({ "notesTitleR", "notesTitleG", "notesTitleB" }) do c[key]:SetText(tostring(colors.titleColor[i])) end
+		for i, key in ipairs({ "notesBorderR", "notesBorderG", "notesBorderB" }) do c[key]:SetText(tostring(colors.borderColor[i])) end
+		for i, key in ipairs({ "notesBgR", "notesBgG", "notesBgB", "notesBgA" }) do c[key]:SetText(tostring(colors.background[i])) end
+		for i, key in ipairs({ "notesEditBgR", "notesEditBgG", "notesEditBgB", "notesEditBgA" }) do c[key]:SetText(tostring(colors.editorBackground[i])) end
 		c.notesTitle:SetText(ns.notes.SiteTitle(ns.notes.ActiveId()))
 		ns.notes.ApplyStyle() -- keep the tab editor's font/colour in sync with saved style
 		ns.notes.RefreshText()
@@ -886,7 +898,7 @@ local function ensureWindow()
 		function() return ns.db.combatText.enabled end,
 		function(v) command("combattext " .. (v and "on" or "off")) end)
 	local combatHeading = label(combatPage, "|  shown on entering and leaving combat", 165, -7, 320)
-	combatHeading:SetTextColor(0.55, 0.75, 0.78, 1)
+	UI.Text(combatHeading, "muted")
 	label(combatPage, "Enter text", 10, -35, 100)
 	combatField("combatEnter", 115, -30, 140, 40)
 	label(combatPage, "Leave text", 270, -35, 90)
@@ -1020,6 +1032,76 @@ local function ensureWindow()
 		ns.weaponTraining.BuildOptionsUI(f)
 	end
 	if ns.graphics then ns.graphics.BuildOptionsUI(f) end
+	local skinPage = CreateFrame("Frame", nil, f)
+	skinPage:SetSize(510, 492)
+	skinPage:SetPoint("TOPLEFT", f, "TOPLEFT", f.contentX, f.contentY)
+	f.skinPage = skinPage
+	background(skinPage, -3, 4, 516, 492)
+	UI.Label(skinPage, "PREDEFINED SKINS", 12, -14, 480, "section")
+	UI.Label(skinPage, "Choose a palette for the whole addon; notes follow it unless set to custom colors.", 12, -37, 480, "muted")
+	local skinNames = { "classic", "ember", "neutral", "original", "custom" }
+	local skinLabels = { classic = "Classic", ember = "Ember", neutral = "Neutral", original = "Original", custom = "Custom" }
+	f.skinButtons = {}
+	for i, name in ipairs(skinNames) do
+		local b = CreateFrame("Button", nil, skinPage, "UIPanelButtonTemplate")
+		b:SetSize(90, 30); b:SetPoint("TOPLEFT", skinPage, "TOPLEFT", 12 + (i - 1) * 96, -66)
+		b:SetText(skinLabels[name]); flatButton(b)
+		b:SetScript("OnClick", function()
+			if name == "custom" then UI.SetSkin("custom", ns.db.uiSkinCustom, ns.db.uiSkinBase)
+			else UI.SetSkin(name) end
+			if f.RefreshSkin then f.RefreshSkin() end
+			if f.RefreshNotes then f.RefreshNotes() end
+		end)
+		f.skinButtons[name] = b
+	end
+	UI.Label(skinPage, "CUSTOM COLORS (RGB 0–1)", 12, -116, 480, "section")
+	UI.Label(skinPage, "Edit these five shared colors, then apply them as a custom skin.", 12, -139, 480, "muted")
+	local skinFields = {}
+	for row, key in ipairs({ "accent", "window", "panel", "text", "border" }) do
+		local y = -174 - (row - 1) * 38
+		UI.Label(skinPage, ({ accent = "Accent", window = "Window", panel = "Panel", text = "Text", border = "Border" })[key], 14, y - 4, 108)
+		for component, channel in ipairs({ "R", "G", "B" }) do
+			local e = CreateFrame("EditBox", nil, skinPage, "BackdropTemplate")
+			e:SetSize(58, 24); e:SetPoint("TOPLEFT", skinPage, "TOPLEFT", 136 + (component - 1) * 70, y)
+			e:SetAutoFocus(false); e:SetMaxLetters(8); e:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+			UI.Input(e)
+			local fieldKey = "skin_" .. key .. channel
+			skinFields[key .. component] = e; f.controls[fieldKey] = e
+		end
+	end
+	local skinMessage = UI.Label(skinPage, "", 12, -380, 480, "muted")
+	local skinApply = CreateFrame("Button", nil, skinPage, "UIPanelButtonTemplate")
+	skinApply:SetSize(170, 28); skinApply:SetPoint("TOPLEFT", skinPage, "TOPLEFT", 12, -432)
+	skinApply:SetText("Apply custom colors"); flatButton(skinApply); UI.Button(skinApply, "primary")
+	f.skinApply = skinApply
+	skinApply:SetScript("OnClick", function()
+		local custom = {}
+		for _, key in ipairs({ "accent", "window", "panel", "text", "border" }) do
+			custom[key] = {}
+			for component = 1, 3 do
+				local value = tonumber(skinFields[key .. component]:GetText())
+				if not ns.isFinite(value) or value > 1 then skinMessage:SetText("Each color value must be between 0 and 1; nothing changed."); return end
+				custom[key][component] = value
+				skinFields[key .. component]:ClearFocus()
+			end
+		end
+		local base = ns.db.uiSkin == "custom" and ns.db.uiSkinBase or ns.db.uiSkin
+		local ok, err = UI.SetSkin("custom", custom, base)
+		if not ok then skinMessage:SetText(err or "Custom skin could not be applied."); return end
+		skinMessage:SetText("Custom skin applied to addon panels and notes following the addon skin.")
+		if f.RefreshSkin then f.RefreshSkin() end
+		if f.RefreshNotes then f.RefreshNotes() end
+	end)
+	f.RefreshSkin = function()
+		local name = ns.db.uiSkin or "classic"
+		for skin, control in pairs(f.skinButtons) do UI.Selected(control, name == skin) end
+		local palette = UI.Palette(name, ns.db.uiSkinBase, ns.db.uiSkinCustom)
+		for _, key in ipairs({ "accent", "window", "panel", "text", "border" }) do
+			for component = 1, 3 do skinFields[key .. component]:SetText(tostring(palette[key][component])) end
+		end
+		if f.skinButtons.custom then f.skinButtons.custom:SetEnabled(name == "custom" or ns.db.uiSkinCustom ~= nil) end
+	end
+	f.RefreshSkin()
 
 	function f.SelectTab(tab)
 		local valid = false
@@ -1033,8 +1115,9 @@ local function ensureWindow()
 		notesPage:SetShown(tab == "notes")
 		combatPage:SetShown(tab == "combat")
 		if f.weaponPage then f.weaponPage:SetShown(tab == "weapons") end
-		chatPage:SetShown(tab == "chat")
 		if f.graphicsPage then f.graphicsPage:SetShown(tab == "graphics") end
+		if f.skinPage then f.skinPage:SetShown(tab == "skins") end
+		chatPage:SetShown(tab == "chat")
 		f.preview:SetShown(tab == "settings" or tab == "spells")
 		local help = HELP[tab]
 		f.helpPanel:SetShown(help ~= nil)
@@ -1053,6 +1136,8 @@ local function ensureWindow()
 			if f.weaponPage and f.weaponPage.Refresh then f.weaponPage.Refresh() end
 		elseif tab == "graphics" then
 			if f.graphicsPage then f.graphicsPage.Refresh() end
+		elseif tab == "skins" then
+			if f.RefreshSkin then f.RefreshSkin() end
 		elseif tab == "chat" then
 			-- Controls are SavedVariables-backed; no separate refresh action is needed.
 		end
@@ -1180,6 +1265,7 @@ local function ensureWindow()
 		f.preview.Saved()
 		if f.RefreshNotes then f.RefreshNotes() end
 		if f.RefreshCombat then f.RefreshCombat() end
+		if f.RefreshSkin then f.RefreshSkin() end
 		if f.weaponPage and f.weaponPage.Refresh then f.weaponPage.Refresh() end
 		refreshing = false
 	end

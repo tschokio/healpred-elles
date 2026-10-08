@@ -128,7 +128,7 @@ not presented as effects of every item. See
 source links and known limitations. Mock-tested only; live WoW tooltips have not
 been verified.
 
-### Updating (to v0.12.2)
+### Updating (to v0.12.3)
 
 Since v0.10.0 the AddOn folder is `DoHelper/` (and the TOC is
 `DoHelper.toc`). Replace the old `EllesmereUI_HoTPrediction/` folder with
@@ -142,7 +142,8 @@ unchanged (`EllesmereUI_HoTPredictionDB`), so the copied file loads as-is.
 Skipping this step just starts with default settings; it never crashes or
 deletes anything. Existing settings are migrated once (a saved schema marker):
 a custom legacy single combat colour becomes both new enter/leave colours (the
-old default instead gets the new distinct defaults). The fake test
+old default instead gets the new distinct defaults). Existing custom Notes
+colours remain independent; untouched Notes adopt the selected skin. The fake test
 value is never persisted, so update with no fake active. Verify with `/euihot status` (version line), and, while previewing a
 fake, `/euihot teststatus` or the copyable `/euihot window`.
 
@@ -199,12 +200,16 @@ and repeat with Cleave, Maul, forms/pages and any macros you use.
 
 ### Settings menu and minimap button (v0.4.0)
 
-The v0.12.0 interface uses a dark slate theme with teal accents, consistent
-sans-serif text, flat hover/selection states and matching input fields. Open
-`/dohelper options`, then choose a page in the left sidebar. The right column
-shows action/healing previews on Settings and Implemented spells, and relevant
-help on Notes and Combat text. Weapon training uses the full content
-width. Manage spells and Diagnostics remain accessible in the sidebar.
+The **Skins** tab offers Classic parchment, Ember and iron, Neutral charcoal,
+and the original teal palette, plus custom RGB colors for accent, window, panel,
+text and border. Classic parchment is the default. Notes follow the selected
+addon skin by default, or can keep their own colors from the Notes tab. Open
+`/dohelper options`, then choose a page in the left sidebar. All skins use
+consistent sans-serif text, flat hover/selection states and matching input
+fields. The right column shows action/healing previews on Settings and
+Implemented spells, and relevant help on Notes and Combat text. Weapon training
+uses the full content width. Manage spells and Diagnostics remain accessible
+in the sidebar.
 
 Settings and dialogs fit smaller screens when opened. Escape and Close release
 input focus. The UI adds no animations or idle timers and never styles vendor
@@ -243,6 +248,7 @@ named **topics**, so unrelated reminders stay separate.
   swallows your keys; cycling topics stays available. It unlocks automatically
   when combat ends.
 * **Styling:** in the Notes tab (`/dohelper options` → **Notes**), configure floating-note styling:
+  - **Use whole-addon skin colors** to follow the palette selected in the Skins tab
   - Window **width / height** (180–900 × 80–800)
   - **Font size** (8–32) and optional **text outline** checkbox
   - **Text RGB** (0–1 each)

@@ -163,7 +163,7 @@ function G.BuildOptionsUI(f)
 			UI.Background(slider, 0, -7, 112, 4)
 			local thumb = slider:CreateTexture(nil, "ARTWORK")
 			thumb:SetTexture(UI.WHITE); thumb:SetSize(10, 18)
-			thumb:SetVertexColor(0.32, 0.83, 0.73, 1); slider:SetThumbTexture(thumb)
+			UI.Tint(thumb, "accent"); slider:SetThumbTexture(thumb)
 			slider:SetValueStep(1)
 			if slider.SetObeyStepOnDrag then slider:SetObeyStepOnDrag(true) end
 			slider:SetScript("OnValueChanged", function(_, value)

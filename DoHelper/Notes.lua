@@ -380,7 +380,8 @@ function notes.RefreshEditable()
 			ns.ui.InputState(e)
 			local focused = e.HasFocus and e:HasFocus()
 			if not focused then
-				safe(e, "SetBackdropBorderColor", s.borderColor[1], s.borderColor[2], s.borderColor[3], 1)
+				local colors = notes.EffectiveColors(s)
+				safe(e, "SetBackdropBorderColor", colors.borderColor[1], colors.borderColor[2], colors.borderColor[3], 1)
 			end
 		end
 	end
@@ -446,6 +447,33 @@ function notes.Style()
 	}
 end
 
+function notes.UsesSkinColors()
+	return not (ns.db and ns.db.notes and ns.db.notes.useSkinColors == false)
+end
+
+function notes.EffectiveColors(style)
+	style = style or notes.Style()
+	if not notes.UsesSkinColors() or not ns.ui then
+		return {
+			textColor = style.textColor, titleColor = style.titleColor, borderColor = style.borderColor,
+			background = style.background, editorBackground = style.editorBackground,
+		}
+	end
+	local c = ns.ui.colors
+	return {
+		textColor = c.noteText, titleColor = c.noteTitle, borderColor = c.noteBorder,
+		background = c.noteWindow, editorBackground = c.noteEditor,
+	}
+end
+
+function notes.SetUseSkinColors(value)
+	local d = data()
+	if not d then return false end
+	d.useSkinColors = value and true or false
+	notes.ApplyStyle()
+	return true
+end
+
 function notes.SetStyle(style)
 	if ns.isSecret(style) or type(style) ~= "table" then return false, "No style values supplied." end
 	local width, height, fontSize = ns.toNumber(style.width), ns.toNumber(style.height), ns.toNumber(style.fontSize)
@@ -497,6 +525,7 @@ function notes.SetStyle(style)
 	if bc then d.borderColor = bc end
 	if ebg then d.editorBackground = ebg end
 	if outline ~= nil then d.outline = outline end
+	d.useSkinColors = false
 
 	notes.ApplyStyle()
 	return true
@@ -508,44 +537,45 @@ end
 
 function notes.ApplyStyle()
 	local s = notes.Style()
+	local colors = notes.EffectiveColors(s)
 	local fontFlags = s.outline and "OUTLINE" or ""
 	local f = notes.window
 	if f then
-		safe(f, "SetBackdropColor", s.background[1], s.background[2], s.background[3], s.background[4])
-		safe(f, "SetBackdropBorderColor", s.borderColor[1], s.borderColor[2], s.borderColor[3], 1)
+		safe(f, "SetBackdropColor", colors.background[1], colors.background[2], colors.background[3], colors.background[4])
+		safe(f, "SetBackdropBorderColor", colors.borderColor[1], colors.borderColor[2], colors.borderColor[3], 1)
 		local collapsed = notes.IsCollapsed()
 		f:SetSize(collapsed and COLLAPSED_WIDTH or s.width, collapsed and COLLAPSED_HEIGHT or s.height)
 		if f.edit then
 			f.edit:SetSize(s.width - 16, notes.EditorHeight(s))
-			safe(f.edit, "SetBackdropColor", s.editorBackground[1], s.editorBackground[2], s.editorBackground[3], s.editorBackground[4])
-			safe(f.edit, "SetBackdropBorderColor", s.borderColor[1], s.borderColor[2], s.borderColor[3], 1)
+			safe(f.edit, "SetBackdropColor", colors.editorBackground[1], colors.editorBackground[2], colors.editorBackground[3], colors.editorBackground[4])
+			safe(f.edit, "SetBackdropBorderColor", colors.borderColor[1], colors.borderColor[2], colors.borderColor[3], 1)
 		end
 		if f.siteTitle then
 			f.siteTitle:SetSize(math.max(60, s.width - 112), 20)
 			safe(f.siteTitle, "SetFont", FONT, 12, "")
-			safe(f.siteTitle, "SetTextColor", s.titleColor[1], s.titleColor[2], s.titleColor[3], 1)
-			safe(f.siteTitle, "SetBackdropBorderColor", s.borderColor[1], s.borderColor[2], s.borderColor[3], 1)
+			safe(f.siteTitle, "SetTextColor", colors.titleColor[1], colors.titleColor[2], colors.titleColor[3], 1)
+			safe(f.siteTitle, "SetBackdropBorderColor", colors.borderColor[1], colors.borderColor[2], colors.borderColor[3], 1)
 		end
 		if f.title then
 			safe(f.title, "SetFont", FONT, 12, "")
-			safe(f.title, "SetTextColor", s.titleColor[1], s.titleColor[2], s.titleColor[3], 1)
+			safe(f.title, "SetTextColor", colors.titleColor[1], colors.titleColor[2], colors.titleColor[3], 1)
 		end
 	end
 	if notes.tabEditor then
 		safe(notes.tabEditor, "SetFont", FONT, s.fontSize, fontFlags)
-		safe(notes.tabEditor, "SetBackdropColor", s.editorBackground[1], s.editorBackground[2], s.editorBackground[3], s.editorBackground[4])
-		safe(notes.tabEditor, "SetBackdropBorderColor", s.borderColor[1], s.borderColor[2], s.borderColor[3], 1)
+		safe(notes.tabEditor, "SetBackdropColor", colors.editorBackground[1], colors.editorBackground[2], colors.editorBackground[3], colors.editorBackground[4])
+		safe(notes.tabEditor, "SetBackdropBorderColor", colors.borderColor[1], colors.borderColor[2], colors.borderColor[3], 1)
 	end
 	if notes.tabTitle then
-		safe(notes.tabTitle, "SetTextColor", s.titleColor[1], s.titleColor[2], s.titleColor[3], 1)
-		safe(notes.tabTitle, "SetBackdropBorderColor", s.borderColor[1], s.borderColor[2], s.borderColor[3], 1)
+		safe(notes.tabTitle, "SetTextColor", colors.titleColor[1], colors.titleColor[2], colors.titleColor[3], 1)
+		safe(notes.tabTitle, "SetBackdropBorderColor", colors.borderColor[1], colors.borderColor[2], colors.borderColor[3], 1)
 	end
 	for _, e in ipairs(notes.Editors()) do
 		safe(e, "SetFont", FONT, s.fontSize, fontFlags)
-		safe(e, "SetTextColor", s.textColor[1], s.textColor[2], s.textColor[3], 1)
+		safe(e, "SetTextColor", colors.textColor[1], colors.textColor[2], colors.textColor[3], 1)
 	end
 	if f and f.hint then
-		safe(f.hint, "SetTextColor", math.min(1, s.textColor[1] + 0.08), math.min(1, s.textColor[2] + 0.08), math.min(1, s.textColor[3] + 0.08), 1)
+		safe(f.hint, "SetTextColor", math.min(1, colors.textColor[1] + 0.08), math.min(1, colors.textColor[2] + 0.08), math.min(1, colors.textColor[3] + 0.08), 1)
 	end
 end
 
@@ -709,7 +739,7 @@ function notes.EnsureWindow()
 	ns.ui.Input(edit, true)
 	if edit.HookScript then
 		edit:HookScript("OnEditFocusLost", function(self)
-			local s = notes.Style()
+			local s = notes.EffectiveColors(notes.Style())
 			safe(self, "SetBackdropBorderColor", s.borderColor[1], s.borderColor[2], s.borderColor[3], 1)
 		end)
 	end

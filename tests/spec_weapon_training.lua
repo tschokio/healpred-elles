@@ -994,7 +994,7 @@ end)
 
 T.register("weapon training: DoHelper branding, aliases and legacy settings compatibility", function()
 	local e = Mocks.NewEnv()
-	assert_eq(e.ns.version, "0.12.2")
+	assert_eq(e.ns.version, "0.12.3")
 	assert_eq(SLASH_DOHELPER1, "/dohelper")
 	assert_eq(SLASH_DOHELPER2, "/dh")
 	assert_true(type(SlashCmdList["DOHELPER"]) == "function")
@@ -1037,7 +1037,7 @@ T.register("weapon training: DoHelper branding, aliases and legacy settings comp
 	local toc = ReadFile((_G.__HOT_ROOT or ".") .. "/DoHelper/DoHelper.toc")
 	assert_true(contains(toc, "## Title: DoHelper"))
 	assert_true(not contains(toc, "HoTPrediction:") and not contains(toc, "HoT Prediction"), "TOC title is simply DoHelper")
-	assert_true(contains(toc, "Version: 0.12.2"))
+	assert_true(contains(toc, "Version: 0.12.3"))
 	assert_true(contains(toc, "SavedVariables: EllesmereUI_HoTPredictionDB"))
 	assert_true(contains(toc, "WeaponTraining.lua"))
 

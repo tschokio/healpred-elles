@@ -1024,7 +1024,7 @@ function WT.BuildOptionsUI(f)
 	racePrev:SetSize(26, 22); racePrev:SetPoint("TOPLEFT", page, "TOPLEFT", 64, -26)
 	racePrev:SetText("<"); flatButton(racePrev)
 	local raceLabel = label(page, "", 98, -30, 250)
-	raceLabel:SetTextColor(0.92, 0.95, 0.97, 1)
+	ns.ui.Text(raceLabel, "heading")
 	local raceNext = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
 	raceNext:SetSize(26, 22); raceNext:SetPoint("TOPLEFT", page, "TOPLEFT", 352, -26)
 	raceNext:SetText(">"); flatButton(raceNext)
@@ -1035,14 +1035,14 @@ function WT.BuildOptionsUI(f)
 	classPrev:SetSize(26, 22); classPrev:SetPoint("TOPLEFT", page, "TOPLEFT", 64, -54)
 	classPrev:SetText("<"); flatButton(classPrev)
 	local classLabel = label(page, "", 98, -58, 250)
-	classLabel:SetTextColor(0.92, 0.95, 0.97, 1)
+	ns.ui.Text(classLabel, "heading")
 	local classNext = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
 	classNext:SetSize(26, 22); classNext:SetPoint("TOPLEFT", page, "TOPLEFT", 352, -54)
 	classNext:SetText(">"); flatButton(classNext)
 	page.raceLabel, page.classLabel = raceLabel, classLabel
 
 	local message = label(page, "", 400, -30, PAGE_WIDTH - 410)
-	message:SetTextColor(0.95, 0.8, 0.4, 1)
+	ns.ui.Text(message, "muted")
 	page.message = message
 
 	-- Scrollable, reusable reference rows.
@@ -1109,7 +1109,7 @@ function WT.BuildOptionsUI(f)
 			block.label:SetText(entry.text or "")
 			local c = entry.color
 			if c then block.label:SetTextColor(c[1], c[2], c[3], 1)
-			else block.label:SetTextColor(0.9, 0.94, 0.97, 1) end
+			else ns.ui.Text(block.label) end
 			local lh = safe(block.label, "GetStringHeight") or 14
 			local shown = 0
 			if entry.trainers then
@@ -1247,7 +1247,7 @@ function WT.EnsureDetail()
 	bodyScroll:SetScrollChild(bodyContent)
 	local body = label(bodyContent, "", 0, 0, DETAIL_BODY_WIDTH)
 	body:SetWordWrap(true)
-	body:SetTextColor(0.9, 0.94, 0.97, 1)
+	ns.ui.Text(body)
 	bodyScroll:SetScript("OnMouseWheel", function(self, delta)
 		local range = safe(self, "GetVerticalScrollRange") or 0
 		local position = safe(self, "GetVerticalScroll") or 0
@@ -1269,7 +1269,7 @@ function WT.EnsureDetail()
 	background(statusBox, 0, 0, 480, 72)
 	local status = label(statusBox, "", 10, -6, 460)
 	status:SetWordWrap(true)
-	status:SetTextColor(0.7, 0.88, 0.8, 1)
+	ns.ui.Text(status, "muted")
 	safe(status, "SetMaxLines", 4)
 	f.statusBox, f.status = statusBox, status
 

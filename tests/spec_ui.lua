@@ -1,5 +1,5 @@
 local function click(w) w:GetScript("OnClick")(w) end
-local tabs = { settingsTab = "settings", spellsTab = "spells", notesTab = "notes", combatTab = "combat", weaponTab = "weapons" }
+local tabs = { settingsTab = "settings", spellsTab = "spells", notesTab = "notes", combatTab = "combat", weaponTab = "weapons", skinsTab = "skins", chatTab = "chat" }
 
 T.register("UI: sidebar navigation has one selection and disjoint readable rows", function()
 	local e = Mocks.NewEnv()
@@ -22,14 +22,69 @@ T.register("UI: layout stays inside shell and aside never covers page content", 
 	local e = Mocks.NewEnv()
 	local f = e.ns.OpenOptions()
 	local root = Mocks.FrameRect(f)
-	for _, page in ipairs({ f.sidebar, f.settingsPage, f.notesPage, f.combatPage, f.spellsPage, f.weaponPage, f.preview, f.helpPanel }) do
+	for _, page in ipairs({ f.sidebar, f.settingsPage, f.notesPage, f.combatPage, f.spellsPage, f.weaponPage, f.skinPage, f.chatPage, f.preview, f.helpPanel }) do
 		local r = Mocks.FrameRect(page)
 		assert_true(r.left >= root.left and r.right <= root.right and r.top <= root.top and r.bottom >= root.bottom)
 	end
-	for _, page in ipairs({ f.settingsPage, f.notesPage, f.combatPage, f.spellsPage }) do
+	for _, page in ipairs({ f.settingsPage, f.notesPage, f.combatPage, f.spellsPage, f.skinPage, f.chatPage }) do
 		assert_false(Mocks.RectsOverlap(Mocks.FrameRect(page), Mocks.FrameRect(f.sidebar)))
 		assert_false(Mocks.RectsOverlap(Mocks.FrameRect(page), Mocks.FrameRect(f.helpPanel)))
 	end
+end)
+
+T.register("UI: whole-addon skins recolor shared widgets, floating notes and persist", function()
+	local e = Mocks.NewEnv()
+	local f = e.ns.OpenOptions()
+	assert_eq(e.ns.db.uiSkin, "classic")
+	assert_true(f.skinPage ~= nil)
+	click(f.controls.skinsTab)
+	assert_eq(f.selectedTab, "skins")
+	assert_true(f.controls.skin_accentR ~= nil)
+	local notes = e.ns.notes.Open()
+	assert_true(e.ns.notes.UsesSkinColors())
+	click(f.skinButtons.ember)
+	assert_eq(e.ns.db.uiSkin, "ember")
+	assert_near(f.skinButtons.ember.uiFill._vertexColor[1], e.ns.ui.colors.selected[1])
+	assert_near(f.graphicsPage.rows.groundEffectDensity.slider._thumbTexture._vertexColor[1], e.ns.ui.colors.accent[1])
+	assert_near(notes._backdropColor[1], e.ns.ui.colors.noteWindow[1])
+	assert_near(notes.title._color[1], e.ns.ui.colors.noteTitle[1])
+	for _, role in ipairs({ "accent", "window", "panel", "text", "border" }) do
+		for component = 1, 3 do f.controls["skin_" .. role .. ({"R", "G", "B"})[component]]:SetText("0.4") end
+	end
+	click(f.skinApply)
+	assert_eq(e.ns.db.uiSkin, "custom")
+	assert_near(e.ns.ui.colors.accent[1], 0.4)
+	assert_near(e.ns.ui.colors.border[3], 0.4)
+	assert_eq(e.ns.db.notes.useSkinColors, true)
+	click(f.controls.notesTab)
+	f.controls.notesFollowSkin:SetChecked(false)
+	click(f.controls.notesFollowSkin)
+	assert_false(e.ns.notes.UsesSkinColors())
+	local customTitle = notes.title._color[1]
+	click(f.controls.skinsTab)
+	click(f.skinButtons.classic)
+	assert_near(notes.title._color[1], customTitle, 1e-6, "Notes keep custom colors when follow-skin is off")
+end)
+
+T.register("UI: custom skin palette is restored from saved settings on startup", function()
+	local e = Mocks.NewEnv()
+	local colors = {
+		accent = { 0.21, 0.43, 0.65 }, window = { 0.11, 0.22, 0.33 },
+		panel = { 0.31, 0.42, 0.53 }, text = { 0.81, 0.82, 0.83 }, border = { 0.41, 0.52, 0.63 },
+	}
+	assert_true(e.ns.ui.SetSkin("custom", colors, "ember"))
+	local saved = EllesmereUI_HoTPredictionDB
+	Mocks.Reset()
+	_G.EllesmereUI_HoTPredictionDB = saved
+	Mocks.BuildEUF()
+	local ns = Mocks.LoadAddon()
+	Mocks.Fire("ADDON_LOADED", "DoHelper")
+	assert_eq(ns.ui.currentSkin, "custom")
+	assert_eq(ns.ui.currentSkinBase, "ember")
+	assert_near(ns.ui.colors.accent[1], 0.21)
+	assert_near(ns.ui.colors.window[3], 0.33)
+	assert_near(ns.ui.colors.noteTitle[1], 0.21)
+	assert_near(ns.ui.colors.noteText[3], 0.83)
 end)
 
 T.register("UI: button styling preserves click handlers and tooltip hooks", function()
@@ -93,6 +148,7 @@ T.register("UI: notes page controls fit and do not overlap", function()
 	local keys = {
 		"notesPrev", "notesNext", "notesTitle", "notesNew", "notesDelete",
 		"notesWidth", "notesHeight", "notesOutline",
+		"notesFollowSkin",
 		"notesFont", "notesTextR", "notesTextG", "notesTextB",
 		"notesTitleR", "notesTitleG", "notesTitleB",
 		"notesBorderR", "notesBorderG", "notesBorderB",
