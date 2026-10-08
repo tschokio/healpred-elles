@@ -1117,6 +1117,9 @@ local function ensureWindow()
 		f.Refresh()
 	end)
 	UI.Button(f.controls.apply, "primary")
+	check("skipRLConfirm", "Skip EllesmereUI confirmation for /rl", -286,
+		function() return ns.db.skipRLConfirm end,
+		function(v) ns.db.skipRLConfirm = v and true or false end)
 	check("minimap", "Show minimap button (drag to reposition)", -363,
 		function() return not ns.db.minimapHidden end, function(v) command("minimap " .. (v and "on" or "off")) end)
 	check("exclude", "Advanced: native incoming heals exclude HoTs", -426,

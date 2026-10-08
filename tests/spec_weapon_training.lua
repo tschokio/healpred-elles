@@ -998,6 +998,8 @@ T.register("weapon training: DoHelper branding, aliases and legacy settings comp
 	assert_eq(SLASH_DOHELPER1, "/dohelper")
 	assert_eq(SLASH_DOHELPER2, "/dh")
 	assert_true(type(SlashCmdList["DOHELPER"]) == "function")
+	assert_eq(SLASH_DOHELPEROPEN1, "/do")
+	assert_true(type(SlashCmdList["DOHELPEROPEN"]) == "function")
 	-- Historical commands remain aliases.
 	assert_eq(SLASH_ELLESMEREUIHOTPRED1, "/euihot")
 	assert_eq(SLASH_ELLESMEREUIHOTPRED2, "/hotpred")
@@ -1008,6 +1010,10 @@ T.register("weapon training: DoHelper branding, aliases and legacy settings comp
 	local f = e.ns.optionsWindow
 	assert_true(f:IsShown())
 	assert_eq(f.selectedTab, "weapons")
+	f:Hide()
+	SlashCmdList["DOHELPEROPEN"]()
+	assert_true(f:IsShown(), "/do opens the DoHelper options window")
+	assert_eq(f.selectedTab, "weapons", "/do preserves the last selected tab")
 	click(f.controls.settingsTab)
 	e.ns.HandleCommand("weapons")
 	assert_eq(e.ns.optionsWindow.selectedTab, "weapons")

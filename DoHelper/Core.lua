@@ -209,6 +209,7 @@ ns.DEFAULTS = {
 	schema = 2,                    -- migration marker; never edit by hand
 	enabled = true,
 	debug = false,
+	skipRLConfirm = false,        -- use the native /reload command instead of EllesmereUI's /rl prompt
 	alpha = 0.60,                  -- our segment's opacity (composited with native)
 	shareNativeStyle = true,       -- inherit native texture/color (default)
 	overlayColor = { 1.0, 0.82, 0.0 },
@@ -249,7 +250,7 @@ ns.DEFAULTS = {
 	-- enterColor / leaveColor are independent; `color` remains as the legacy
 	-- fallback for old saved data and old SetStyle callers.
 	combatText = {
-		enabled = true,
+		enabled = false,
 		enterText = "+ combat",
 		leaveText = "- combat",
 		fontSize = 22,
@@ -1003,6 +1004,10 @@ function ns.SetupSlash()
 	SLASH_DOHELPER2 = "/dh"
 	SlashCmdList["DOHELPER"] = function(msg)
 		ns.HandleCommand(msg)
+	end
+	SLASH_DOHELPEROPEN1 = "/do"
+	SlashCmdList["DOHELPEROPEN"] = function()
+		if ns.OpenOptions then ns.OpenOptions() else ns.print("settings are not ready yet.") end
 	end
 end
 

@@ -85,7 +85,7 @@ function combat.Style()
 	if x == nil then x = 0 end
 	if y == nil then y = 0 end
 	return {
-		enabled = d.enabled ~= false,
+		enabled = d.enabled == true,
 		x = clamp(x, LIMITS.offset[1], LIMITS.offset[2]),
 		y = clamp(y, LIMITS.offset[1], LIMITS.offset[2]),
 		enterText = cleanLabel(d.enterText) or "+ combat",

@@ -5,6 +5,11 @@ local function click(widget, ...)
 	widget:GetScript("OnClick")(widget, ...)
 end
 
+local function optIn(env)
+	env.ns.db.combatText.enabled = true
+	env.ns.combatText.Refresh()
+end
+
 local function style(ct, o)
 	o = o or {}
 	return ct.SetStyle({
@@ -44,6 +49,10 @@ T.register("combat text: enter and leave transitions show the matching label", f
 	assert_not_nil(ct.eventFrame, "combat text owns an event frame")
 	local f = ct.EnsureFrame()
 	assert_false(f:IsShown(), "hidden until the first transition")
+	assert_false(ct.Enabled(), "disabled by default until the user opts in")
+	ct.Show("enter")
+	assert_false(f:IsShown(), "disabled combat text ignores transitions")
+	e.ns.db.combatText.enabled = true
 	ct.eventFrame:GetScript("OnEvent")(ct.eventFrame, "PLAYER_REGEN_DISABLED")
 	assert_true(f:IsShown())
 	assert_eq(f.label:GetText(), "+ combat")
@@ -55,6 +64,7 @@ end)
 
 T.register("combat text: timed line hides after its duration and 0 stays until the next change", function()
 	local e = Mocks.NewEnv()
+	optIn(e)
 	local ct = e.ns.combatText
 	assert_true(style(ct, { duration = 2, distance = 0 }))
 	local f = ct.EnsureFrame()
@@ -76,6 +86,7 @@ end)
 
 T.register("combat text: scroll motion progresses and a sticky line settles with no permanent updater", function()
 	local e = Mocks.NewEnv()
+	optIn(e)
 	local ct = e.ns.combatText
 	assert_true(style(ct, { duration = 0, fade = 0, distance = 18, motion = 1, direction = "up" }))
 	local f = ct.EnsureFrame()
@@ -109,6 +120,7 @@ end)
 
 T.register("combat text: direction down and none are honoured", function()
 	local e = Mocks.NewEnv()
+	optIn(e)
 	local ct = e.ns.combatText
 	assert_true(style(ct, { duration = 0, fade = 0, distance = 25, motion = 1, direction = "down" }))
 	local f = ct.EnsureFrame()
@@ -129,6 +141,7 @@ end)
 
 T.register("combat text: unlocking freezes the scroll at the saved base before dragging", function()
 	local e = Mocks.NewEnv()
+	optIn(e)
 	local ct = e.ns.combatText
 	assert_true(style(ct, { x = 120, y = -40, duration = 0, fade = 0, distance = 18, motion = 1 }))
 	local f = ct.EnsureFrame()
@@ -241,6 +254,7 @@ end)
 
 T.register("combat text: custom labels are used and validated", function()
 	local e = Mocks.NewEnv()
+	optIn(e)
 	local ct = e.ns.combatText
 	assert_true(style(ct, { enterText = "COMBAT!", leaveText = "safe" }))
 	local f = ct.EnsureFrame()
@@ -254,6 +268,7 @@ end)
 
 T.register("combat text: disabling hides it and suppresses transitions", function()
 	local e = Mocks.NewEnv()
+	optIn(e)
 	local ct = e.ns.combatText
 	local f = ct.EnsureFrame()
 	ct.Show("enter"); assert_true(f:IsShown())
@@ -432,6 +447,7 @@ end)
 
 T.register("combat text: an unlocked line is click-through during combat and draggable after", function()
 	local e = Mocks.NewEnv()
+	optIn(e)
 	local ct = e.ns.combatText
 	ct.SetUnlocked(true)
 	local f = ct.EnsureFrame()
@@ -459,6 +475,7 @@ end)
 
 T.register("combat text: corrupted nested colours cannot raise or retain secrets", function()
 	local e = Mocks.NewEnv()
+	optIn(e)
 	local ct = e.ns.combatText
 	e.ns.db.combatText.enterColor = { Mocks.MakeSecret(), 0.5, 0.5 }
 	e.ns.db.combatText.leaveColor = { 0.1, Mocks.MakeSecret(), 0.2 }
@@ -517,10 +534,12 @@ T.register("combat text: enable checkbox toggles state, hides visible line immed
 	local f = e.ns.OpenOptions("combat")
 	local cb = f.controls.combatEnabled
 	assert_not_nil(cb, "combatEnabled checkbox exists")
-	assert_true(cb:GetChecked(), "enabled by default")
+	assert_false(cb:GetChecked(), "disabled by default until the user opts in")
 
-	-- Show combat text line
+	-- Opt in, show a line, then verify turning it back off hides it immediately.
 	local textFrame = ct.EnsureFrame()
+	cb:SetChecked(true)
+	cb:GetScript("OnClick")(cb)
 	ct.Show("enter")
 	assert_true(textFrame:IsShown(), "text is visible before disabling")
 
@@ -560,7 +579,7 @@ T.register("combat text: checkbox reflects slash-command changes and persists ac
 	local e = Mocks.NewEnv()
 	local f = e.ns.OpenOptions("combat")
 	local cb = f.controls.combatEnabled
-	assert_true(cb:GetChecked())
+	assert_false(cb:GetChecked(), "combat text is opt-in")
 
 	-- Slash command disables combat text; options checkbox reflects it
 	e.ns.HandleCommand("combattext off")
