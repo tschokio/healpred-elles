@@ -16,10 +16,12 @@ local NAVIGATION = {
 	{ "combatTab", "combat", "Combat text", "Customize the indicator shown when entering or leaving combat." },
 	{ "weaponTab", "weapons", "Weapon training", "Find proficiencies, starting skills and weapon trainers." },
 	{ "graphicsTab", "graphics", "Graphics", "Tune world scenery, sharpening and reflections, then share your console settings." },
+	{ "chatTab", "chat", "Chat items", "Optional item-link tooltips and repeat-click previews in chat." },
 }
 local HELP = {
 	notes = { "YOUR NOTEPAD", "A place for reminders", "Use the arrows to switch topics. New topic creates a separate note; edit its title and press Enter to rename it.\n\nYour edits save as you type. The floating window mirrors the active topic.\n\nClick the arrow beside Do to collapse it to a tiny Do ^ toggle. Drag its header to move it.", "Editing locks during combat. Switching topics remains available." },
 	combat = { "COMBAT INDICATOR", "Clear, quiet feedback", "Choose your enter and leave labels, independent enter/leave colours, the text size and the timing.\n\nDirection and distance scroll the line up or down; 0 distance disables motion. Motion always restarts from the saved position.\n\nA duration of 0 keeps the label until the next transition (after the scroll settles).\n\nUse Preview + and Preview - to test without starting combat. Unlock to drag, then lock again to restore click-through.", "Size, colours and position remain independent of the settings theme." },
+	chat = { "CHAT ITEM LINKS", "Optional item-link helpers", "Enable a tooltip when hovering item links in Blizzard chat frames. You can also make a second click on the same item link close its native item preview.\n\nBoth options apply to Blizzard chat frames and are independent of EllesmereUI code.", "Both settings are off by default." },
 }
 
 local function safe(obj, method, ...)
@@ -462,7 +464,7 @@ local function ensureWindow()
 	UI.Rect(f, 16, -74, 968, 1, UI.colors.border)
 	f.sidebar = panel(f, 16, -84, 164, 584)
 	UI.Label(f.sidebar, "PERSONALIZE", 12, -16, 140, "section")
-	UI.Label(f.sidebar, "TOOLS", 12, -316, 140, "section")
+	UI.Label(f.sidebar, "TOOLS", 12, -380, 140, "section")
 	f.sidebarStatus = UI.Label(f.sidebar, "", 12, -544, 140, "muted")
 	UI.Label(f.sidebar, "/dohelper options", 12, -562, 140, "muted")
 	f.pageTitle = UI.Label(f, "", 212, -88, 750, "heading")
@@ -490,6 +492,11 @@ local function ensureWindow()
 	catalog:SetSize(510, 492)
 	catalog:SetPoint("TOPLEFT", f, "TOPLEFT", f.contentX, f.contentY)
 	f.spellsPage = catalog
+	local chatPage = CreateFrame("Frame", nil, f)
+	chatPage:SetSize(540, 610)
+	chatPage:SetPoint("TOPLEFT", f, "TOPLEFT", 196, -62)
+	f.chatPage = chatPage
+	background(chatPage, 12, -54, 516, 190)
 	background(catalog, -3, 4, 516, 492)
 	local catalogHeading = label(catalog, "503 spellbook entries reviewed | select a class", 8, -5, 482)
 	catalogHeading:SetTextColor(0.55, 0.75, 0.78, 1)
@@ -1026,6 +1033,7 @@ local function ensureWindow()
 		notesPage:SetShown(tab == "notes")
 		combatPage:SetShown(tab == "combat")
 		if f.weaponPage then f.weaponPage:SetShown(tab == "weapons") end
+		chatPage:SetShown(tab == "chat")
 		if f.graphicsPage then f.graphicsPage:SetShown(tab == "graphics") end
 		f.preview:SetShown(tab == "settings" or tab == "spells")
 		local help = HELP[tab]
@@ -1045,6 +1053,8 @@ local function ensureWindow()
 			if f.weaponPage and f.weaponPage.Refresh then f.weaponPage.Refresh() end
 		elseif tab == "graphics" then
 			if f.graphicsPage then f.graphicsPage.Refresh() end
+		elseif tab == "chat" then
+			-- Controls are SavedVariables-backed; no separate refresh action is needed.
 		end
 		for _, item in ipairs(NAVIGATION) do
 			UI.Selected(f.controls[item[1]], tab == item[2])
@@ -1061,6 +1071,23 @@ local function ensureWindow()
 		UI.Checkbox(c)
 		f.controls[key] = c
 	end
+	UI.Label(chatPage, "ITEM LINK OPTIONS", 24, -70, 470, "section")
+	local function chatCheck(key, title, description, y)
+		local c = CreateFrame("CheckButton", nil, chatPage, "UICheckButtonTemplate")
+		c:SetSize(26, 26)
+		c:SetPoint("TOPLEFT", chatPage, "TOPLEFT", 24, y)
+		label(chatPage, title, 58, y - 6, 430)
+		local detail = UI.Label(chatPage, description, 58, y - 27, 430, "muted")
+		UI.Text(detail, "muted")
+		c.read = function() return ns.db[key] == true end
+		c:SetScript("OnClick", function(self)
+			if not refreshing then ns.db[key] = self:GetChecked() and true or false; f.Refresh() end
+		end)
+		UI.Checkbox(c)
+		f.controls[key] = c
+	end
+	chatCheck("chatItemTooltipOnHover", "Show item tooltips on hover", "Display the item tooltip while the pointer is over an item link.", -92)
+	chatCheck("chatItemPreviewToggle", "Toggle item preview on repeat click", "Click an item link again to close its native preview.", -145)
 	check("enabled", "Enable helper (healing overlay and next-swing borders)", -88, function() return ns.db.enabled end,
 		function(v) command("enable " .. (v and "on" or "off")) end)
 	check("approximate", "Approximate tooltip prediction (for restricted Forever)", -120,
@@ -1129,7 +1156,7 @@ local function ensureWindow()
 		function(v) command("debug " .. (v and "on" or "off")) end)
 	button("preview", "Test +1000", 16, -419, 90, function() command("test 1000") end)
 	button("stop", "Stop test", 114, -419, 94, function() command("test off") end)
-	button("diagnostics", "Diagnostics", 8, -386, 148, function() ns.OpenDebugWindow() end)
+	button("diagnostics", "Diagnostics", 8, -416, 148, function() ns.OpenDebugWindow() end)
 	local status = UI.Text(label(f.preview, "", 16, -458, 192), "muted")
 	check("queue", "Highlight genuinely queued next-swing attacks", -532,
 		function() return ns.db.queuedSwingEnabled end, function(v) command("queue " .. (v and "on" or "off")) end)
@@ -1141,7 +1168,7 @@ local function ensureWindow()
 		local tab = item[2]
 		button(item[1], item[3], 8, -36 - (i - 1) * 42, 148, function() f.SelectTab(tab) end)
 	end
-	button("manageTab", "Manage spells", 8, -344, 148, function() ns.OpenSpellEditor() end)
+	button("manageTab", "Manage spells", 8, -456, 148, function() ns.OpenSpellEditor() end)
 	f.Refresh = function()
 		refreshing = true
 		for _, c in pairs(f.controls) do if c.read then c:SetChecked(c.read()) end end

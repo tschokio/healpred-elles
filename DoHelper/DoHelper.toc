@@ -28,3 +28,4 @@ Graphics.lua
 Options.lua
 ActionBarPressed.lua
 ReloadPrompt.lua
+ChatItemLinks.lua

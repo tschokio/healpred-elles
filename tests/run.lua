@@ -51,6 +51,7 @@ loadRel("tests/spec_notes.lua")
 loadRel("tests/spec_combat_text.lua")
 loadRel("tests/spec_weapon_training.lua")
 loadRel("tests/spec_ui.lua")
+loadRel("tests/spec_chat_item_links.lua")
 loadRel("tests/spec_graphics.lua")
 loadRel("tests/spec_camping.lua")
 
