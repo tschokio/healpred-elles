@@ -497,7 +497,7 @@ local function ensureWindow()
 	chatPage:SetSize(540, 610)
 	chatPage:SetPoint("TOPLEFT", f, "TOPLEFT", 196, -62)
 	f.chatPage = chatPage
-	background(chatPage, 12, -54, 516, 190)
+	background(chatPage, 12, -54, 516, 420)
 	background(catalog, -3, 4, 516, 492)
 	local catalogHeading = label(catalog, "503 spellbook entries reviewed | select a class", 8, -5, 482)
 	UI.Text(catalogHeading, "muted")
@@ -1172,7 +1172,57 @@ local function ensureWindow()
 		f.controls[key] = c
 	end
 	chatCheck("chatItemTooltipOnHover", "Show item tooltips on hover", "Display the item tooltip while the pointer is over an item link.", -92)
-	chatCheck("chatItemPreviewToggle", "Toggle item preview on repeat click", "Click an item link again to close its native preview.", -145)
+	chatCheck("chatItemPreviewToggle", "Enable managed clicked previews", "Repeat-click an item to close it; managed previews support timers and multiple items.", -145)
+	local function chatSlider(key, title, y, minimum, maximum, step, formatValue)
+		local heading = UI.Label(chatPage, title, 24, y, 350, "body")
+		local valueLabel = UI.Label(chatPage, "", 390, y, 110, "muted")
+		valueLabel:SetJustifyH("RIGHT")
+		local slider = CreateFrame("Slider", nil, chatPage)
+		slider:SetSize(476, 18)
+		slider:SetPoint("TOPLEFT", chatPage, "TOPLEFT", 24, y - 25)
+		slider:SetOrientation("HORIZONTAL")
+		slider:SetMinMaxValues(minimum, maximum)
+		slider:SetValueStep(step)
+		if slider.SetObeyStepOnDrag then slider:SetObeyStepOnDrag(true) end
+		UI.Background(slider, 0, -7, 476, 4)
+		local thumb = slider:CreateTexture(nil, "ARTWORK")
+		thumb:SetTexture(UI.WHITE); thumb:SetSize(10, 18); UI.Tint(thumb, "accent")
+		slider:SetThumbTexture(thumb)
+		local function normalize(value)
+			if ns.isSecret(value) then value = nil end
+			value = tonumber(value) or minimum
+			value = math.floor(value / step + 0.5) * step
+			return math.max(minimum, math.min(maximum, value))
+		end
+		local function display(value)
+			value = normalize(value)
+			valueLabel:SetText(formatValue(value))
+		end
+		slider:SetScript("OnValueChanged", function(_, value)
+			value = normalize(value)
+			if not refreshing then ns.db[key] = value end
+			if key == "chatItemTooltipLimit" and ns.chatItemLinks and ns.chatItemLinks.EnforceLimit then
+				ns.chatItemLinks.EnforceLimit()
+			end
+			display(value)
+		end)
+		slider.RefreshValue = function() slider:SetValue(normalize(ns.db[key])) end
+		slider.RefreshValue()
+		f.controls[key] = slider
+		return slider
+	end
+	chatSlider("chatItemHoverLingerMs", "Hover tooltip linger after leaving", -205, 0, 5000, 100,
+		function(value) return value .. " ms" end)
+	chatSlider("chatItemClickDurationMs", "Clicked preview auto-close (0 = never)", -280, 0, 5000, 100,
+		function(value) return value == 0 and "Never" or (value .. " ms") end)
+	chatSlider("chatItemTooltipLimit", "Maximum simultaneous item tooltips", -355, 1, 10, 1,
+		function(value) return value .. (value == 1 and " item" or " items") end)
+	f.RefreshChat = function()
+		for _, key in ipairs({ "chatItemHoverLingerMs", "chatItemClickDurationMs", "chatItemTooltipLimit" }) do
+			local slider = f.controls[key]
+			if slider and slider.RefreshValue then slider.RefreshValue() end
+		end
+	end
 	check("enabled", "Enable helper (healing overlay and next-swing borders)", -88, function() return ns.db.enabled end,
 		function(v) command("enable " .. (v and "on" or "off")) end)
 	check("approximate", "Approximate tooltip prediction (for restricted Forever)", -120,
@@ -1266,6 +1316,7 @@ local function ensureWindow()
 		if f.RefreshNotes then f.RefreshNotes() end
 		if f.RefreshCombat then f.RefreshCombat() end
 		if f.RefreshSkin then f.RefreshSkin() end
+		if f.RefreshChat then f.RefreshChat() end
 		if f.weaponPage and f.weaponPage.Refresh then f.weaponPage.Refresh() end
 		refreshing = false
 	end
