@@ -1,5 +1,5 @@
 local function click(w) w:GetScript("OnClick")(w) end
-local tabs = { settingsTab = "settings", spellsTab = "spells", notesTab = "notes", combatTab = "combat", weaponTab = "weapons", skinsTab = "skins", chatTab = "chat" }
+local tabs = { settingsTab = "settings", spellsTab = "spells", notesTab = "notes", combatTab = "combat", weaponTab = "weapons", skinsTab = "skins", chatTab = "chat", lootWindowTab = "loot" }
 
 T.register("UI: sidebar navigation has one selection and disjoint readable rows", function()
 	local e = Mocks.NewEnv()
@@ -22,11 +22,11 @@ T.register("UI: layout stays inside shell and aside never covers page content", 
 	local e = Mocks.NewEnv()
 	local f = e.ns.OpenOptions()
 	local root = Mocks.FrameRect(f)
-	for _, page in ipairs({ f.sidebar, f.settingsPage, f.notesPage, f.combatPage, f.spellsPage, f.weaponPage, f.skinPage, f.chatPage, f.preview, f.helpPanel }) do
+	for _, page in ipairs({ f.sidebar, f.settingsPage, f.notesPage, f.combatPage, f.spellsPage, f.weaponPage, f.skinPage, f.chatPage, f.lootPage, f.preview, f.helpPanel }) do
 		local r = Mocks.FrameRect(page)
 		assert_true(r.left >= root.left and r.right <= root.right and r.top <= root.top and r.bottom >= root.bottom)
 	end
-	for _, page in ipairs({ f.settingsPage, f.notesPage, f.combatPage, f.spellsPage, f.skinPage, f.chatPage }) do
+	for _, page in ipairs({ f.settingsPage, f.notesPage, f.combatPage, f.spellsPage, f.skinPage, f.chatPage, f.lootPage }) do
 		assert_false(Mocks.RectsOverlap(Mocks.FrameRect(page), Mocks.FrameRect(f.sidebar)))
 		assert_false(Mocks.RectsOverlap(Mocks.FrameRect(page), Mocks.FrameRect(f.helpPanel)))
 	end
@@ -64,6 +64,40 @@ T.register("UI: whole-addon skins recolor shared widgets, floating notes and per
 	click(f.controls.skinsTab)
 	click(f.skinButtons.classic)
 	assert_near(notes.title._color[1], customTitle, 1e-6, "Notes keep custom colors when follow-skin is off")
+end)
+
+T.register("UI: Classic WoW, EllesmereUI and transparent skins change visual treatments", function()
+	local e = Mocks.NewEnv()
+	local f = e.ns.OpenOptions("skins")
+	click(f.skinButtons.classic)
+	assert_eq(e.ns.ui.currentStyle, "classic")
+	assert_eq(f._backdrop.edgeFile, "Interface\\DialogFrame\\UI-DialogBox-Border")
+	assert_eq(f.preview._backdrop.edgeFile, e.ns.ui.WHITE, "Classic reserves the ornate frame for windows")
+	assert_eq(f.heading:GetFont(), "Fonts\\FRIZQT__.TTF")
+	click(f.skinButtons.ellesmere)
+	assert_eq(e.ns.ui.currentStyle, "ellesmere")
+	assert_eq(f._backdrop.edgeFile, e.ns.ui.WHITE)
+	assert_eq(f._backdrop.edgeSize, 2, "EllesmereUI has a stronger square frame")
+	assert_eq(f.heading:GetFont(), "Fonts\\ARIALN.TTF")
+	click(f.skinButtons.transparent)
+	assert_eq(e.ns.ui.currentStyle, "transparent")
+	assert_true(f._backdropColor[4] < 1, "transparent style uses translucent window surfaces")
+	assert_true(f.skinPage.background._vertexColor[4] < 1, "transparent style fades panel fills too")
+	assert_eq(e.ns.db.uiSkin, "transparent")
+	assert_true(e.ns.ui.SetSkin("custom", e.ns.ui.Palette("transparent"), "transparent"))
+	assert_eq(e.ns.ui.currentStyle, "transparent", "custom colors preserve their base visual style")
+	assert_true(f._backdropColor[4] < 1, "custom colors retain the transparent base opacity")
+	local page = Mocks.FrameRect(f.skinPage)
+	for _, name in ipairs({ "classic", "ellesmere", "transparent", "ember", "neutral", "original", "custom" }) do
+		local bounds = Mocks.FrameRect(f.skinButtons[name])
+		assert_true(bounds.left >= page.left and bounds.right <= page.right and bounds.top <= page.top and bounds.bottom >= page.bottom)
+	end
+	for i, name in ipairs({ "classic", "ellesmere", "transparent", "ember", "neutral", "original", "custom" }) do
+		for j = i + 1, 7 do
+			local names = { "classic", "ellesmere", "transparent", "ember", "neutral", "original", "custom" }
+			assert_false(Mocks.RectsOverlap(Mocks.FrameRect(f.skinButtons[name]), Mocks.FrameRect(f.skinButtons[names[j]])))
+		end
+	end
 end)
 
 T.register("UI: custom skin palette is restored from saved settings on startup", function()

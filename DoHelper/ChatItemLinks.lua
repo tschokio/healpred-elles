@@ -36,6 +36,8 @@ end
 
 local function releaseFrame(frame)
 	if not frame then return end
+	frame._doHelperChatRecord = nil
+	if frame.EnableMouse then frame:EnableMouse(false) end
 	if frame.Hide then frame:Hide() end
 	if frame.ClearLines then frame:ClearLines() end
 	pool[#pool + 1] = frame
@@ -73,20 +75,66 @@ local function acquireFrame()
 	local ok, created = pcall(_G.CreateFrame, "GameTooltip", "DoHelperChatItemTooltip" .. tooltipSerial, _G.UIParent, "GameTooltipTemplate")
 	if not ok or not created then return nil end
 	if created.SetClampedToScreen then created:SetClampedToScreen(true) end
+	if created.EnableMouse then created:EnableMouse(false) end
 	return created
 end
 
-local function cursorPoint()
-	local x, y = 24, 24
-	if type(_G.GetCursorPosition) == "function" then
-		local ok, cx, cy = pcall(_G.GetCursorPosition)
-		if ok and type(cx) == "number" and type(cy) == "number" then
-			local scale = _G.UIParent and _G.UIParent.GetEffectiveScale and _G.UIParent:GetEffectiveScale() or 1
-			if type(scale) ~= "number" or scale <= 0 then scale = 1 end
-			x, y = cx / scale, cy / scale
+local function ratio(value, fallback)
+	if ns.isSecret and ns.isSecret(value) then return fallback end
+	local number = tonumber(value)
+	if not number or number ~= number or number == math.huge or number == -math.huge then return fallback end
+	return math.max(0, math.min(1, number))
+end
+
+local function savedPosition()
+	local parent = _G.UIParent
+	local width = parent and parent.GetWidth and ns.toNumber(parent:GetWidth())
+	local height = parent and parent.GetHeight and ns.toNumber(parent:GetHeight())
+	if not width or not height or width <= 0 or height <= 0 then return 24, 24 end
+	local saved = ns.db and ns.db.chatItemPreviewPosition
+	if ns.isSecret and ns.isSecret(saved) then saved = nil end
+	local x = ratio(type(saved) == "table" and saved.x, 0.5)
+	local y = ratio(type(saved) == "table" and saved.y, 0.5)
+	return x * width, y * height
+end
+
+local function rememberPosition(frame)
+	local parent = _G.UIParent
+	if not parent or not frame.GetLeft or not frame.GetBottom or not frame.ClearAllPoints or not frame.SetPoint
+		or not parent.GetWidth or not parent.GetHeight then return end
+	local left, bottom = ns.toNumber(frame:GetLeft()), ns.toNumber(frame:GetBottom())
+	local width, height = ns.toNumber(parent:GetWidth()), ns.toNumber(parent:GetHeight())
+	if not left or not bottom or not width or not height or width <= 0 or height <= 0 then return end
+	local x, y = ratio(left / width, 0.5), ratio(bottom / height, 0.5)
+	ns.db.chatItemPreviewPosition = { x = x, y = y }
+	local record = frame._doHelperChatRecord
+	if record then record.x, record.y = x * width, y * height end
+	frame:ClearAllPoints()
+	frame:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", x * width, y * height)
+end
+
+local function configureDragging(frame)
+	if frame._doHelperDragConfigured then return end
+	frame._doHelperDragConfigured = true
+	if type(frame.SetMovable) ~= "function" or type(frame.RegisterForDrag) ~= "function"
+		or type(frame.SetScript) ~= "function" or type(frame.StartMoving) ~= "function"
+		or type(frame.StopMovingOrSizing) ~= "function" then return end
+	frame:SetMovable(true)
+	frame:RegisterForDrag("LeftButton")
+	frame:SetScript("OnDragStart", function(self)
+		if type(_G.IsShiftKeyDown) == "function" then
+			local ok, down = pcall(_G.IsShiftKeyDown)
+			if not ok or not down then return end
 		end
-	end
-	return x, y
+		self._doHelperDragging = true
+		self:StartMoving()
+	end)
+	frame:SetScript("OnDragStop", function(self)
+		if not self._doHelperDragging then return end
+		self._doHelperDragging = nil
+		self:StopMovingOrSizing()
+		rememberPosition(self)
+	end)
 end
 
 local function getOrCreate(frame, link)
@@ -100,7 +148,7 @@ local function getOrCreate(frame, link)
 		if tooltip then releaseFrame(tooltip) end
 		return nil
 	end
-	local x, y = cursorPoint()
+	local x, y = savedPosition()
 	record = { key = key, link = link, frame = tooltip, owner = frame, x = x, y = y }
 	active[#active + 1] = record
 	return record
@@ -112,6 +160,9 @@ local function showRecord(record, frame, link, clicked)
 	local _, index = lookup(record.key)
 	record.owner, record.link = frame, link
 	local pinned = clicked or record.clicked
+	tooltip._doHelperChatRecord = record
+	if pinned then configureDragging(tooltip) end
+	if tooltip.EnableMouse then tooltip:EnableMouse(pinned and true or false) end
 	if index == 1 and not pinned then
 		tooltip:SetOwner(frame or _G.UIParent, "ANCHOR_CURSOR")
 	else
@@ -136,6 +187,9 @@ local function showRecord(record, frame, link, clicked)
 	-- On modern clients TooltipDataProcessor normally decorates synchronously;
 	-- this explicit pass also covers legacy clients and our custom preview frames.
 	if ns.Camping and ns.Camping.Decorate then pcall(ns.Camping.Decorate, tooltip) end
+	if pinned and tooltip.AddLine then
+		pcall(tooltip.AddLine, tooltip, "Shift-drag to move; position is saved.", 0.7, 0.82, 1)
+	end
 	if tooltip.Show then tooltip:Show() end
 	if _G.GameTooltip and _G.GameTooltip ~= tooltip and _G.GameTooltip.Hide then _G.GameTooltip:Hide() end
 	return true
@@ -184,9 +238,9 @@ function links.OnHyperlinkClick(frame, link)
 		return
 	end
 	if not record then record = getOrCreate(frame, link) end
-	-- Pin the clicked preview at the click position instead of letting an
+	-- Pin the clicked preview at the saved position instead of letting an
 	-- ANCHOR_CURSOR tooltip follow the pointer around the screen.
-	record.x, record.y = cursorPoint()
+	record.x, record.y = savedPosition()
 	if not showRecord(record, frame, link, true) then return end
 	record.clicked = true
 	if _G.ItemRefTooltip and _G.ItemRefTooltip.Hide then _G.ItemRefTooltip:Hide() end

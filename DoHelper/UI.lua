@@ -9,7 +9,8 @@ UI.FONT = "Fonts\\ARIALN.TTF"
 UI.WHITE = "Interface\\Buttons\\WHITE8X8"
 UI.themes = {
 	classic = {
-		label = "Classic parchment",
+		label = "Classic WoW",
+		style = "classic",
 		window = { 0.12, 0.085, 0.045, 0.98 }, panel = { 0.18, 0.13, 0.07, 1 },
 		input = { 0.075, 0.052, 0.03, 1 }, border = { 0.50, 0.34, 0.12, 1 },
 		text = { 0.95, 0.87, 0.69, 1 }, muted = { 0.72, 0.60, 0.40, 1 },
@@ -22,6 +23,7 @@ UI.themes = {
 	},
 	ember = {
 		label = "Ember and iron",
+		style = "flat",
 		window = { 0.075, 0.055, 0.05, 0.99 }, panel = { 0.13, 0.09, 0.075, 1 },
 		input = { 0.04, 0.03, 0.027, 1 }, border = { 0.46, 0.25, 0.14, 1 },
 		text = { 0.91, 0.86, 0.80, 1 }, muted = { 0.66, 0.57, 0.52, 1 },
@@ -34,6 +36,7 @@ UI.themes = {
 	},
 	neutral = {
 		label = "Neutral charcoal",
+		style = "flat",
 		window = { 0.08, 0.08, 0.075, 0.99 }, panel = { 0.14, 0.14, 0.13, 1 },
 		input = { 0.035, 0.035, 0.033, 1 }, border = { 0.37, 0.34, 0.27, 1 },
 		text = { 0.91, 0.90, 0.86, 1 }, muted = { 0.67, 0.65, 0.58, 1 },
@@ -46,6 +49,7 @@ UI.themes = {
 	},
 	original = {
 		label = "Original teal",
+		style = "flat",
 		window = { 0.035, 0.045, 0.065, 0.99 }, panel = { 0.052, 0.068, 0.092, 1 },
 		input = { 0.026, 0.037, 0.054, 1 }, border = { 0.15, 0.20, 0.27, 1 },
 		text = { 0.90, 0.94, 0.98, 1 }, muted = { 0.60, 0.68, 0.77, 1 },
@@ -56,15 +60,71 @@ UI.themes = {
 		noteText = { 0.90, 0.94, 0.98, 1 }, noteTitle = { 0.32, 0.83, 0.73, 1 },
 		noteBorder = { 0.20, 0.30, 0.34, 1 },
 	},
+	ellesmere = {
+		label = "EllesmereUI",
+		style = "ellesmere",
+		window = { 0.035, 0.048, 0.061, 0.99 }, panel = { 0.055, 0.077, 0.096, 1 },
+		input = { 0.018, 0.03, 0.041, 1 }, border = { 0.12, 0.40, 0.48, 1 },
+		text = { 0.88, 0.94, 0.97, 1 }, muted = { 0.56, 0.70, 0.75, 1 },
+		accent = { 0.25, 0.80, 0.86, 1 }, button = { 0.06, 0.10, 0.12, 1 },
+		hover = { 0.09, 0.17, 0.19, 1 }, selected = { 0.06, 0.21, 0.24, 1 },
+		primary = { 0.05, 0.34, 0.39, 1 }, danger = { 0.82, 0.30, 0.34, 1 },
+		noteWindow = { 0.03, 0.05, 0.07, 0.97 }, noteEditor = { 0.015, 0.025, 0.035, 0.92 },
+		noteText = { 0.89, 0.95, 0.98, 1 }, noteTitle = { 0.25, 0.80, 0.86, 1 },
+		noteBorder = { 0.12, 0.40, 0.48, 1 },
+	},
+	transparent = {
+		label = "Transparent glass",
+		style = "transparent",
+		window = { 0.025, 0.04, 0.065, 0.58 }, panel = { 0.025, 0.05, 0.08, 0.38 },
+		input = { 0.015, 0.028, 0.045, 0.34 }, border = { 0.32, 0.56, 0.76, 0.76 },
+		text = { 0.94, 0.97, 1, 1 }, muted = { 0.67, 0.78, 0.89, 1 },
+		accent = { 0.35, 0.82, 1, 1 }, button = { 0.03, 0.07, 0.10, 0.46 },
+		hover = { 0.06, 0.15, 0.23, 0.64 }, selected = { 0.08, 0.22, 0.34, 0.72 },
+		primary = { 0.05, 0.38, 0.58, 0.78 }, danger = { 0.82, 0.29, 0.38, 0.84 },
+		noteWindow = { 0.025, 0.04, 0.065, 0.60 }, noteEditor = { 0.015, 0.03, 0.05, 0.30 },
+		noteText = { 0.94, 0.97, 1, 1 }, noteTitle = { 0.35, 0.82, 1, 1 },
+		noteBorder = { 0.32, 0.56, 0.76, 0.76 },
+	},
 }
+UI.styles = {
+	classic = {
+		font = "Fonts\\FRIZQT__.TTF",
+		edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+		edgeSize = 16, inputEdgeSize = 1,
+		insets = { left = 7, right = 7, top = 7, bottom = 7 },
+		detailEdgeFile = UI.WHITE, detailEdgeSize = 1,
+		detailInsets = { left = 1, right = 1, top = 1, bottom = 1 },
+		topLineHeight = 3,
+	},
+	flat = {
+		font = "Fonts\\ARIALN.TTF", edgeFile = UI.WHITE, edgeSize = 1,
+		detailEdgeFile = UI.WHITE, detailEdgeSize = 1, inputEdgeSize = 1,
+		insets = { left = 1, right = 1, top = 1, bottom = 1 }, topLineHeight = 2,
+	},
+	ellesmere = {
+		font = "Fonts\\ARIALN.TTF", edgeFile = UI.WHITE, edgeSize = 2,
+		detailEdgeFile = UI.WHITE, detailEdgeSize = 1, inputEdgeSize = 1,
+		insets = { left = 2, right = 2, top = 2, bottom = 2 },
+		detailInsets = { left = 1, right = 1, top = 1, bottom = 1 }, topLineHeight = 3,
+	},
+	transparent = {
+		font = "Fonts\\ARIALN.TTF", edgeFile = UI.WHITE, edgeSize = 1,
+		detailEdgeFile = UI.WHITE, detailEdgeSize = 1, inputEdgeSize = 1,
+		insets = { left = 1, right = 1, top = 1, bottom = 1 }, topLineHeight = 1,
+	},
+}
+UI.currentStyle = "classic"
 UI.colors = {}
 local colorRoles = { "window", "panel", "input", "border", "text", "muted", "accent", "button", "hover", "selected", "primary", "danger", "noteWindow", "noteEditor", "noteText", "noteTitle", "noteBorder" }
 local paletteRoles = { "window", "panel", "border", "text", "accent" }
 local customRoles = { window = true, panel = true, text = true, accent = true, border = true }
 local textColors = { body = "text", heading = "text", title = "text", muted = "muted", section = "accent" }
 local rectRoles, surfaceRoles = setmetatable({}, { __mode = "k" }), setmetatable({}, { __mode = "k" })
+local windowFrames = setmetatable({}, { __mode = "k" })
 local tintedTextures = setmetatable({}, { __mode = "k" })
 local textRoles, buttonWidgets = setmetatable({}, { __mode = "k" }), setmetatable({}, { __mode = "k" })
+local textSizes = setmetatable({}, { __mode = "k" })
 local inputWidgets, checkWidgets = setmetatable({}, { __mode = "k" }), setmetatable({}, { __mode = "k" })
 local roles = { body = 12, muted = 11, section = 11, heading = 18, title = 24 }
 local unpack = unpack or table.unpack
@@ -76,7 +136,8 @@ end
 function UI.Text(text, role)
 	role = role or "body"
 	textRoles[text] = textColors[role] or "text"
-	call(text, "SetFont", UI.FONT, roles[role] or 12, "")
+	textSizes[text] = roles[role] or 12
+	call(text, "SetFont", UI.FONT, textSizes[text], "")
 	call(text, "SetTextColor", unpack(UI.colors[textRoles[text]]))
 	call(text, "SetShadowOffset", 0, 0)
 	return text
@@ -114,19 +175,33 @@ function UI.Background(parent, x, y, width, height)
 end
 
 function UI.Surface(frame, color)
-	call(frame, "SetBackdrop", { bgFile = UI.WHITE, edgeFile = UI.WHITE, edgeSize = 1 })
 	local bg = color or UI.colors.panel
 	local bgRole
 	for key, value in pairs(UI.colors) do if value == bg then bgRole = key; break end end
-	surfaceRoles[frame] = bgRole or "panel"
-	call(frame, "SetBackdropColor", unpack(bg))
+	bgRole = bgRole or "panel"
+	surfaceRoles[frame] = bgRole
+	local style = UI.styles[UI.currentStyle] or UI.styles.flat
+	local isWindow = bgRole == "window"
+	local edgeFile = isWindow and style.edgeFile or (style.detailEdgeFile or style.edgeFile)
+	local edgeSize = isWindow and style.edgeSize
+		or bgRole == "input" and (style.inputEdgeSize or style.detailEdgeSize or style.edgeSize)
+		or (style.detailEdgeSize or style.edgeSize)
+	call(frame, "SetBackdrop", {
+		bgFile = style.bgFile or UI.WHITE,
+		edgeFile = edgeFile or UI.WHITE,
+		edgeSize = edgeSize or 1,
+		insets = (isWindow and style.insets) or style.detailInsets or style.insets,
+	})
+	call(frame, "SetBackdropColor", unpack(UI.colors[bgRole] or bg))
 	call(frame, "SetBackdropBorderColor", unpack(UI.colors.border))
 end
 
 function UI.Window(frame)
 	UI.Surface(frame, UI.colors.window)
+	windowFrames[frame] = true
 	if not frame.uiTopLine then
-		frame.uiTopLine = UI.Rect(frame, 1, -1, frame:GetWidth() - 2, 2, UI.colors.accent, "BORDER")
+		local style = UI.styles[UI.currentStyle] or UI.styles.flat
+		frame.uiTopLine = UI.Rect(frame, 1, -1, frame:GetWidth() - 2, style.topLineHeight or 2, UI.colors.accent, "BORDER")
 	end
 end
 
@@ -227,6 +302,10 @@ local function applyPalette(name, base, custom)
 	local theme = UI.themes[name]
 	if name == "custom" then theme = UI.themes[base] or UI.themes.classic end
 	if not theme then name = "classic"; theme = UI.themes.classic end
+	local styleName = theme.style or "flat"
+	if not UI.styles[styleName] then styleName = "flat" end
+	UI.currentStyle = styleName
+	UI.FONT = UI.styles[styleName].font or "Fonts\\ARIALN.TTF"
 	for _, key in ipairs(colorRoles) do
 		local value = theme[key]
 		local supplied = custom and custom[key]
@@ -256,10 +335,19 @@ local function applyPalette(name, base, custom)
 	for texture, role in pairs(rectRoles) do call(texture, "SetVertexColor", unpack(UI.colors[role])) end
 	for texture, role in pairs(tintedTextures) do call(texture, "SetVertexColor", unpack(UI.colors[role] or UI.colors.accent)) end
 	for frame, role in pairs(surfaceRoles) do
-		call(frame, "SetBackdropColor", unpack(UI.colors[role] or UI.colors.panel))
-		call(frame, "SetBackdropBorderColor", unpack(UI.colors.border))
+		UI.Surface(frame, UI.colors[role] or UI.colors.panel)
 	end
-	for text, role in pairs(textRoles) do call(text, "SetTextColor", unpack(UI.colors[role] or UI.colors.text)) end
+	for text, role in pairs(textRoles) do
+		call(text, "SetTextColor", unpack(UI.colors[role] or UI.colors.text))
+		call(text, "SetFont", UI.FONT, textSizes[text] or 12, "")
+	end
+	for frame in pairs(windowFrames) do
+		local line = frame.uiTopLine
+		if line and line.SetHeight then
+			local style = UI.styles[UI.currentStyle] or UI.styles.flat
+			line:SetHeight(style.topLineHeight or 2)
+		end
+	end
 	for button in pairs(buttonWidgets) do UI.PaintButton(button) end
 	for input in pairs(inputWidgets) do UI.Surface(input, UI.colors.input); UI.Text(input) end
 	for checkbox in pairs(checkWidgets) do
@@ -267,6 +355,7 @@ local function applyPalette(name, base, custom)
 		call(checked, "SetVertexColor", unpack(UI.colors.accent))
 	end
 	if ns.notes and ns.notes.ApplyStyle then ns.notes.ApplyStyle() end
+	if ns.lootWindow and ns.lootWindow.ApplyStyle then ns.lootWindow.ApplyStyle() end
 	local options = ns.optionsWindow
 	if options then
 		if options.RefreshCatalog then pcall(options.RefreshCatalog, true) end

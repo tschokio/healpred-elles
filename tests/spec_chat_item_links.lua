@@ -66,7 +66,6 @@ T.register("chat item links: clicked previews stay pinned until toggled and obey
 	end
 	local native = { Hide = function(self) self.hidden = true end }
 	ItemRefTooltip = native
-	GetCursorPosition = function() return 180, 260 end
 	e.ns.db.chatItemTooltipOnHover = true
 	e.ns.db.chatItemPreviewToggle = true
 	e.ns.db.chatItemTooltipLimit = 2
@@ -77,8 +76,8 @@ T.register("chat item links: clicked previews stay pinned until toggled and obey
 	assert_eq(created[1].anchor, "ANCHOR_NONE", "clicked previews must not track the cursor")
 	assert_eq(created[1].point[1], "BOTTOMLEFT")
 	assert_eq(created[1].point[2], UIParent)
-	assert_eq(created[1].point[4], 180, "clicked preview stays at the click's x position")
-	assert_eq(created[1].point[5], 260, "clicked preview stays at the click's y position")
+	assert_eq(created[1].point[4], 960, "first clicked preview opens at the saved screen-relative x position")
+	assert_eq(created[1].point[5], 540, "first clicked preview opens at the saved screen-relative y position")
 	links.OnHyperlinkLeave(chat) -- A pending hover leave must not close a clicked preview.
 	assert_eq(links.OpenTooltipCount(), 1)
 	links.OnHyperlinkClick(chat, "item:456")
@@ -100,6 +99,72 @@ T.register("chat item links: clicked previews stay pinned until toggled and obey
 	e.ns.db.chatItemTooltipLimit = 1
 	links.EnforceLimit()
 	assert_eq(links.OpenTooltipCount(), 1, "lowering the limit immediately dismisses oldest excess previews")
+end)
+
+T.register("chat item links: clicked previews can be shift-dragged and remember their position", function()
+	local e = Mocks.NewEnv()
+	local links = e.ns.chatItemLinks
+	local created = {}
+	local originalCreateFrame = CreateFrame
+	CreateFrame = function(kind, name, parent, template)
+		if kind == "GameTooltip" then
+			local tip = { shown = false, scripts = {} }
+			function tip:SetOwner(owner, anchor) self.owner, self.anchor = owner, anchor end
+			function tip:SetHyperlink(link) self.link = link end
+			function tip:AddLine(line) self.extraLine = line end
+			function tip:Show() self.shown = true end
+			function tip:Hide() self.shown = false end
+			function tip:ClearLines() self.link = nil end
+			function tip:ClearAllPoints() self.point = nil end
+			function tip:SetPoint(...)
+				self.point = { ... }
+				if self.point[2] == UIParent then self.left, self.bottom = self.point[4], self.point[5] end
+			end
+			function tip:SetClampedToScreen(value) self.clamped = value end
+			function tip:SetMovable(value) self.movable = value end
+			function tip:RegisterForDrag(button) self.dragButton = button end
+			function tip:EnableMouse(value) self.mouseEnabled = value end
+			function tip:SetScript(name, fn) self.scripts[name] = fn end
+			function tip:GetScript(name) return self.scripts[name] end
+			function tip:StartMoving() self.moving = true end
+			function tip:StopMovingOrSizing() self.moving = false end
+			function tip:GetLeft() return self.left end
+			function tip:GetBottom() return self.bottom end
+			created[#created + 1] = tip
+			return tip
+		end
+		return originalCreateFrame(kind, name, parent, template)
+	end
+	e.ns.db.chatItemPreviewToggle = true
+	local oldShiftCheck = IsShiftKeyDown
+	IsShiftKeyDown = function() return false end
+	local chat = {}
+	links.OnHyperlinkClick(chat, "item:321")
+	local tip = created[1]
+	assert_true(tip.movable)
+	assert_eq(tip.mouseEnabled, true)
+	assert_eq(tip.dragButton, "LeftButton")
+	assert_eq(tip.extraLine, "Shift-drag to move; position is saved.")
+	tip:GetScript("OnDragStart")(tip)
+	assert_false(tip.moving, "ordinary drags do not move the tooltip")
+	IsShiftKeyDown = function() return true end
+	tip:GetScript("OnDragStart")(tip)
+	assert_true(tip.moving)
+	tip.left, tip.bottom = 450, 270
+	tip:GetScript("OnDragStop")(tip)
+	assert_false(tip.moving)
+	assert_eq(e.ns.db.chatItemPreviewPosition.x, 450 / 1920)
+	assert_eq(e.ns.db.chatItemPreviewPosition.y, 270 / 1080)
+	assert_eq(tip.point[4], 450)
+	assert_eq(tip.point[5], 270)
+	links.OnHyperlinkClick(chat, "item:321")
+	assert_false(tip.mouseEnabled, "releasing the pooled tooltip disables mouse capture")
+	UIParent:SetSize(1280, 720)
+	links.OnHyperlinkClick(chat, "item:654")
+	assert_eq(created[1], tip, "the tooltip frame is reused")
+	assert_eq(tip.point[4], 300, "future previews use the saved relative x position after a resolution change")
+	assert_eq(tip.point[5], 180, "future previews use the saved relative y position after a resolution change")
+	IsShiftKeyDown = oldShiftCheck
 end)
 
 T.register("chat item links: options are available in DoHelper without EllesmereUI hooks", function()

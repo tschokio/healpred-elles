@@ -233,6 +233,24 @@ ns.DEFAULTS = {
 	chatItemTooltipOnHover = false,
 	chatItemPreviewToggle = false,
 	chatItemTooltipLimit = 3,
+	chatItemPreviewPosition = { x = 0.5, y = 0.5 },
+	lootWindow = {
+		enabled = false,
+		items = true,
+		money = true,
+		currency = true,
+		reputation = true,
+		duration = 6,
+		maxRows = 6,
+		fontSize = 13,
+		iconSize = 24,
+		width = 320,
+		opacity = 1,
+		backgroundAlpha = 0.78,
+		qualityColors = true,
+		x = 0,
+		y = -180,
+	},
 	campingTooltipsEnabled = true,
 	alpha = 0.60,                  -- our segment's opacity (composited with native)
 	shareNativeStyle = true,       -- inherit native texture/color (default)
@@ -544,6 +562,7 @@ function ns.Startup()
 	if ns.learner and ns.learner.Setup then ns.learner.Setup() end
 	if ns.notes and ns.notes.Setup then ns.notes.Setup() end
 	if ns.combatText and ns.combatText.Setup then ns.combatText.Setup() end
+	if ns.lootWindow and ns.lootWindow.Setup then ns.lootWindow.Setup() end
 	ns.SetRuntimeEnabled(ns.db.enabled)
 	ns.unregister("ADDON_LOADED")
 

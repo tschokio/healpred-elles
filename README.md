@@ -210,16 +210,22 @@ and repeat with Cleave, Maul, forms/pages and any macros you use.
 
 ### Settings menu and minimap button (v0.4.0)
 
-The **Skins** tab offers Classic parchment, Ember and iron, Neutral charcoal,
-and the original teal palette, plus custom RGB colors for accent, window, panel,
-text and border. Classic parchment is the default. Notes follow the selected
-addon skin by default, or can keep their own colors from the Notes tab. Open
-`/dohelper options`, then choose a page in the left sidebar. All skins use
-consistent sans-serif text, flat hover/selection states and matching input
-fields. The right column shows action/healing previews on Settings and
-Implemented spells, and relevant help on Notes and Combat text. Weapon training
-uses the full content width. Manage spells and Diagnostics remain accessible
-in the sidebar.
+The **Skins** tab offers **Classic WoW** (Friz Quadrata-style text and framed
+dialog borders), **EllesmereUI** (crisp, square-edged panels), and **Transparent
+glass** (translucent surfaces), alongside Ember, Neutral and Original palettes.
+Classic WoW is the default. Custom RGB colors can be applied while keeping the
+selected visual style. Notes follow the selected addon skin by default, or can
+keep their own colors from the Notes tab. Open `/dohelper options`, then choose
+a page in the left sidebar. The right column shows action/healing previews on
+Settings and Implemented spells, and relevant help on Notes and Combat text.
+Weapon training uses the full content width. Manage spells and Diagnostics
+remain accessible in the sidebar.
+
+The **Loot window** tab adds an opt-in floating feed for your own item drops,
+money, currencies and reputation changes. Drag its title bar to save its
+position. Choose categories, row count, display duration, icon/font size,
+quality coloring, window opacity and background opacity; the frame otherwise
+follows the selected DoHelper skin. Preview works without enabling live tracking.
 
 Settings and dialogs fit smaller screens when opened. Escape and Close release
 input focus. The UI adds no animations or idle timers and never styles vendor
