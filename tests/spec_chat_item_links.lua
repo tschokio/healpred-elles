@@ -70,12 +70,19 @@ T.register("chat item links: click previews time out, toggle, deduplicate by ite
 	end
 	local native = { Hide = function(self) self.hidden = true end }
 	ItemRefTooltip = native
+	GetCursorPosition = function() return 180, 260 end
 	e.ns.db.chatItemPreviewToggle = true
 	e.ns.db.chatItemClickDurationMs = 1000
 	e.ns.db.chatItemTooltipLimit = 2
 	Mocks.SetNow(20)
 	local chat = {}
 	links.OnHyperlinkClick(chat, "item:123:1")
+	assert_eq(created[1].owner, UIParent, "clicked previews use their own tooltip frame")
+	assert_eq(created[1].anchor, "ANCHOR_NONE", "clicked previews must not track the cursor")
+	assert_eq(created[1].point[1], "BOTTOMLEFT")
+	assert_eq(created[1].point[2], UIParent)
+	assert_eq(created[1].point[4], 180, "clicked preview stays at the click's x position")
+	assert_eq(created[1].point[5], 260, "clicked preview stays at the click's y position")
 	links.OnHyperlinkClick(chat, "item:456")
 	assert_eq(links.OpenTooltipCount(), 2)
 	assert_true(native.hidden, "managed previews replace the single Blizzard item tooltip")

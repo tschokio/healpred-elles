@@ -460,7 +460,10 @@ local function ensureWindow()
 	UI.Text(f.heading, "title")
 	f.subtitle:ClearAllPoints(); f.subtitle:SetPoint("TOPLEFT", f, "TOPLEFT", 72, -46); f.subtitle:SetWidth(700)
 	UI.Rect(f, 24, -22, 34, 34, UI.colors.selected, "BORDER")
-	UI.Label(f, "Do", 29, -30, 28, "heading")
+	f.logo = f:CreateTexture(nil, "ARTWORK")
+	f.logo:SetTexture("Interface\\AddOns\\DoHelper\\Media\\DoHelper.tga")
+	f.logo:SetPoint("TOPLEFT", f, "TOPLEFT", 24, -22)
+	f.logo:SetSize(34, 34)
 	UI.Label(f, "v" .. ns.version, 850, -29, 90, "muted")
 	UI.Rect(f, 16, -74, 968, 1, UI.colors.border)
 	f.sidebar = panel(f, 16, -84, 164, 584)
@@ -487,7 +490,7 @@ local function ensureWindow()
 	background(page, 12, -329, 516, 158)
 	background(page, 12, -499, 516, 111)
 	UI.Label(page, "HEALING PREDICTION", 24, -66, 470, "section")
-	UI.Label(page, "GENERAL & DIAGNOSTICS", 24, -341, 470, "section")
+	UI.Label(page, "GENERAL OPTIONS", 24, -341, 470, "section")
 	UI.Label(page, "ACTION HIGHLIGHTS", 24, -511, 470, "section")
 	local catalog = CreateFrame("Frame", nil, f)
 	catalog:SetSize(510, 492)
@@ -1279,18 +1282,18 @@ local function ensureWindow()
 		f.Refresh()
 	end)
 	UI.Button(f.controls.apply, "primary")
-	check("skipRLConfirm", "Skip EllesmereUI confirmation for /rl", -286,
-		function() return ns.db.skipRLConfirm end,
-		function(v) ns.db.skipRLConfirm = v and true or false end)
 	check("minimap", "Show minimap button (drag to reposition)", -363,
 		function() return not ns.db.minimapHidden end, function(v) command("minimap " .. (v and "on" or "off")) end)
-	check("exclude", "Advanced: native incoming heals exclude HoTs", -426,
-		function() return ns.db.assumeApiExcludesHoTs end, function(v) command("excludehots " .. (v and "on" or "off")) end)
-	check("campingTooltipsEnabled", "Show campfire and camping tooltip references", -458,
+	check("campingTooltipsEnabled", "Show campfire and camping tooltip references", -395,
 		function() return ns.db.campingTooltipsEnabled ~= false end,
 		function(v) ns.db.campingTooltipsEnabled = v and true or false end)
-	check("debug", "Enable debug chat logging", -395, function() return ns.db.debug end,
+	check("skipRLConfirm", "Skip EllesmereUI confirmation for /rl", -427,
+		function() return ns.db.skipRLConfirm end,
+		function(v) ns.db.skipRLConfirm = v and true or false end)
+	check("debug", "Enable debug chat logging", -459, function() return ns.db.debug end,
 		function(v) command("debug " .. (v and "on" or "off")) end)
+	check("exclude", "Advanced: native incoming heals exclude HoTs", -286,
+		function() return ns.db.assumeApiExcludesHoTs end, function(v) command("excludehots " .. (v and "on" or "off")) end)
 	button("preview", "Test +1000", 16, -419, 90, function() command("test 1000") end)
 	button("stop", "Stop test", 114, -419, 94, function() command("test off") end)
 	button("diagnostics", "Diagnostics", 8, -416, 148, function() ns.OpenDebugWindow() end)

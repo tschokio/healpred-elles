@@ -124,18 +124,19 @@ local function getOrCreate(frame, link)
 	return record
 end
 
-local function showRecord(record, frame, link)
+local function showRecord(record, frame, link, clicked)
 	if not record then return false end
 	local tooltip = record.frame
 	local _, index = lookup(record.key)
 	record.owner, record.link = frame, link
-	if index == 1 then
+	local pinned = clicked or record.clicked
+	if index == 1 and not pinned then
 		tooltip:SetOwner(frame or _G.UIParent, "ANCHOR_CURSOR")
 	else
 		tooltip:SetOwner(_G.UIParent, "ANCHOR_NONE")
 		if tooltip.ClearAllPoints and tooltip.SetPoint then
 			tooltip:ClearAllPoints()
-			local previous = active[(index or #active) - 1]
+			local previous = index and index > 1 and active[index - 1]
 			if previous and previous.frame then
 				tooltip:SetPoint("TOPLEFT", previous.frame, "BOTTOMLEFT", 0, -8)
 			else
@@ -216,7 +217,10 @@ function links.OnHyperlinkClick(frame, link)
 		return
 	end
 	if not record then record = getOrCreate(frame, link) end
-	if not showRecord(record, frame, link) then return end
+	-- Pin the clicked preview at the click position instead of letting an
+	-- ANCHOR_CURSOR tooltip follow the pointer around the screen.
+	record.x, record.y = cursorPoint()
+	if not showRecord(record, frame, link, true) then return end
 	record.clicked = true
 	record.openedAt = now()
 	local timeout = math.max(0, math.min(5000, setting("chatItemClickDurationMs", 0)))
