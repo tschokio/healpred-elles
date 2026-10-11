@@ -15,6 +15,17 @@ local function safeNumber(value)
 	return value
 end
 
+local function referencesEnabled()
+	local db = type(ns) == "table" and ns.db
+	if type(db) ~= "table" then return true end
+	local value = db.campingTooltipsEnabled
+	if type(ns.isSecret) == "function" then
+		local ok, secret = pcall(ns.isSecret, value)
+		if not ok or secret then return false end
+	end
+	return value ~= false
+end
+
 local function scaled(brackets)
 	return { kind = "scaled", brackets = brackets }
 end
@@ -173,6 +184,10 @@ local function isAllowed(tip)
 		local ok,match=pcall(function() return _G[name] == tip end)
 		if ok and match then return true end
 	end
+	-- ChatItemLinks creates named GameTooltip frames so several item-link
+	-- previews can remain visible at once. Treat those just like the built-ins.
+	local ok,name=pcall(function() return tip:GetName() end)
+	if ok and type(name)=="string" and name:match("^DoHelperChatItemTooltip%d+$") then return true end
 	return false
 end
 local function field(obj,key)
@@ -248,6 +263,7 @@ local function currentLevel()
 end
 local function decorate(tip,data)
 	if not isAllowed(tip) then return end
+	if not referencesEnabled() then states[tip]=nil; return end
 	-- Postcalls may run while the visible tooltip is still being built, before Show.
 	local id=readItemId(tip,data)
 	local lines=id and linesFor(id,currentLevel())
@@ -292,6 +308,7 @@ local function worldDataIsCurrent(tip)
 end
 local function decorateWorld(tip,data,typedObject,refresh)
 	if not isAllowed(tip) or _G.GameTooltip~=tip or not worldDataIsCurrent(tip) then return end
+	if not referencesEnabled() then states[tip]=nil; return end
 	if ns.isSecret(data) then return end
 	if typedObject and data == nil then return end
 	if data ~= nil and not typedObject then

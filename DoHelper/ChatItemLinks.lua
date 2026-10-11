@@ -151,6 +151,9 @@ local function showRecord(record, frame, link)
 		updateDriver()
 		return false
 	end
+	-- On modern clients TooltipDataProcessor normally decorates synchronously;
+	-- this explicit pass also covers legacy clients and our custom preview frames.
+	if ns.Camping and ns.Camping.Decorate then pcall(ns.Camping.Decorate, tooltip) end
 	if tooltip.Show then tooltip:Show() end
 	if _G.GameTooltip and _G.GameTooltip ~= tooltip and _G.GameTooltip.Hide then _G.GameTooltip:Hide() end
 	return true
@@ -180,7 +183,20 @@ end
 function links.OnHyperlinkLeave(frame, link)
 	local key = itemKey(link)
 	local record = key and lookup(key)
-	if not record or record.owner ~= frame then return end
+	if not record or record.owner ~= frame or not record.hovered then
+		-- EllesmereUI and some WoW client builds fire OnHyperlinkLeave with only
+		-- the chat frame (unlike OnHyperlinkEnter, which includes the link).
+		-- Resolve the active hover by frame so the linger timer always starts.
+		record = nil
+		for i = #active, 1, -1 do
+			local candidate = active[i]
+			if candidate.owner == frame and candidate.hovered then
+				record = candidate
+				break
+			end
+		end
+	end
+	if not record then return end
 	record.hovered = false
 	local linger = math.max(0, math.min(5000, setting("chatItemHoverLingerMs", 1000)))
 	record.leaveAt = now() + linger / 1000

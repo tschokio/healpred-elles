@@ -14,7 +14,7 @@ local function withCamping(fn, configure)
 	local ns={isSecret=function(v) return type(v)=="table" and v.secret==true end,toNumber=function(v) if type(v)=="table" and v.secret then return nil end; return type(v)=="number" and v or nil end}
 	assert(load(ReadFile(__HOT_ROOT.."/DoHelper/Camping.lua"),"@Camping.lua"))("DoHelper",ns)
 	local mod=ns.Camping
-	local ok,err=pcall(fn,mod,function(v) level=v end)
+	local ok,err=pcall(fn,mod,function(v) level=v end,ns)
 	for _,k in ipairs(names) do _G[k]=old[k] end
 	if not ok then error(err,0) end
 end
@@ -60,6 +60,46 @@ T.register("camping fixed perks, utility inheritance, and rested cap are describ
 		assert_true(contains(table.concat(m.LinesFor(279990,14)," "),"+10 Mana/5 sec")); assert_true(contains(table.concat(m.LinesFor(279990,14)," "),"recipes requiring"))
 		assert_true(contains(table.concat(m.LinesFor(279961,60)," "),"up to 5 additional"))
 	end)
+end)
+
+T.register("camping references can be disabled and the Camp Chair item has a tooltip entry",function()
+	local tip={lines={}}
+	function tip:AddLine(line) self.lines[#self.lines+1]=line end
+	function tip:GetItem() return "Camp Chair", "|Hitem:279979|h[Camp Chair]|h" end
+	withCamping(function(m,_,ns)
+		ns.db={campingTooltipsEnabled=false}
+		m.Decorate(tip,{id=279979})
+		assert_eq(#tip.lines,0,"disabled setting suppresses the reference")
+		ns.db.campingTooltipsEnabled=true
+		m.Decorate(tip,{id=279979})
+		assert_true(contains(table.concat(tip.lines," "),"Camp Chair"))
+		assert_true(contains(table.concat(tip.lines," "),"+2% critical strike"))
+	end,function() _G.GameTooltip=tip end)
+end)
+
+T.register("camping references decorate DoHelper's managed multi-item chat tooltips",function()
+	local tip={lines={}}
+	function tip:GetName() return "DoHelperChatItemTooltip1" end
+	function tip:GetItem() return "Camp Chair", "|Hitem:279979|h[Camp Chair]|h" end
+	function tip:AddLine(line) self.lines[#self.lines+1]=line end
+	withCamping(function(m,_,ns)
+		ns.db={campingTooltipsEnabled=true}
+		m.Decorate(tip)
+		assert_true(contains(table.concat(tip.lines," "),"Camp Chair"))
+		assert_true(contains(table.concat(tip.lines," "),"+2% critical strike"))
+	end)
+end)
+
+T.register("camping reference setting is visible and enabled by default in DoHelper",function()
+	local e=Mocks.NewEnv()
+	assert_true(e.ns.db.campingTooltipsEnabled)
+	local options=e.ns.OpenOptions("settings")
+	local toggle=options.controls.campingTooltipsEnabled
+	assert_not_nil(toggle)
+	assert_true(toggle:GetChecked())
+	toggle:SetChecked(false)
+	toggle:GetScript("OnClick")(toggle)
+	assert_false(e.ns.db.campingTooltipsEnabled)
 end)
 
 T.register("camping modern and legacy hooks are safe, deduplicated, and recyclable",function()

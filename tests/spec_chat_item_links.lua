@@ -40,7 +40,7 @@ T.register("chat item links: settings are opt-in and hover tooltips follow the s
 	assert_eq(created[2].link, "item:123")
 	assert_true(created[2].shown)
 	assert_false(nativeTooltip.shown, "the one-off Blizzard hover tooltip is replaced by the managed tooltip")
-	links.OnHyperlinkLeave(frame, "item:123")
+	links.OnHyperlinkLeave(frame) -- EllesmereUI's leave hook does not pass the link.
 	links.UpdateTimers(10.999)
 	assert_eq(links.OpenTooltipCount(), 1, "linger timer keeps it open until its deadline")
 	links.UpdateTimers(11)

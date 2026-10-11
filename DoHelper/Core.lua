@@ -235,6 +235,7 @@ ns.DEFAULTS = {
 	chatItemHoverLingerMs = 1000,
 	chatItemClickDurationMs = 0,
 	chatItemTooltipLimit = 3,
+	campingTooltipsEnabled = true,
 	alpha = 0.60,                  -- our segment's opacity (composited with native)
 	shareNativeStyle = true,       -- inherit native texture/color (default)
 	overlayColor = { 1.0, 0.82, 0.0 },

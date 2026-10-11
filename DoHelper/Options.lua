@@ -1286,7 +1286,9 @@ local function ensureWindow()
 		function() return not ns.db.minimapHidden end, function(v) command("minimap " .. (v and "on" or "off")) end)
 	check("exclude", "Advanced: native incoming heals exclude HoTs", -426,
 		function() return ns.db.assumeApiExcludesHoTs end, function(v) command("excludehots " .. (v and "on" or "off")) end)
-	UI.Text(label(page, "Leave off unless verified. This does not unlock restricted values or fix overlap.", 48, -458, 465), "muted")
+	check("campingTooltipsEnabled", "Show campfire and camping tooltip references", -458,
+		function() return ns.db.campingTooltipsEnabled ~= false end,
+		function(v) ns.db.campingTooltipsEnabled = v and true or false end)
 	check("debug", "Enable debug chat logging", -395, function() return ns.db.debug end,
 		function(v) command("debug " .. (v and "on" or "off")) end)
 	button("preview", "Test +1000", 16, -419, 90, function() command("test 1000") end)

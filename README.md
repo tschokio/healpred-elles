@@ -125,8 +125,10 @@ No ownership, inventory, or profession check is required. Install/update the
 features are labelled separately from buffs, and shared camp requirements are
 not presented as effects of every item. See
 [`CAMPING_REFERENCE.md`](CAMPING_REFERENCE.md) for the full catalog, formulas,
-source links and known limitations. Mock-tested only; live WoW tooltips have not
-been verified.
+source links and known limitations. References are on by default and can be
+toggled under `/dohelper options` → **Settings** → **Show campfire and camping
+tooltip references**. Mock-tested only; live WoW tooltips have not been
+verified.
 
 ### Updating (to v0.12.3)
 
