@@ -37,6 +37,8 @@ end
 local function releaseFrame(frame)
 	if not frame then return end
 	frame._doHelperChatRecord = nil
+	frame._doHelperLastClickAt = nil
+	frame._doHelperDragging = nil
 	if frame.EnableMouse then frame:EnableMouse(false) end
 	if frame.Hide then frame:Hide() end
 	if frame.ClearLines then frame:ClearLines() end
@@ -132,9 +134,31 @@ local function configureDragging(frame)
 	frame:SetScript("OnDragStop", function(self)
 		if not self._doHelperDragging then return end
 		self._doHelperDragging = nil
+		self._doHelperLastClickAt = nil
 		self:StopMovingOrSizing()
 		rememberPosition(self)
 	end)
+	-- GameTooltip is a Frame rather than a Button, so use mouse-up timestamps
+	-- for double-click detection. Only pinned previews receive mouse input.
+	local function onMouseUp(self, button)
+		local record = self._doHelperChatRecord
+		if button ~= "LeftButton" or not record or not record.clicked or self._doHelperDragging then
+			self._doHelperLastClickAt = nil
+			return
+		end
+		local current = ns.now()
+		local previous = self._doHelperLastClickAt
+		if previous and current >= previous and current - previous <= 0.35 then
+			local live, index = lookup(record.key)
+			self._doHelperLastClickAt = nil
+			if live == record and index then removeAt(index) end
+			if _G.ItemRefTooltip and _G.ItemRefTooltip.Hide then _G.ItemRefTooltip:Hide() end
+		else
+			self._doHelperLastClickAt = current
+		end
+	end
+	if type(frame.HookScript) == "function" then frame:HookScript("OnMouseUp", onMouseUp)
+	else frame:SetScript("OnMouseUp", onMouseUp) end
 end
 
 local function getOrCreate(frame, link)

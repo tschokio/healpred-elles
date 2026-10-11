@@ -439,7 +439,7 @@ T.register("notes: skin migration preserves saved custom colors but themes defau
 	Mocks.Fire("ADDON_LOADED", "DoHelper")
 	assert_false(custom.notes.UsesSkinColors(), "existing custom note colors remain independent")
 	assert_eq(custom.db.notes.textColor[1], 1)
-	assert_eq(custom.db.schema, 3)
+	assert_eq(custom.db.schema, 4)
 
 	Mocks.Reset()
 	_G.EllesmereUI_HoTPredictionDB = { schema = 2, notes = { text = "old reminder" } }

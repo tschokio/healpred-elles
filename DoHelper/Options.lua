@@ -18,14 +18,14 @@ local NAVIGATION = {
 	{ "graphicsTab", "graphics", "Graphics", "Tune world scenery, sharpening and reflections, then share your console settings." },
 	{ "skinsTab", "skins", "Skins", "Choose a whole-addon visual style or customize its colors." },
 	{ "chatTab", "chat", "Chat items", "Optional item-link tooltips and repeat-click previews in chat." },
-	{ "lootWindowTab", "loot", "Loot window", "Show recent items, currency, money and reputation in a movable window." },
+	{ "lootWindowTab", "loot", "Loot window", "Show scrolling item, money, currency and reputation popups." },
 }
 local HELP = {
 	notes = { "YOUR NOTEPAD", "A place for reminders", "Use the arrows to switch topics. New topic creates a separate note; edit its title and press Enter to rename it.\n\nYour edits save as you type. The floating window mirrors the active topic.\n\nClick the arrow beside Do to collapse it to a tiny Do ^ toggle. Drag its header to move it.", "Editing locks during combat. Switching topics remains available." },
 	combat = { "COMBAT INDICATOR", "Clear, quiet feedback", "Choose your enter and leave labels, independent enter/leave colours, the text size and the timing.\n\nDirection and distance scroll the line up or down; 0 distance disables motion. Motion always restarts from the saved position.\n\nA duration of 0 keeps the label until the next transition (after the scroll settles).\n\nUse Preview + and Preview - to test without starting combat. Unlock to drag, then lock again to restore click-through.", "Size, colours and position remain independent of the settings theme." },
 	chat = { "CHAT ITEM LINKS", "Optional item-link helpers", "Enable a tooltip when hovering item links in Blizzard chat frames. You can also make a second click on the same item link close its native item preview.\n\nBoth options apply to Blizzard chat frames and are independent of EllesmereUI code.", "Both settings are off by default." },
 	skins = { "ADDON SKIN", "A look that fits your game", "Choose Classic WoW's framed look, the crisp EllesmereUI style, transparent glass, or a color palette. Styles change borders, font and opacity as well as colors. Changes apply across addon panels and notes.", "The Notes tab can follow the selected style or keep its own custom colors." },
-	loot = { "LOOT WINDOW", "Your recent loot at a glance", "Show items you receive, money, currencies and reputation changes in a separate movable window. Drag its header to reposition; the location is saved.", "Enable it here, choose which kinds of loot to show, then tune row count, duration and appearance." },
+	loot = { "LOOT POPUPS", "Item details as you loot", "Show item icons, quantity, available value and mouseover tooltips in scrolling popups. Money, currency and reputation changes can be included too. Drag the thin top edge to reposition; the location is saved.", "Choose a glass, Classic, EllesmereUI, Minimal, Charcoal or Arcane skin, then tune duration and appearance." },
 }
 
 local function safe(obj, method, ...)
@@ -1207,7 +1207,7 @@ local function ensureWindow()
 		f.controls[key] = c
 	end
 	chatCheck("chatItemTooltipOnHover", "Show item tooltips on hover", "Display the item tooltip while the pointer is over an item link; it closes when you leave.", -92)
-	chatCheck("chatItemPreviewToggle", "Enable managed clicked previews", "Click an item to pin its preview; click it again to close. Shift-drag to move it; the position is saved.", -145)
+	chatCheck("chatItemPreviewToggle", "Enable managed clicked previews", "Click an item to pin its preview; click the chat link again or double-click the open preview to close it. Shift-drag to move it; the position is saved.", -145)
 	local function chatSlider(key, title, y, minimum, maximum, step, formatValue)
 		local heading = UI.Label(chatPage, title, 24, y, 350, "body")
 		local valueLabel = UI.Label(chatPage, "", 390, y, 110, "muted")
@@ -1252,8 +1252,8 @@ local function ensureWindow()
 		local slider = f.controls.chatItemTooltipLimit
 		if slider and slider.RefreshValue then slider.RefreshValue() end
 	end
-	UI.Label(lootPage, "LOOT WINDOW", 18, -16, 470, "section")
-	UI.Label(lootPage, "A separate feed for recent item drops and gains.", 18, -40, 470, "muted")
+	UI.Label(lootPage, "LOOT POPUPS", 18, -16, 470, "section")
+	UI.Label(lootPage, "Scrolling item cards with quantity, value and hover tooltips.", 18, -40, 470, "muted")
 	local function lootCheck(key, title, description, x, y, read, write)
 		local c = CreateFrame("CheckButton", nil, lootPage, "UICheckButtonTemplate")
 		c:SetSize(26, 26)
@@ -1272,20 +1272,39 @@ local function ensureWindow()
 	lootCheck("lootWindowEnabled", "Enable loot window", "Tracks your own loot; disabled by default.", 18, -66,
 		function() return ns.lootWindow and ns.lootWindow.Enabled() end,
 		function(value) if ns.lootWindow then ns.lootWindow.SetEnabled(value) end end)
-	UI.Label(lootPage, "SHOW", 18, -126, 470, "section")
-	lootCheck("lootItems", "Items", nil, 18, -145,
+	UI.Label(lootPage, "TRACK", 18, -116, 470, "section")
+	lootCheck("lootItems", "Items", nil, 18, -134,
 		function() return ns.lootWindow and ns.lootWindow.Style().items end,
 		function(value) if ns.lootWindow then ns.lootWindow.SetCategory("items", value) end end)
-	lootCheck("lootMoney", "Money", nil, 264, -145,
+	lootCheck("lootMoney", "Money", nil, 264, -134,
 		function() return ns.lootWindow and ns.lootWindow.Style().money end,
 		function(value) if ns.lootWindow then ns.lootWindow.SetCategory("money", value) end end)
-	lootCheck("lootCurrency", "Currency", nil, 18, -177,
+	lootCheck("lootCurrency", "Currency", nil, 18, -164,
 		function() return ns.lootWindow and ns.lootWindow.Style().currency end,
 		function(value) if ns.lootWindow then ns.lootWindow.SetCategory("currency", value) end end)
-	lootCheck("lootReputation", "Reputation", nil, 264, -177,
+	lootCheck("lootReputation", "Reputation", nil, 264, -164,
 		function() return ns.lootWindow and ns.lootWindow.Style().reputation end,
 		function(value) if ns.lootWindow then ns.lootWindow.SetCategory("reputation", value) end end)
-	UI.Label(lootPage, "APPEARANCE", 18, -220, 470, "section")
+	UI.Label(lootPage, "SKIN PRESETS", 18, -202, 470, "section")
+	f.lootSkinButtons = {}
+	local skinNames = {
+		{ "glass", "Glass" }, { "classic", "Classic" }, { "ellesmere", "EUI" },
+		{ "minimal", "Minimal" }, { "charcoal", "Charcoal" }, { "arcane", "Arcane" },
+	}
+	for index, entry in ipairs(skinNames) do
+		local key, title = entry[1], entry[2]
+		local b = CreateFrame("Button", nil, lootPage, "UIPanelButtonTemplate")
+		b:SetSize(70, 24)
+		b:SetPoint("TOPLEFT", lootPage, "TOPLEFT", 18 + (index - 1) * 76, -220)
+		b:SetText(title)
+		b:SetScript("OnClick", function()
+			ns.lootWindow.SetSkin(key)
+			f.RefreshLoot()
+		end)
+		UI.Button(b)
+		f.lootSkinButtons[key] = b
+	end
+	UI.Label(lootPage, "APPEARANCE", 18, -254, 470, "section")
 	local function lootField(key, title, x, y, width)
 		label(lootPage, title, x, y - 5, 112)
 		local e = CreateFrame("EditBox", nil, lootPage, "BackdropTemplate")
@@ -1298,39 +1317,54 @@ local function ensureWindow()
 		f.controls[key] = e
 		return e
 	end
-	lootField("lootFontSize", "Font size (8-24)", 18, -246)
-	lootField("lootIconSize", "Icon size (16-40)", 264, -246)
-	lootField("lootWidth", "Window width (220-520)", 18, -278)
-	lootField("lootDuration", "Show seconds (0-30)", 264, -278)
-	lootField("lootMaxRows", "Maximum rows (1-12)", 18, -310)
-	lootField("lootOpacity", "Window opacity (0-1)", 264, -310)
-	lootField("lootBackgroundAlpha", "Background opacity (0-1)", 18, -342)
-	lootCheck("lootQualityColors", "Item-quality colors", nil, 264, -342,
+	lootField("lootFontSize", "Font size (8-28)", 18, -278)
+	lootField("lootIconSize", "Icon size (20-96)", 264, -278)
+	lootField("lootWidth", "Popup width (280-900)", 18, -308)
+	lootField("lootDuration", "Show seconds (0-30)", 264, -308)
+	lootField("lootMaxRows", "Maximum rows (1-12)", 18, -338)
+	lootField("lootOpacity", "Popup opacity (0-1)", 264, -338)
+	lootField("lootBackgroundAlpha", "Background (0-1)", 18, -368)
+	lootCheck("lootQualityColors", "Quality color", nil, 264, -368,
 		function() return ns.lootWindow and ns.lootWindow.Style().qualityColors end,
 		function(value)
 			local d = ns.db.lootWindow
 			d.qualityColors = value and true or false
 			if ns.lootWindow then ns.lootWindow.Refresh() end
 		end)
-	UI.Label(lootPage, "Drag the loot window's title bar to move it. Its position and these settings are saved.", 18, -385, 480, "muted")
-	local lootMessage = UI.Label(lootPage, "", 18, -410, 480, "muted")
+	lootCheck("lootBorderGlow", "Quality glow", nil, 18, -398,
+		function() return ns.lootWindow and ns.lootWindow.Style().borderGlow end,
+		function(value)
+			local style = ns.lootWindow.Style()
+			style.qualityColors = ns.lootWindow.Style().qualityColors
+			style.borderGlow = value
+			ns.lootWindow.SetStyle(style)
+		end)
+	lootCheck("lootAnimate", "Scroll in", nil, 264, -398,
+		function() return ns.lootWindow and ns.lootWindow.Style().animate end,
+		function(value)
+			local style = ns.lootWindow.Style()
+			style.animate = value
+			ns.lootWindow.SetStyle(style)
+		end)
+	UI.Label(lootPage, "Drag the thin top edge to move. Preview is labeled and does not replace live loot.", 18, -426, 480, "muted")
+	local lootMessage = UI.Label(lootPage, "", 18, -445, 480, "muted")
 	local function lootButton(key, text, x, width, action)
 		local b = CreateFrame("Button", nil, lootPage, "UIPanelButtonTemplate")
 		b:SetSize(width, 24)
-		b:SetPoint("TOPLEFT", lootPage, "TOPLEFT", x, -448)
+		b:SetPoint("TOPLEFT", lootPage, "TOPLEFT", x, -462)
 		b:SetText(text)
 		b:SetScript("OnClick", action)
 		flatButton(b)
 		f.controls[key] = b
 		return b
 	end
-	lootButton("lootPreview", "Preview", 18, 90, function()
-		if ns.lootWindow then ns.lootWindow.Preview(); lootMessage:SetText("Preview shown. Loot tracking is unchanged.") end
+	lootButton("lootPreview", "Style preview", 18, 112, function()
+		if ns.lootWindow then ns.lootWindow.Preview(); lootMessage:SetText("Labeled sample only; live loot is kept and restored.") end
 	end)
-	lootButton("lootClear", "Hide / clear", 116, 100, function()
+	lootButton("lootClear", "Hide / clear", 138, 100, function()
 		if ns.lootWindow then ns.lootWindow.Clear(); lootMessage:SetText("Loot window hidden and cleared.") end
 	end)
-	local lootApply = lootButton("lootApply", "Apply appearance", 224, 142, function()
+	local lootApply = lootButton("lootApply", "Apply values", 246, 118, function()
 		local c = f.controls
 		local ok, message = ns.lootWindow.SetStyle({
 			fontSize = tonumber(c.lootFontSize:GetText()),
@@ -1341,21 +1375,25 @@ local function ensureWindow()
 			opacity = tonumber(c.lootOpacity:GetText()),
 			backgroundAlpha = tonumber(c.lootBackgroundAlpha:GetText()),
 			qualityColors = c.lootQualityColors:GetChecked(),
+			borderGlow = c.lootBorderGlow:GetChecked(),
+			animate = c.lootAnimate:GetChecked(),
 		})
 		if not ok then lootMessage:SetText(message); return end
 		for _, key in ipairs({ "lootFontSize", "lootIconSize", "lootWidth", "lootDuration", "lootMaxRows", "lootOpacity", "lootBackgroundAlpha" }) do c[key]:ClearFocus() end
-		lootMessage:SetText("Loot window appearance saved.")
+		lootMessage:SetText("Loot popup appearance saved.")
 		f.RefreshLoot()
 	end)
 	UI.Button(lootApply, "primary")
-	lootButton("lootDefaults", "Defaults", 374, 104, function()
+	lootButton("lootDefaults", "Defaults", 372, 96, function()
 		local defaults = ns.DEFAULTS.lootWindow
 		local c = f.controls
 		local ok = ns.lootWindow.SetStyle({
 			fontSize = defaults.fontSize, iconSize = defaults.iconSize, width = defaults.width,
 			duration = defaults.duration, maxRows = defaults.maxRows, opacity = defaults.opacity,
 			backgroundAlpha = defaults.backgroundAlpha, qualityColors = defaults.qualityColors,
+			borderGlow = defaults.borderGlow, animate = defaults.animate,
 		})
+		ns.lootWindow.SetSkin(defaults.skin)
 		for _, key in ipairs({ "items", "money", "currency", "reputation" }) do ns.lootWindow.SetCategory(key, true) end
 		if ok then lootMessage:SetText("Default appearance restored; enable state was not changed."); f.RefreshLoot() end
 	end)
@@ -1368,9 +1406,11 @@ local function ensureWindow()
 		c.lootMaxRows:SetText(tostring(ns.lootWindow.Style().maxRows))
 		c.lootOpacity:SetText(tostring(ns.lootWindow.Style().opacity))
 		c.lootBackgroundAlpha:SetText(tostring(ns.lootWindow.Style().backgroundAlpha))
-		for _, key in ipairs({ "lootWindowEnabled", "lootItems", "lootMoney", "lootCurrency", "lootReputation", "lootQualityColors" }) do
+		for _, key in ipairs({ "lootWindowEnabled", "lootItems", "lootMoney", "lootCurrency", "lootReputation", "lootQualityColors", "lootBorderGlow", "lootAnimate" }) do
 			if c[key] and c[key].read then c[key]:SetChecked(c[key].read() and true or false) end
 		end
+		local skin = ns.lootWindow.Style().skin
+		for key, button in pairs(f.lootSkinButtons) do UI.Selected(button, key == skin) end
 	end
 	f.RefreshLoot()
 	check("enabled", "Enable helper (healing overlay and next-swing borders)", -88, function() return ns.db.enabled end,

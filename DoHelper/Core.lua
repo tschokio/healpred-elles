@@ -6,10 +6,10 @@
 local addonName, ns = ...
 
 ns.name = addonName
-ns.version = "0.12.3"
+ns.version = "0.12.4"
 -- Bumped when saved settings need a one-time migration. The marker lives in
 -- SavedVariables, so a migration runs exactly once.
-ns.SCHEMA_VERSION = 3
+ns.SCHEMA_VERSION = 4
 ns.debugEnabled = false
 ns.inCombat = false
 ns.started = false
@@ -179,6 +179,14 @@ function ns.MigrateDatabase(db)
 		end
 	end
 
+	-- v3 loot popups used a fully opaque default with no named skin. Keep
+	-- custom dimensions/colors, but migrate the old default to transparent glass.
+	if version < 4 and type(db.lootWindow) == "table" then
+		local loot = db.lootWindow
+		if loot.skin == nil then loot.skin = "glass" end
+		if ns.toNumber(loot.backgroundAlpha) == 0.78 then loot.backgroundAlpha = 0.24 end
+	end
+
 	db.schema = ns.SCHEMA_VERSION
 end
 
@@ -226,7 +234,7 @@ function ns.initCapabilities()
 end
 
 ns.DEFAULTS = {
-	schema = 3,                    -- migration marker; never edit by hand
+	schema = 4,                    -- migration marker; never edit by hand
 	enabled = true,
 	debug = false,
 	skipRLConfirm = false,        -- use the native /reload command instead of EllesmereUI's /rl prompt
@@ -240,14 +248,17 @@ ns.DEFAULTS = {
 		money = true,
 		currency = true,
 		reputation = true,
-		duration = 6,
+		duration = 5,
 		maxRows = 6,
-		fontSize = 13,
-		iconSize = 24,
-		width = 320,
+		fontSize = 15,
+		iconSize = 40,
+		width = 420,
 		opacity = 1,
-		backgroundAlpha = 0.78,
+		backgroundAlpha = 0.24,
 		qualityColors = true,
+		skin = "glass",
+		borderGlow = true,
+		animate = true,
 		x = 0,
 		y = -180,
 	},

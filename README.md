@@ -221,15 +221,18 @@ Settings and Implemented spells, and relevant help on Notes and Combat text.
 Weapon training uses the full content width. Manage spells and Diagnostics
 remain accessible in the sidebar.
 
-The **Loot window** tab adds an opt-in floating feed for your own item drops,
-money, currencies and reputation changes. Drag its title bar to save its
-position. Choose categories, row count, display duration, icon/font size,
-quality coloring, window opacity and background opacity; the frame otherwise
-follows the selected DoHelper skin. Preview works without enabling live tracking.
+The **Loot window** tab adds an opt-in scrolling popup feed for your own item
+drops, money, currencies and reputation changes. Item cards show the icon,
+quantity, available vendor/Auctionator/TradeSkillMaster value and a hover
+tooltip. Pick a glass, Classic, EllesmereUI, Minimal, Charcoal or Arcane skin;
+adjust duration, row count, dimensions, opacity, quality glow and entry motion.
+Style preview is clearly labeled and does not replace real loot. Drag the thin
+top edge to save the popup's position.
 
 Settings and dialogs fit smaller screens when opened. Escape and Close release
-input focus. The UI adds no animations or idle timers and never styles vendor
-frames. Your existing settings, custom notes/combat colors and the compact
+input focus. There are no idle UI timers: updates run only during active loot
+popups or while moving the minimap button. DoHelper never styles vendor frames.
+Your existing settings, custom notes/combat colors and the compact
 `Do ^` notes toggle are preserved. BAM/crit sounds and the Sounds tab were
 removed, keeping old saved settings inert. No reinstall or settings reset is required.
 

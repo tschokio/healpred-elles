@@ -164,6 +164,14 @@ T.register("chat item links: clicked previews can be shift-dragged and remember 
 	assert_eq(created[1], tip, "the tooltip frame is reused")
 	assert_eq(tip.point[4], 300, "future previews use the saved relative x position after a resolution change")
 	assert_eq(tip.point[5], 180, "future previews use the saved relative y position after a resolution change")
+	assert_eq(links.OpenTooltipCount(), 1)
+	Mocks.now = 10
+	tip:GetScript("OnMouseUp")(tip, "LeftButton")
+	assert_eq(links.OpenTooltipCount(), 1, "one click on an opened preview keeps it open")
+	Mocks.now = 10.2
+	tip:GetScript("OnMouseUp")(tip, "LeftButton")
+	assert_eq(links.OpenTooltipCount(), 0, "double-clicking the opened tooltip closes it")
+	assert_false(tip.shown)
 	IsShiftKeyDown = oldShiftCheck
 end)
 
