@@ -311,7 +311,7 @@ end)
 T.register("notes: metadata icon texture is configured in TOC", function()
 	local toc = ReadFile((_G.__HOT_ROOT or ".") .. "/DoHelper/DoHelper.toc")
 	assert_not_nil(toc, "TOC file must be readable")
-	assert_true(contains(toc, "## IconTexture: Interface\\Icons\\INV_Misc_Note_01"), "TOC must define note icon texture")
+	assert_true(contains(toc, "## IconTexture: Interface\\AddOns\\DoHelper\\Media\\DoHelper.tga"), "TOC must define the DoHelper icon texture")
 end)
 
 T.register("notes: style persistence, apply, reset, and atomic validation", function()

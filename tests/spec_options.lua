@@ -105,6 +105,7 @@ T.register("options: minimap visibility position clicks and drag have no idle up
 	e.ns.InitOptions()
 	local b = e.ns.minimapButton
 	assert_true(b:IsShown())
+	assert_eq(b._textures[1]:GetTexture(), "Interface\\AddOns\\DoHelper\\Media\\DoHelper.tga")
 	assert_nil(b:GetScript("OnUpdate"))
 	click(b, "LeftButton")
 	assert_true(e.ns.optionsWindow:IsShown())
