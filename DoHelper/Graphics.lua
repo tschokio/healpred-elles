@@ -6,11 +6,11 @@ ns.graphics = G
 local UI = ns.ui
 local definitions = {
 	{ "groundEffectDensity", "Ground clutter density", 16, 256, 256, "Higher: more grass, flowers and small rocks." },
-	{ "groundEffectFade", "Ground clutter fade distance", 0, 600, 370, "Higher: fades later; coordinate with clutter distance." },
-	{ "groundEffectDist", "Ground clutter distance", 32, 600, 500, "Higher: renders ground clutter farther away." },
-	{ "lodObjectFadeScale", "Object fade scale", 50, 300, 200, "Higher: keeps distant objects visible longer." },
-	{ "lodObjectCullSize", "Object culling size", 1, 100, 8, "LOWER: retains smaller objects. Higher: fewer objects." },
-	{ "terrainLodDist", "Terrain detail distance", 128, 5248, 1000, "Higher: keeps detailed terrain farther away." },
+	{ "groundEffectFade", "Ground clutter fade distance", 0, 600, 600, "Higher: fades later; coordinate with clutter distance." },
+	{ "groundEffectDist", "Ground clutter distance", 32, 600, 600, "Higher: renders ground clutter farther away." },
+	{ "lodObjectFadeScale", "Object fade scale", 50, 300, 300, "Higher: keeps distant objects visible longer." },
+	{ "lodObjectCullSize", "Object culling size", 1, 100, 1, "LOWER: retains smaller objects. Higher: fewer objects." },
+	{ "terrainLodDist", "Terrain detail distance", 128, 5248, 5248, "Higher: keeps detailed terrain farther away." },
 	{ "ResampleAlwaysSharpen", "Always sharpen", 0, 1, 1, "Off reverses sharpening; effect depends on resampling." },
 	{ "reflectionMode", "Water reflection mode", 0, 3, 3, "0 screen-space; 1 sky; 2 + terrain; 3 + buildings." },
 }
@@ -20,6 +20,32 @@ for _, row in ipairs(definitions) do
 	G.entries[#G.entries + 1] = entry
 	byName[entry.name] = entry
 end
+
+local PRESETS = {
+	dense = {}, -- Filled from each entry's high-detail preset above.
+	balanced = {
+		groundEffectDensity = 128,
+		groundEffectFade = 300,
+		groundEffectDist = 316,
+		lodObjectFadeScale = 175,
+		lodObjectCullSize = 8,
+		terrainLodDist = 2688,
+		ResampleAlwaysSharpen = 1,
+		reflectionMode = 2,
+	},
+	herbs = {
+		groundEffectDensity = 16,
+		groundEffectFade = 0,
+		groundEffectDist = 32,
+		lodObjectFadeScale = 300,
+		lodObjectCullSize = 1,
+		terrainLodDist = 128,
+		ResampleAlwaysSharpen = 0,
+		reflectionMode = 0,
+	},
+}
+for _, entry in ipairs(G.entries) do PRESETS.dense[entry.name] = entry.preset end
+G.presets = PRESETS
 
 local function api(name)
 	if C_CVar and type(C_CVar[name]) == "function" then return C_CVar[name] end
@@ -99,11 +125,11 @@ end
 
 function G.BuildOptionsUI(f)
 	local page = CreateFrame("Frame", nil, f)
-	page:SetSize(764, 492)
+	page:SetSize(764, 540)
 	page:SetPoint("TOPLEFT", f, "TOPLEFT", f.contentX, f.contentY)
 	f.graphicsPage = page
-	UI.Background(page, -3, 4, 764, 492)
-	local message = UI.Label(page, "Draft only: click Apply graphics to change the game.", 10, -432, 736, "muted")
+	UI.Background(page, -3, 4, 764, 540)
+	local message = UI.Label(page, "Draft only: click Apply graphics to change the game.", 10, -496, 736, "muted")
 	page.message, page.rows = message, {}
 	local draft, refreshing = {}, false
 	local function button(key, text, x, y, width, action)
@@ -211,11 +237,19 @@ function G.BuildOptionsUI(f)
 		end
 		refreshing = false
 	end
-	button("graphicsPreset", "Your scenery preset", 10, -394, 148, function()
-		stage(function(entry) return entry.preset end)
-		message:SetText("Your eight supplied values are staged. Click Apply graphics to use them.")
+	button("graphicsPreset", "Dense + realistic", 10, -394, 148, function()
+		stage(function(entry) return PRESETS.dense[entry.name] end)
+		message:SetText("Dense, high-detail settings staged. Expect a substantial performance cost; click Apply graphics to use them.")
 	end)
-	button("graphicsDefaults", "Stage game defaults", 166, -394, 148, function()
+	button("graphicsBalancedPreset", "Balanced", 166, -394, 148, function()
+		stage(function(entry) return PRESETS.balanced[entry.name] end)
+		message:SetText("Balanced scenery staged. Click Apply graphics to use it.")
+	end)
+	button("graphicsHerbPreset", "Herb visibility", 322, -394, 148, function()
+		stage(function(entry) return PRESETS.herbs[entry.name] end)
+		message:SetText("Minimum ground clutter staged; small and distant objects are preserved. Some effects cannot be fully disabled with these CVars.")
+	end)
+	button("graphicsDefaults", "Stage game defaults", 10, -426, 148, function()
 		local missing = 0
 		stage(function(entry)
 			local value = G.Read(entry.name, true)
@@ -224,7 +258,7 @@ function G.BuildOptionsUI(f)
 		end)
 		message:SetText("Available game defaults staged; " .. missing .. " defaults unavailable (draft kept). Click Apply graphics.")
 	end)
-	button("graphicsRefresh", "Read current", 322, -394, 148, function()
+	button("graphicsRefresh", "Read current", 166, -426, 148, function()
 		page.Refresh(); message:SetText("Draft replaced with current game values; nothing changed.")
 	end)
 	UI.Button(button("graphicsApply", "Apply graphics", 10, -460, 148, function()

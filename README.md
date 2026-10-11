@@ -40,20 +40,28 @@ behaviour.
 Open `/dohelper options` (or click the minimap button), then choose **Graphics**.
 Six sliders plus numeric fields, a sharpening checkbox and a reflection-mode
 button control the eight CVars below. Changes are **drafts** until you click
-**Apply graphics**. **Your scenery preset** stages the eight values supplied
-below; you can lower or raise them before applying. Nothing changes on login,
-while moving a slider, or when opening this tab. Apply is blocked in combat.
+**Apply graphics**. The **Dense + realistic**, **Balanced**, and **Herb
+visibility** presets only stage values; you can adjust them before applying.
+Nothing changes on login, while moving a slider, or when opening this tab. Apply
+is blocked in combat.
 
 | CVar | Control range | Scenery preset | Effect / reverse direction |
 | --- | --- | --- | --- |
 | `groundEffectDensity` | 16–256 | 256 | Higher: denser grass, flowers and rocks; lower: less clutter. |
-| `groundEffectFade` | 0–600, practical range | 370 | Higher: ground clutter fades later; lower: earlier. Coordinate with clutter distance. |
-| `groundEffectDist` | 32–600 | 500 | Higher: ground clutter renders farther away; lower: nearer. |
-| `lodObjectFadeScale` | 50–300, community range | 200 | Higher: distant objects remain visible longer; lower: fade sooner. |
-| `lodObjectCullSize` | 1–100, community range | 8 | **Lower** retains smaller objects; higher culls more objects. |
-| `terrainLodDist` | 128–5248 | 1000 | Higher: detailed terrain extends farther; lower: earlier detail reduction. |
+| `groundEffectFade` | 0–600, practical range | 600 | Higher: ground clutter fades later; lower: earlier. Coordinate with clutter distance. |
+| `groundEffectDist` | 32–600 | 600 | Higher: ground clutter renders farther away; lower: nearer. |
+| `lodObjectFadeScale` | 50–300, community range | 300 | Higher: distant objects remain visible longer; lower: fade sooner. |
+| `lodObjectCullSize` | 1–100, community range | 1 | **Lower** retains smaller objects; higher culls more objects. |
+| `terrainLodDist` | 128–5248 | 5248 | Higher: detailed terrain extends farther; lower: earlier detail reduction. |
 | `ResampleAlwaysSharpen` | 0 / 1 | 1 | 1 enables always-on resample sharpening; 0 reverses it. |
 | `reflectionMode` | 0–3 | 3 | 0 screen-space; 1 sky; 2 sky + terrain; 3 also large world objects/buildings. 0 is not necessarily "off". |
+
+**Dense + realistic** uses the high-detail values above and can significantly
+reduce FPS. **Balanced** stages moderate clutter, terrain detail and reflections.
+**Herb visibility** uses minimum supported ground clutter, turns sharpening off,
+and preserves small and distant objects so gathering nodes are less likely to be
+culled. It is not a full graphics-off switch: `groundEffectDensity` bottoms out
+at 16, and reflection mode 0 still uses screen-space reflections.
 
 These are bounded UI ranges, **not guaranteed limits for every Forever/retail
 build**. Defaults and actual behavior depend on the client and other graphics

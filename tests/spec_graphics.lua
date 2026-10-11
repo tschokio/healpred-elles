@@ -64,6 +64,31 @@ T.register("graphics: sliders stage both directions and the exact supplied prese
 	assert_nil(e.ns.db.graphics)
 end)
 
+T.register("graphics: named presets stage safely and herb mode minimizes clutter without hiding small objects", function()
+	local e = env()
+	local f = e.ns.OpenOptions("graphics")
+	for _, preset in ipairs({
+		{ "graphicsPreset", "dense" },
+		{ "graphicsBalancedPreset", "balanced" },
+		{ "graphicsHerbPreset", "herbs" },
+	}) do
+		local writes = #e.writes
+		click(f.controls[preset[1]])
+		assert_eq(#e.writes, writes, "preset selection only stages drafts")
+		for name, value in pairs(e.ns.graphics.presets[preset[2]]) do
+			assert_eq(f.controls["graphics_" .. name]:GetText(), tostring(value))
+		end
+		if preset[2] == "herbs" then
+			assert_true(f.graphicsPage.message:GetText():find("Some effects cannot be fully disabled", 1, true))
+		end
+		click(f.controls.graphicsApply)
+		for name, value in pairs(e.ns.graphics.presets[preset[2]]) do assert_eq(e.values[name], value) end
+	end
+	assert_eq(e.ns.graphics.presets.herbs.groundEffectDensity, 16)
+	assert_eq(e.ns.graphics.presets.herbs.lodObjectCullSize, 1, "small world objects remain visible")
+	assert_eq(e.ns.graphics.presets.herbs.lodObjectFadeScale, 300, "distant world objects remain visible longer")
+end)
+
 T.register("graphics: validation is atomic and unrelated CVars are never accepted", function()
 	local e = env()
 	local G = e.ns.graphics
@@ -145,11 +170,11 @@ T.register("graphics: defaults are client supplied and stage without writing or 
 	C_CVar.GetCVarDefault = function(name) return name ~= "groundEffectFade" and tostring(defaults[name]) or nil end
 	click(f.controls.graphicsDefaults)
 	assert_eq(#e.writes, 0)
-	assert_eq(f.controls.graphics_groundEffectFade:GetText(), "370")
+	assert_eq(f.controls.graphics_groundEffectFade:GetText(), "600")
 	assert_eq(f.controls.graphics_groundEffectDensity:GetText(), "16")
 	assert_true(f.graphicsPage.message:GetText():find("1 defaults unavailable", 1, true))
-	click(f.controls.graphicsApply); assert_eq(e.values.groundEffectFade, 370)
-	click(f.controls.graphicsRefresh); assert_eq(f.controls.graphics_groundEffectFade:GetText(), "370")
+	click(f.controls.graphicsApply); assert_eq(e.values.groundEffectFade, 600)
+	click(f.controls.graphicsRefresh); assert_eq(f.controls.graphics_groundEffectFade:GetText(), "600")
 	-- Existing values outside practical bounds must not block unrelated edits.
 	e.values.lodObjectFadeScale = 400.5
 	f.graphicsPage.Refresh(); f.controls.graphics_groundEffectDensity:SetText("128")
@@ -166,7 +191,7 @@ T.register("graphics: controls fit the full-width page without overlapping and p
 		widgets[#widgets + 1] = row.input
 		widgets[#widgets + 1] = row.slider or row.toggle or row.mode
 	end
-	for _, key in ipairs({ "graphicsPreset", "graphicsDefaults", "graphicsRefresh", "graphicsApply", "graphicsRestore", "graphicsExport", "graphicsSelectAll" }) do
+	for _, key in ipairs({ "graphicsPreset", "graphicsBalancedPreset", "graphicsHerbPreset", "graphicsDefaults", "graphicsRefresh", "graphicsApply", "graphicsRestore", "graphicsExport", "graphicsSelectAll" }) do
 		widgets[#widgets + 1] = f.controls[key]
 	end
 	for i, widget in ipairs(widgets) do
