@@ -28,26 +28,9 @@ local function setting(key, fallback)
 	return value or fallback
 end
 
-local function now()
-	return type(_G.GetTime) == "function" and _G.GetTime() or 0
-end
-
 local function lookup(key)
 	for i, record in ipairs(active) do
 		if record.key == key then return record, i end
-	end
-end
-
-local function updateDriver()
-	if not eventFrame then return end
-	local needsUpdate = false
-	for _, record in ipairs(active) do
-		if record.leaveAt or record.clickExpiresAt then needsUpdate = true; break end
-	end
-	if needsUpdate then
-		eventFrame:SetScript("OnUpdate", function() links.UpdateTimers() end)
-	else
-		eventFrame:SetScript("OnUpdate", nil)
 	end
 end
 
@@ -80,7 +63,6 @@ end
 function links.EnforceLimit()
 	local limit = links.TooltipLimit()
 	while #active > limit do removeAt(1) end
-	updateDriver()
 end
 
 local function acquireFrame()
@@ -119,7 +101,7 @@ local function getOrCreate(frame, link)
 		return nil
 	end
 	local x, y = cursorPoint()
-	record = { key = key, link = link, frame = tooltip, owner = frame, openedAt = now(), x = x, y = y }
+	record = { key = key, link = link, frame = tooltip, owner = frame, x = x, y = y }
 	active[#active + 1] = record
 	return record
 end
@@ -149,7 +131,6 @@ local function showRecord(record, frame, link, clicked)
 	if not ok then
 		local _, badIndex = lookup(record.key)
 		if badIndex then removeAt(badIndex) end
-		updateDriver()
 		return false
 	end
 	-- On modern clients TooltipDataProcessor normally decorates synchronously;
@@ -160,25 +141,12 @@ local function showRecord(record, frame, link, clicked)
 	return true
 end
 
-function links.UpdateTimers(at)
-	at = tonumber(at) or now()
-	for i = #active, 1, -1 do
-		local record = active[i]
-		local clickedExpired = record.clickExpiresAt and at >= record.clickExpiresAt
-		local lingerExpired = record.leaveAt and at >= record.leaveAt
-		if clickedExpired then record.clickExpiresAt = nil end
-		if (clickedExpired or lingerExpired) and not record.hovered then removeAt(i) end
-	end
-	updateDriver()
-end
-
 function links.OnHyperlinkEnter(frame, link)
 	if not isItemLink(link) or not ns.db or not ns.db.chatItemTooltipOnHover then return end
 	local record = getOrCreate(frame, link)
 	if not record then return end
 	record.hovered = true
-	record.leaveAt = nil
-	if showRecord(record, frame, link) then updateDriver() end
+	showRecord(record, frame, link)
 end
 
 function links.OnHyperlinkLeave(frame, link)
@@ -187,7 +155,7 @@ function links.OnHyperlinkLeave(frame, link)
 	if not record or record.owner ~= frame or not record.hovered then
 		-- EllesmereUI and some WoW client builds fire OnHyperlinkLeave with only
 		-- the chat frame (unlike OnHyperlinkEnter, which includes the link).
-		-- Resolve the active hover by frame so the linger timer always starts.
+		-- Resolve the active hover by frame when the client omits the link.
 		record = nil
 		for i = #active, 1, -1 do
 			local candidate = active[i]
@@ -199,9 +167,9 @@ function links.OnHyperlinkLeave(frame, link)
 	end
 	if not record then return end
 	record.hovered = false
-	local linger = math.max(0, math.min(5000, setting("chatItemHoverLingerMs", 1000)))
-	record.leaveAt = now() + linger / 1000
-	links.UpdateTimers()
+	if record.clicked then return end
+	local _, index = lookup(record.key)
+	if index then removeAt(index) end
 end
 
 function links.OnHyperlinkClick(frame, link)
@@ -212,7 +180,6 @@ function links.OnHyperlinkClick(frame, link)
 	if record and record.clicked then
 		local _, index = lookup(key)
 		removeAt(index)
-		updateDriver()
 		if _G.ItemRefTooltip and _G.ItemRefTooltip.Hide then _G.ItemRefTooltip:Hide() end
 		return
 	end
@@ -222,12 +189,7 @@ function links.OnHyperlinkClick(frame, link)
 	record.x, record.y = cursorPoint()
 	if not showRecord(record, frame, link, true) then return end
 	record.clicked = true
-	record.openedAt = now()
-	local timeout = math.max(0, math.min(5000, setting("chatItemClickDurationMs", 0)))
-	-- Zero means keep clicked previews open until explicitly toggled/evicted.
-	record.clickExpiresAt = timeout > 0 and (record.openedAt + timeout / 1000) or nil
 	if _G.ItemRefTooltip and _G.ItemRefTooltip.Hide then _G.ItemRefTooltip:Hide() end
-	updateDriver()
 end
 
 function links.HookFrame(frame)

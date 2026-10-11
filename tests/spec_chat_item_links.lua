@@ -30,9 +30,7 @@ T.register("chat item links: settings are opt-in and hover tooltips follow the s
 	links.OnHyperlinkEnter(frame, "item:123")
 	assert_eq(links.OpenTooltipCount(), 0, "hover is disabled by default")
 	e.ns.db.chatItemTooltipOnHover = true
-	e.ns.db.chatItemHoverLingerMs = 1000
 	e.ns.db.chatItemTooltipLimit = 3
-	Mocks.SetNow(10)
 	links.OnHyperlinkEnter(frame, "item:123")
 	assert_eq(links.OpenTooltipCount(), 1)
 	assert_eq(created[2].owner, frame)
@@ -41,13 +39,11 @@ T.register("chat item links: settings are opt-in and hover tooltips follow the s
 	assert_true(created[2].shown)
 	assert_false(nativeTooltip.shown, "the one-off Blizzard hover tooltip is replaced by the managed tooltip")
 	links.OnHyperlinkLeave(frame) -- EllesmereUI's leave hook does not pass the link.
-	links.UpdateTimers(10.999)
-	assert_eq(links.OpenTooltipCount(), 1, "linger timer keeps it open until its deadline")
-	links.UpdateTimers(11)
-	assert_eq(links.OpenTooltipCount(), 0, "linger timer closes at its deadline")
+	assert_eq(links.OpenTooltipCount(), 0, "hover tooltip closes immediately on leave")
+	assert_nil(links.eventFrame:GetScript("OnUpdate"), "chat previews do not need a timer driver")
 end)
 
-T.register("chat item links: click previews time out, toggle, deduplicate by item and obey the limit", function()
+T.register("chat item links: clicked previews stay pinned until toggled and obey the limit", function()
 	local e = Mocks.NewEnv()
 	local links = e.ns.chatItemLinks
 	local created = {}
@@ -71,11 +67,11 @@ T.register("chat item links: click previews time out, toggle, deduplicate by ite
 	local native = { Hide = function(self) self.hidden = true end }
 	ItemRefTooltip = native
 	GetCursorPosition = function() return 180, 260 end
+	e.ns.db.chatItemTooltipOnHover = true
 	e.ns.db.chatItemPreviewToggle = true
-	e.ns.db.chatItemClickDurationMs = 1000
 	e.ns.db.chatItemTooltipLimit = 2
-	Mocks.SetNow(20)
 	local chat = {}
+	links.OnHyperlinkEnter(chat, "item:123:1")
 	links.OnHyperlinkClick(chat, "item:123:1")
 	assert_eq(created[1].owner, UIParent, "clicked previews use their own tooltip frame")
 	assert_eq(created[1].anchor, "ANCHOR_NONE", "clicked previews must not track the cursor")
@@ -83,6 +79,8 @@ T.register("chat item links: click previews time out, toggle, deduplicate by ite
 	assert_eq(created[1].point[2], UIParent)
 	assert_eq(created[1].point[4], 180, "clicked preview stays at the click's x position")
 	assert_eq(created[1].point[5], 260, "clicked preview stays at the click's y position")
+	links.OnHyperlinkLeave(chat) -- A pending hover leave must not close a clicked preview.
+	assert_eq(links.OpenTooltipCount(), 1)
 	links.OnHyperlinkClick(chat, "item:456")
 	assert_eq(links.OpenTooltipCount(), 2)
 	assert_true(native.hidden, "managed previews replace the single Blizzard item tooltip")
@@ -94,17 +92,9 @@ T.register("chat item links: click previews time out, toggle, deduplicate by ite
 	assert_eq(links.OpenTooltipCount(), 1, "item variants share one preview and a repeat click closes it")
 	links.OnHyperlinkClick(chat, "item:999")
 	assert_eq(links.OpenTooltipCount(), 2)
-	links.UpdateTimers(20.999)
-	assert_eq(links.OpenTooltipCount(), 2)
-	links.UpdateTimers(21)
-	assert_eq(links.OpenTooltipCount(), 0, "click preview duration closes previews automatically")
-	assert_false(links.eventFrame:GetScript("OnUpdate") ~= nil, "timer driver stops when there are no pending timers")
-	e.ns.db.chatItemClickDurationMs = 0
-	links.OnHyperlinkClick(chat, "item:1000")
-	links.UpdateTimers(100)
-	assert_eq(links.OpenTooltipCount(), 1, "zero disables clicked-preview auto-close")
-	links.OnHyperlinkClick(chat, "item:1000")
-	assert_eq(links.OpenTooltipCount(), 0, "repeat click still closes an untimed preview")
+	assert_nil(links.eventFrame:GetScript("OnUpdate"), "clicked previews have no auto-close timer")
+	links.OnHyperlinkClick(chat, "item:999")
+	assert_eq(links.OpenTooltipCount(), 1, "repeat click closes a clicked preview")
 	links.OnHyperlinkClick(chat, "item:1001")
 	links.OnHyperlinkClick(chat, "item:1002")
 	e.ns.db.chatItemTooltipLimit = 1
@@ -118,17 +108,13 @@ T.register("chat item links: options are available in DoHelper without Ellesmere
 	assert_eq(f.selectedTab, "chat")
 	assert_not_nil(f.controls.chatItemTooltipOnHover)
 	assert_not_nil(f.controls.chatItemPreviewToggle)
-	assert_not_nil(f.controls.chatItemHoverLingerMs)
-	assert_not_nil(f.controls.chatItemClickDurationMs)
+	assert_nil(f.controls.chatItemHoverLingerMs)
+	assert_nil(f.controls.chatItemClickDurationMs)
 	assert_not_nil(f.controls.chatItemTooltipLimit)
 	assert_true(f.chatPage:IsShown())
 	f.controls.chatItemTooltipOnHover:SetChecked(true)
 	f.controls.chatItemTooltipOnHover:GetScript("OnClick")(f.controls.chatItemTooltipOnHover)
 	assert_true(e.ns.db.chatItemTooltipOnHover)
-	f.controls.chatItemHoverLingerMs:SetValue(2500)
-	assert_eq(e.ns.db.chatItemHoverLingerMs, 2500)
-	f.controls.chatItemClickDurationMs:SetValue(5000)
-	assert_eq(e.ns.db.chatItemClickDurationMs, 5000)
 	f.controls.chatItemTooltipLimit:SetValue(5)
 	assert_eq(e.ns.db.chatItemTooltipLimit, 5)
 end)

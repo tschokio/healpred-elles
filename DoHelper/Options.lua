@@ -500,7 +500,7 @@ local function ensureWindow()
 	chatPage:SetSize(540, 610)
 	chatPage:SetPoint("TOPLEFT", f, "TOPLEFT", 196, -62)
 	f.chatPage = chatPage
-	background(chatPage, 12, -54, 516, 420)
+	background(chatPage, 12, -54, 516, 260)
 	background(catalog, -3, 4, 516, 492)
 	local catalogHeading = label(catalog, "503 spellbook entries reviewed | select a class", 8, -5, 482)
 	UI.Text(catalogHeading, "muted")
@@ -1174,8 +1174,8 @@ local function ensureWindow()
 		UI.Checkbox(c)
 		f.controls[key] = c
 	end
-	chatCheck("chatItemTooltipOnHover", "Show item tooltips on hover", "Display the item tooltip while the pointer is over an item link.", -92)
-	chatCheck("chatItemPreviewToggle", "Enable managed clicked previews", "Repeat-click an item to close it; managed previews support timers and multiple items.", -145)
+	chatCheck("chatItemTooltipOnHover", "Show item tooltips on hover", "Display the item tooltip while the pointer is over an item link; it closes when you leave.", -92)
+	chatCheck("chatItemPreviewToggle", "Enable managed clicked previews", "Click an item to pin its preview; click it again to close. Multiple items can stay open.", -145)
 	local function chatSlider(key, title, y, minimum, maximum, step, formatValue)
 		local heading = UI.Label(chatPage, title, 24, y, 350, "body")
 		local valueLabel = UI.Label(chatPage, "", 390, y, 110, "muted")
@@ -1214,17 +1214,11 @@ local function ensureWindow()
 		f.controls[key] = slider
 		return slider
 	end
-	chatSlider("chatItemHoverLingerMs", "Hover tooltip linger after leaving", -205, 0, 5000, 100,
-		function(value) return value .. " ms" end)
-	chatSlider("chatItemClickDurationMs", "Clicked preview auto-close (0 = never)", -280, 0, 5000, 100,
-		function(value) return value == 0 and "Never" or (value .. " ms") end)
-	chatSlider("chatItemTooltipLimit", "Maximum simultaneous item tooltips", -355, 1, 10, 1,
+	chatSlider("chatItemTooltipLimit", "Maximum simultaneous item tooltips", -205, 1, 10, 1,
 		function(value) return value .. (value == 1 and " item" or " items") end)
 	f.RefreshChat = function()
-		for _, key in ipairs({ "chatItemHoverLingerMs", "chatItemClickDurationMs", "chatItemTooltipLimit" }) do
-			local slider = f.controls[key]
-			if slider and slider.RefreshValue then slider.RefreshValue() end
-		end
+		local slider = f.controls.chatItemTooltipLimit
+		if slider and slider.RefreshValue then slider.RefreshValue() end
 	end
 	check("enabled", "Enable helper (healing overlay and next-swing borders)", -88, function() return ns.db.enabled end,
 		function(v) command("enable " .. (v and "on" or "off")) end)
