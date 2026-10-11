@@ -105,14 +105,17 @@ function G.Apply(values, restoring)
 		touched[#touched + 1] = item
 		if G.original[item.name] == nil then G.original[item.name] = item.old end
 		local ok, result = pcall(set, item.name, tostring(item.value))
-		if not ok or result == false or G.Read(item.name) ~= item.value then
+		local readback = G.Read(item.name)
+		if not ok or result == false or readback ~= item.value then
 			local rolledBack = true
 			for i = #touched, 1, -1 do
 				local old = touched[i]
 				pcall(set, old.name, tostring(old.old))
 				if G.Read(old.name) ~= old.old then rolledBack = false end
 			end
-			return false, item.name .. " was refused, clamped or not immediately confirmed. " ..
+			local detail = not ok and "setter raised an error" or result == false and "setter reported failure"
+				or readback == nil and "readback is unavailable" or ("read back " .. tostring(readback))
+			return false, item.name .. " could not hold " .. tostring(item.value) .. " (" .. detail .. "). " ..
 				(rolledBack and "Previous values restored." or "Rollback incomplete; check current values and use Restore original.")
 		end
 	end
@@ -262,26 +265,30 @@ function G.BuildOptionsUI(f)
 		page.Refresh(); message:SetText("Draft replaced with current game values; nothing changed.")
 	end)
 	UI.Button(button("graphicsApply", "Apply graphics", 10, -460, 148, function()
-		local _, status = G.Apply(draft)
-		page.Refresh(); message:SetText(status)
+		local ok, status = G.Apply(draft)
+		page.Refresh(not ok)
+		if not ok then status = status .. " Draft kept so you can adjust the named setting or use Read current." end
+		message:SetText(status)
 	end), "primary")
 	button("graphicsRestore", "Restore original", 166, -460, 148, function()
 		local _, status = G.Restore()
 		page.Refresh(); message:SetText(status)
 	end)
 	UI.Label(page, "Original backup lasts this login only.\nNo automatic changes on login.", 322, -458, 400, "muted")
-	function page.Refresh()
-		draft = {}; refreshing = true
+	function page.Refresh(keepDraft)
+		if not keepDraft then draft = {} end
+		refreshing = true
 		for _, entry in ipairs(G.entries) do
-			local value = G.Read(entry.name)
+			local current = G.Read(entry.name)
+			local value = keepDraft and draft[entry.name] or current
 			local row = page.rows[entry.name]
-			if value ~= nil then draft[entry.name] = value end
+			if not keepDraft and current ~= nil then draft[entry.name] = current end
 			display(entry, value)
-			row.input:SetEnabled(value ~= nil)
-			if value == nil then row.input:ClearFocus() end
-			if row.slider then row.slider:EnableMouse(value ~= nil) end
-			if row.toggle then row.toggle:SetEnabled(value ~= nil) end
-			if row.mode then row.mode:SetEnabled(value ~= nil) end
+			row.input:SetEnabled(current ~= nil)
+			if current == nil then row.input:ClearFocus() end
+			if row.slider then row.slider:EnableMouse(current ~= nil) end
+			if row.toggle then row.toggle:SetEnabled(current ~= nil) end
+			if row.mode then row.mode:SetEnabled(current ~= nil) end
 		end
 		refreshing = false
 	end

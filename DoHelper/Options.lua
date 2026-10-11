@@ -25,7 +25,7 @@ local HELP = {
 	combat = { "COMBAT INDICATOR", "Clear, quiet feedback", "Choose your enter and leave labels, independent enter/leave colours, the text size and the timing.\n\nDirection and distance scroll the line up or down; 0 distance disables motion. Motion always restarts from the saved position.\n\nA duration of 0 keeps the label until the next transition (after the scroll settles).\n\nUse Preview + and Preview - to test without starting combat. Unlock to drag, then lock again to restore click-through.", "Size, colours and position remain independent of the settings theme." },
 	chat = { "CHAT ITEM LINKS", "Optional item-link helpers", "Enable a tooltip when hovering item links in Blizzard chat frames. You can also make a second click on the same item link close its native item preview.\n\nBoth options apply to Blizzard chat frames and are independent of EllesmereUI code.", "Both settings are off by default." },
 	skins = { "ADDON SKIN", "A look that fits your game", "Choose Classic WoW's framed look, the crisp EllesmereUI style, transparent glass, or a color palette. Styles change borders, font and opacity as well as colors. Changes apply across addon panels and notes.", "The Notes tab can follow the selected style or keep its own custom colors." },
-	loot = { "LOOT POPUPS", "Item details as you loot", "Show item icons, quantity, available value and mouseover tooltips in scrolling popups. Money, currency and reputation changes can be included too. Drag the thin top edge to reposition; the location is saved.", "Choose a glass, Classic, EllesmereUI, Minimal, Charcoal or Arcane skin, then tune duration and appearance." },
+	loot = { "LOOT POPUPS", "Item details as you loot", "Show item icons, looted quantity, available value and mouseover tooltips. Money, currency and reputation popups show the amount gained on the right. Drag the thin top edge to reposition; the location is saved.", "Choose a skin and size, position the label and quantity independently, customize the font, and set the window strata. Positive X moves right; positive Y moves up." },
 }
 
 local function safe(obj, method, ...)
@@ -1149,6 +1149,7 @@ local function ensureWindow()
 		if f.weaponPage then f.weaponPage:SetShown(tab == "weapons") end
 		if f.graphicsPage then f.graphicsPage:SetShown(tab == "graphics") end
 		if f.lootPage then f.lootPage:SetShown(tab == "loot") end
+		if tab ~= "loot" and f.lootTextLayoutPanel then f.lootTextLayoutPanel:Hide() end
 		if f.skinPage then f.skinPage:SetShown(tab == "skins") end
 		chatPage:SetShown(tab == "chat")
 		f.preview:SetShown(tab == "settings" or tab == "spells")
@@ -1253,12 +1254,12 @@ local function ensureWindow()
 		if slider and slider.RefreshValue then slider.RefreshValue() end
 	end
 	UI.Label(lootPage, "LOOT POPUPS", 18, -16, 470, "section")
-	UI.Label(lootPage, "Scrolling item cards with quantity, value and hover tooltips.", 18, -40, 470, "muted")
-	local function lootCheck(key, title, description, x, y, read, write)
+	UI.Label(lootPage, "Item cards show quality, quantity, value and hover tooltips.", 18, -40, 470, "muted")
+	local function lootCheck(key, title, description, x, y, read, write, labelWidth)
 		local c = CreateFrame("CheckButton", nil, lootPage, "UICheckButtonTemplate")
 		c:SetSize(26, 26)
 		c:SetPoint("TOPLEFT", lootPage, "TOPLEFT", x, y)
-		label(lootPage, title, x + 34, y - 6, 200)
+		label(lootPage, title, x + 34, y - 6, labelWidth or 200)
 		if description then UI.Label(lootPage, description, x + 34, y - 27, 200, "muted") end
 		c.read = read
 		c:SetScript("OnClick", function(self)
@@ -1320,34 +1321,188 @@ local function ensureWindow()
 	lootField("lootFontSize", "Font size (8-28)", 18, -278)
 	lootField("lootIconSize", "Icon size (20-96)", 264, -278)
 	lootField("lootWidth", "Popup width (280-900)", 18, -308)
-	lootField("lootDuration", "Show seconds (0-30)", 264, -308)
-	lootField("lootMaxRows", "Maximum rows (1-12)", 18, -338)
-	lootField("lootOpacity", "Popup opacity (0-1)", 264, -338)
-	lootField("lootBackgroundAlpha", "Background (0-1)", 18, -368)
-	lootCheck("lootQualityColors", "Quality color", nil, 264, -368,
+	local syncingWidthSlider = false
+	local widthSlider = CreateFrame("Slider", nil, lootPage)
+	widthSlider:SetSize(280, 18)
+	widthSlider:SetPoint("TOPLEFT", lootPage, "TOPLEFT", 210, -307)
+	widthSlider:SetOrientation("HORIZONTAL")
+	widthSlider:SetMinMaxValues(280, 900)
+	widthSlider:SetValueStep(10)
+	if widthSlider.SetObeyStepOnDrag then widthSlider:SetObeyStepOnDrag(true) end
+	UI.Background(widthSlider, 0, -7, 280, 4)
+	local widthThumb = widthSlider:CreateTexture(nil, "ARTWORK")
+	widthThumb:SetTexture(UI.WHITE); widthThumb:SetSize(10, 18); UI.Tint(widthThumb, "accent")
+	widthSlider:SetThumbTexture(widthThumb)
+	widthSlider:SetScript("OnValueChanged", function(_, value)
+		if syncingWidthSlider then return end
+		local width = math.max(280, math.min(900, math.floor(value + 0.5)))
+		if tonumber(f.controls.lootWidth:GetText()) ~= width then f.controls.lootWidth:SetText(tostring(width)) end
+	end)
+	f.controls.lootWidthSlider = widthSlider
+	lootField("lootDuration", "Show seconds (0-30)", 18, -338)
+	lootField("lootMaxRows", "Maximum rows (1-12)", 264, -338)
+	lootField("lootOpacity", "Popup opacity (0-1)", 18, -368)
+	lootField("lootBackgroundAlpha", "Background (0-1)", 264, -368)
+	lootCheck("lootQualityColors", "Quality color", nil, 18, -398,
 		function() return ns.lootWindow and ns.lootWindow.Style().qualityColors end,
 		function(value)
 			local d = ns.db.lootWindow
 			d.qualityColors = value and true or false
 			if ns.lootWindow then ns.lootWindow.Refresh() end
-		end)
-	lootCheck("lootBorderGlow", "Quality glow", nil, 18, -398,
+		end, 128)
+	lootCheck("lootBorderGlow", "Quality glow", nil, 180, -398,
 		function() return ns.lootWindow and ns.lootWindow.Style().borderGlow end,
 		function(value)
 			local style = ns.lootWindow.Style()
 			style.qualityColors = ns.lootWindow.Style().qualityColors
 			style.borderGlow = value
 			ns.lootWindow.SetStyle(style)
-		end)
-	lootCheck("lootAnimate", "Scroll in", nil, 264, -398,
+		end, 128)
+	lootCheck("lootAnimate", "Scroll in", nil, 342, -398,
 		function() return ns.lootWindow and ns.lootWindow.Style().animate end,
 		function(value)
 			local style = ns.lootWindow.Style()
 			style.animate = value
 			ns.lootWindow.SetStyle(style)
+		end, 130)
+	local lootMessage = UI.Label(lootPage, "Open text layout to reposition labels and choose fonts.", 270, -426, 230, "muted")
+	local function stageLootSize(width, fontSize, iconSize)
+		local c = f.controls
+		c.lootWidth:SetText(tostring(width))
+		c.lootFontSize:SetText(tostring(fontSize))
+		c.lootIconSize:SetText(tostring(iconSize))
+		c.lootWidthSlider:SetValue(width)
+		if tonumber(c.lootWidth:GetText()) ~= width then c.lootWidth:SetText(tostring(width)) end
+		lootMessage:SetText("Size staged; click Apply values to save.")
+	end
+	local sizePresets = {
+		{ "lootSizeCompact", "Compact", 350, 12, 28 },
+		{ "lootSizeStandard", "Standard", 420, 15, 40 },
+		{ "lootSizeLarge", "Large", 560, 18, 56 },
+	}
+	for i, preset in ipairs(sizePresets) do
+		local key, title = preset[1], preset[2]
+		local width, fontSize, iconSize = preset[3], preset[4], preset[5]
+		local b = CreateFrame("Button", nil, lootPage, "UIPanelButtonTemplate")
+		b:SetSize(76, 24)
+		b:SetPoint("TOPLEFT", lootPage, "TOPLEFT", 18 + (i - 1) * 82, -426)
+		b:SetText(title)
+		b:SetScript("OnClick", function() stageLootSize(width, fontSize, iconSize) end)
+		UI.Button(b)
+		f.controls[key] = b
+	end
+	local FONT_CHOICES = {
+		{ "default", "Game default" }, { "friz", "Friz Quadrata" }, { "arial", "Arial Narrow" },
+		{ "morpheus", "Morpheus" }, { "skurri", "Skurri" },
+	}
+	local OUTLINE_CHOICES = {
+		{ "none", "None" }, { "outline", "Outline" }, { "thick", "Thick" },
+	}
+	local STRATA_CHOICES = {}
+	for _, strata in ipairs(ns.lootWindow.strataLevels or {}) do STRATA_CHOICES[#STRATA_CHOICES + 1] = { strata, strata } end
+	local fontFaceDraft, fontOutlineDraft, frameStrataDraft = "default", "none", "DIALOG"
+	local layoutPanel = CreateFrame("Frame", nil, f, "BackdropTemplate")
+	layoutPanel:SetSize(520, 350)
+	layoutPanel:SetPoint("CENTER", f, "CENTER", 0, 0)
+	layoutPanel:SetFrameStrata("DIALOG")
+	layoutPanel:SetFrameLevel(f:GetFrameLevel() + 30)
+	layoutPanel:EnableMouse(true)
+	layoutPanel:Hide()
+	UI.Background(layoutPanel, -3, 4, 516, 350)
+	UI.Label(layoutPanel, "LOOT LABEL / QUANTITY / FONT / LAYER", 16, -16, 480, "section")
+	UI.Label(layoutPanel, "Offsets are pixels: positive X moves right; positive Y moves up.", 16, -40, 480, "muted")
+	local function lootOffsetSlider(key, title, x, y, minimum, maximum)
+		label(layoutPanel, title, x, y - 5, 76)
+		local valueLabel = UI.Label(layoutPanel, "0", x + 202, y - 5, 34, "muted")
+		valueLabel:SetJustifyH("RIGHT")
+		local slider = CreateFrame("Slider", nil, layoutPanel)
+		slider:SetSize(120, 18)
+		slider:SetPoint("TOPLEFT", layoutPanel, "TOPLEFT", x + 78, y)
+		slider:SetOrientation("HORIZONTAL")
+		slider:SetMinMaxValues(minimum, maximum)
+		slider:SetValueStep(1)
+		if slider.SetObeyStepOnDrag then slider:SetObeyStepOnDrag(true) end
+		UI.Background(slider, 0, -7, 120, 4)
+		local thumb = slider:CreateTexture(nil, "ARTWORK")
+		thumb:SetTexture(UI.WHITE); thumb:SetSize(10, 18); UI.Tint(thumb, "accent")
+		slider:SetThumbTexture(thumb)
+		slider:SetScript("OnValueChanged", function(_, value)
+			value = math.floor(value + 0.5)
+			valueLabel:SetText((value > 0 and "+" or "") .. value)
 		end)
-	UI.Label(lootPage, "Drag the thin top edge to move. Preview is labeled and does not replace live loot.", 18, -426, 480, "muted")
-	local lootMessage = UI.Label(lootPage, "", 18, -445, 480, "muted")
+		f.controls[key] = slider
+		return slider
+	end
+	lootOffsetSlider("lootLabelXOffset", "Label X", 16, -80, -120, 120)
+	lootOffsetSlider("lootLabelYOffset", "Label Y", 268, -80, -60, 60)
+	lootOffsetSlider("lootAmountXOffset", "Quantity X", 16, -122, -120, 120)
+	lootOffsetSlider("lootAmountYOffset", "Quantity Y", 268, -122, -60, 60)
+	local layoutMessage
+	local function cycleStyleOption(key, title, choices, x, width, y, read, write)
+		local b = CreateFrame("Button", nil, layoutPanel, "UIPanelButtonTemplate")
+		b:SetSize(width, 26)
+		b:SetPoint("TOPLEFT", layoutPanel, "TOPLEFT", x, y)
+		local function refresh()
+			local value = read()
+			for _, choice in ipairs(choices) do
+				if choice[1] == value then b:SetText(title .. ": " .. choice[2]); return end
+			end
+			b:SetText(title .. ": " .. choices[1][2])
+		end
+		b:SetScript("OnClick", function()
+			local index = 1
+			for i, choice in ipairs(choices) do if choice[1] == read() then index = i; break end end
+			local nextChoice = choices[index % #choices + 1]
+			write(nextChoice[1])
+			refresh()
+			layoutMessage:SetText(title .. " selected; click Apply text style to save.")
+		end)
+		UI.Button(b)
+		f.controls[key] = b
+		return b, refresh
+	end
+	local _, refreshFontFace = cycleStyleOption("lootFontFace", "Font", FONT_CHOICES, 16, 240, -170,
+		function() return fontFaceDraft end, function(value) fontFaceDraft = value end)
+	local _, refreshFontOutline = cycleStyleOption("lootFontOutline", "Outline", OUTLINE_CHOICES, 268, 236, -170,
+		function() return fontOutlineDraft end, function(value) fontOutlineDraft = value end)
+	local _, refreshStrata = cycleStyleOption("lootFrameStrata", "Window strata", STRATA_CHOICES, 16, 488, -206,
+		function() return frameStrataDraft end, function(value) frameStrataDraft = value end)
+	layoutMessage = UI.Label(layoutPanel, "", 16, -244, 480, "muted")
+	f.controls.lootLayoutMessage = layoutMessage
+	local layoutApply = CreateFrame("Button", nil, layoutPanel, "UIPanelButtonTemplate")
+	layoutApply:SetSize(160, 26); layoutApply:SetPoint("TOPLEFT", layoutPanel, "TOPLEFT", 150, -300)
+	layoutApply:SetText("Apply text style")
+	layoutApply:SetScript("OnClick", function()
+		local style = ns.lootWindow.Style()
+		style.labelXOffset = f.controls.lootLabelXOffset:GetValue()
+		style.labelYOffset = f.controls.lootLabelYOffset:GetValue()
+		style.amountXOffset = f.controls.lootAmountXOffset:GetValue()
+		style.amountYOffset = f.controls.lootAmountYOffset:GetValue()
+		style.fontFace, style.fontOutline = fontFaceDraft, fontOutlineDraft
+		style.frameStrata = frameStrataDraft
+		local ok, message = ns.lootWindow.SetStyle(style)
+		layoutMessage:SetText(ok and "Text layout, font, and strata saved." or message)
+		if ok then f.RefreshLoot() end
+	end)
+	UI.Button(layoutApply, "primary")
+	f.controls.lootLayoutApply = layoutApply
+	local layoutClose = CreateFrame("Button", nil, layoutPanel, "UIPanelButtonTemplate")
+	layoutClose:SetSize(96, 26); layoutClose:SetPoint("TOPLEFT", layoutPanel, "TOPLEFT", 326, -300)
+	layoutClose:SetText("Close")
+	layoutClose:SetScript("OnClick", function() layoutPanel:Hide() end)
+	UI.Button(layoutClose)
+	f.controls.lootLayoutClose = layoutClose
+	f.lootTextLayoutPanel = layoutPanel
+	f.controls.lootTextLayout = CreateFrame("Button", nil, lootPage, "UIPanelButtonTemplate")
+	f.controls.lootTextLayout:SetSize(230, 24)
+	f.controls.lootTextLayout:SetPoint("TOPLEFT", lootPage, "TOPLEFT", 270, -426)
+	f.controls.lootTextLayout:SetText("Text / font / strata")
+	f.controls.lootTextLayout:SetScript("OnClick", function()
+		f.RefreshLoot()
+		layoutMessage:SetText("")
+		layoutPanel:Show()
+	end)
+	UI.Button(f.controls.lootTextLayout)
 	local function lootButton(key, text, x, width, action)
 		local b = CreateFrame("Button", nil, lootPage, "UIPanelButtonTemplate")
 		b:SetSize(width, 24)
@@ -1359,7 +1514,10 @@ local function ensureWindow()
 		return b
 	end
 	lootButton("lootPreview", "Style preview", 18, 112, function()
-		if ns.lootWindow then ns.lootWindow.Preview(); lootMessage:SetText("Labeled sample only; live loot is kept and restored.") end
+		if ns.lootWindow then
+			local active = ns.lootWindow.Preview()
+			lootMessage:SetText(active and "Full preview active; click again to restore live loot." or "Live loot restored.")
+		end
 	end)
 	lootButton("lootClear", "Hide / clear", 138, 100, function()
 		if ns.lootWindow then ns.lootWindow.Clear(); lootMessage:SetText("Loot window hidden and cleared.") end
@@ -1390,7 +1548,11 @@ local function ensureWindow()
 		local ok = ns.lootWindow.SetStyle({
 			fontSize = defaults.fontSize, iconSize = defaults.iconSize, width = defaults.width,
 			duration = defaults.duration, maxRows = defaults.maxRows, opacity = defaults.opacity,
-			backgroundAlpha = defaults.backgroundAlpha, qualityColors = defaults.qualityColors,
+			backgroundAlpha = defaults.backgroundAlpha,
+			labelXOffset = defaults.labelXOffset, labelYOffset = defaults.labelYOffset,
+			amountXOffset = defaults.amountXOffset, amountYOffset = defaults.amountYOffset,
+			fontFace = defaults.fontFace, fontOutline = defaults.fontOutline, frameStrata = defaults.frameStrata,
+			qualityColors = defaults.qualityColors,
 			borderGlow = defaults.borderGlow, animate = defaults.animate,
 		})
 		ns.lootWindow.SetSkin(defaults.skin)
@@ -1398,14 +1560,24 @@ local function ensureWindow()
 		if ok then lootMessage:SetText("Default appearance restored; enable state was not changed."); f.RefreshLoot() end
 	end)
 	f.RefreshLoot = function()
-		local c, d = f.controls, ns.db.lootWindow
-		c.lootFontSize:SetText(tostring(ns.lootWindow.Style().fontSize))
-		c.lootIconSize:SetText(tostring(ns.lootWindow.Style().iconSize))
-		c.lootWidth:SetText(tostring(ns.lootWindow.Style().width))
-		c.lootDuration:SetText(tostring(ns.lootWindow.Style().duration))
-		c.lootMaxRows:SetText(tostring(ns.lootWindow.Style().maxRows))
-		c.lootOpacity:SetText(tostring(ns.lootWindow.Style().opacity))
-		c.lootBackgroundAlpha:SetText(tostring(ns.lootWindow.Style().backgroundAlpha))
+		local c = f.controls
+		local style = ns.lootWindow.Style()
+		c.lootFontSize:SetText(tostring(style.fontSize))
+		c.lootIconSize:SetText(tostring(style.iconSize))
+		c.lootWidth:SetText(tostring(style.width))
+		syncingWidthSlider = true
+		c.lootWidthSlider:SetValue(style.width)
+		syncingWidthSlider = false
+		c.lootDuration:SetText(tostring(style.duration))
+		c.lootMaxRows:SetText(tostring(style.maxRows))
+		c.lootOpacity:SetText(tostring(style.opacity))
+		c.lootBackgroundAlpha:SetText(tostring(style.backgroundAlpha))
+		c.lootLabelXOffset:SetValue(style.labelXOffset)
+		c.lootLabelYOffset:SetValue(style.labelYOffset)
+		c.lootAmountXOffset:SetValue(style.amountXOffset)
+		c.lootAmountYOffset:SetValue(style.amountYOffset)
+		fontFaceDraft, fontOutlineDraft, frameStrataDraft = style.fontFace, style.fontOutline, style.frameStrata
+		refreshFontFace(); refreshFontOutline(); refreshStrata()
 		for _, key in ipairs({ "lootWindowEnabled", "lootItems", "lootMoney", "lootCurrency", "lootReputation", "lootQualityColors", "lootBorderGlow", "lootAnimate" }) do
 			if c[key] and c[key].read then c[key]:SetChecked(c[key].read() and true or false) end
 		end

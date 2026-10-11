@@ -137,12 +137,32 @@ T.register("graphics: client clamps and false or erroring setters roll back with
 		end
 		local ok, message = e.ns.graphics.Apply({ groundEffectDensity = 256, groundEffectDist = 500 })
 		assert_false(ok); assert_true(message:find("Previous values restored", 1, true))
+		if mode == "clamp" then assert_true(message:find("read back 400", 1, true)) end
+		if mode == "false" then assert_true(message:find("setter reported failure", 1, true)) end
 		assert_eq(e.values.groundEffectDensity, 16); assert_eq(e.values.groundEffectDist, 70)
 	end
 	local e = env()
 	SetCVar = function(name, value) e.values[name] = tonumber(value) == 256 and 200 or 100 end
 	local ok, message = e.ns.graphics.Apply({ groundEffectDensity = 256 })
 	assert_false(ok); assert_true(message:find("Rollback incomplete", 1, true))
+end)
+
+T.register("graphics: rejected preset keeps its staged values and names the incompatible CVar", function()
+	local e = env()
+	local f = e.ns.OpenOptions("graphics")
+	local set = SetCVar
+	SetCVar = function(name, value)
+		if name == "groundEffectDist" and tonumber(value) == 600 then return false end
+		return set(name, value)
+	end
+	click(f.controls.graphicsPreset)
+	click(f.controls.graphicsApply)
+	assert_eq(e.values.groundEffectDensity, defaults.groundEffectDensity, "failed preset rolls back earlier writes")
+	assert_eq(f.controls.graphics_groundEffectDist:GetText(), "600", "failed draft remains visible for adjustment")
+	assert_true(f.graphicsPage.message:GetText():find("groundEffectDist", 1, true))
+	assert_true(f.graphicsPage.message:GetText():find("Draft kept", 1, true))
+	click(f.controls.graphicsRefresh)
+	assert_eq(f.controls.graphics_groundEffectDist:GetText(), tostring(defaults.groundEffectDist), "Read current explicitly discards the failed draft")
 end)
 
 T.register("graphics: export is current-only copyable text and editing it never executes commands", function()

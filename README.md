@@ -82,7 +82,9 @@ graphics presets, raid/dungeon settings or other addons may overwrite them.
 
 Application validates the entire draft first and checks CVar readback. A refusal,
 clamp or unconfirmed write triggers a best-effort rollback. The status explicitly
-warns if rollback cannot be confirmed; always check current values in that case.
+names the CVar that rejected the draft and keeps the staged values visible for
+adjustment. **Read current** explicitly discards a failed draft. The status warns
+if rollback cannot be confirmed; always check current values in that case.
 
 ### Export graphics settings
 
@@ -223,9 +225,21 @@ remain accessible in the sidebar.
 
 The **Loot window** tab adds an opt-in scrolling popup feed for your own item
 drops, money, currencies and reputation changes. Item cards show the icon,
-quantity, available vendor/Auctionator/TradeSkillMaster value and a hover
-tooltip. Pick a glass, Classic, EllesmereUI, Minimal, Charcoal or Arcane skin;
-adjust duration, row count, dimensions, opacity, quality glow and entry motion.
+explicit item-quality label/color, looted quantity and total vendor sell worth.
+When available, an Auctionator/TradeSkillMaster estimate is included in the item
+tooltip. Money, currency and reputation show their gained amount at the right.
+Repeated gains of the same item, currency, faction, or money merge into their
+current popup row and refresh its timer; gains after the row expires start a new
+total.
+Pick a glass, Classic, EllesmereUI, Minimal, Charcoal or Arcane skin; adjust
+popup width with the slider or numeric field, and use Compact, Standard or Large
+to stage matching width, icon and font sizes before applying. Separate X/Y
+offsets position the item label and quantity; font face and outline are
+customizable as well. The text-layout panel also sets the loot window's frame
+strata. Duration, row count, opacity, quality glow and entry motion are
+adjustable too. Style preview shows representative quality tiers and money,
+currency and reputation examples; it stays active while you tune settings and
+restores live loot when toggled off or when new loot arrives.
 Style preview is clearly labeled and does not replace real loot. Drag the thin
 top edge to save the popup's position.
 
