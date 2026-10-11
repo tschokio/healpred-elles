@@ -238,6 +238,24 @@ function ns.UpdateMinimapButton()
 	b:SetShown(not ns.db.minimapHidden)
 end
 
+local function setMinimapButtonOptionsLayer(open)
+	local b = ns.minimapButton
+	if not b or not Minimap then return end
+	if open then
+		-- The nearly opaque DIALOG options panel can cover the minimap button on
+		-- compact screens. Keep our icon above that panel while the menu is open.
+		b:SetFrameStrata("DIALOG")
+		local level = Minimap:GetFrameLevel() + 5
+		if ns.optionsWindow and ns.optionsWindow.GetFrameLevel then
+			level = math.max(level, ns.optionsWindow:GetFrameLevel() + 100)
+		end
+		b:SetFrameLevel(level)
+	else
+		b:SetFrameStrata("MEDIUM")
+		b:SetFrameLevel(Minimap:GetFrameLevel() + 5)
+	end
+end
+
 local function dragPosition()
 	if not GetCursorPosition or not Minimap.GetCenter then return end
 	local cx, cy = Minimap:GetCenter()
@@ -1321,6 +1339,7 @@ local function ensureWindow()
 	end
 	f:SetScript("OnShow", function() f.Refresh(); f.SelectTab(f.selectedTab or "settings") end)
 	f:SetScript("OnHide", function()
+		setMinimapButtonOptionsLayer(false)
 		for _, control in pairs(f.controls) do if control.ClearFocus then control:ClearFocus() end end
 		if f.notesEditor then f.notesEditor:ClearFocus() end
 	end)
@@ -1336,6 +1355,7 @@ function ns.OpenOptions(tab)
 	UI.FitWindow(f)
 	f.Refresh()
 	f.SelectTab(tab or f.selectedTab or "settings")
+	setMinimapButtonOptionsLayer(true)
 	f:Show()
 	return f
 end
