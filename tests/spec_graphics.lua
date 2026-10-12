@@ -55,7 +55,9 @@ T.register("graphics: sliders stage both directions and the exact supplied prese
 	local toggle = f.graphicsPage.rows.ResampleAlwaysSharpen.toggle
 	toggle:SetChecked(false); click(toggle); click(f.controls.graphicsApply)
 	assert_eq(e.values.ResampleAlwaysSharpen, 0)
-	for value = 0, 3 do
+	f.controls.graphics_reflectionMode:SetText("4"); click(f.controls.graphicsApply)
+	assert_eq(e.values.reflectionMode, 4)
+	for value = 0, 4 do
 		click(f.controls.graphicsReflection); click(f.controls.graphicsApply)
 		assert_eq(e.values.reflectionMode, value)
 	end
@@ -71,6 +73,7 @@ T.register("graphics: named presets stage safely and herb mode minimizes clutter
 		{ "graphicsPreset", "dense" },
 		{ "graphicsBalancedPreset", "balanced" },
 		{ "graphicsHerbPreset", "herbs" },
+		{ "graphicsBeyondUltra", "beyondUltra" },
 	}) do
 		local writes = #e.writes
 		click(f.controls[preset[1]])
@@ -87,6 +90,9 @@ T.register("graphics: named presets stage safely and herb mode minimizes clutter
 	assert_eq(e.ns.graphics.presets.herbs.groundEffectDensity, 16)
 	assert_eq(e.ns.graphics.presets.herbs.lodObjectCullSize, 1, "small world objects remain visible")
 	assert_eq(e.ns.graphics.presets.herbs.lodObjectFadeScale, 300, "distant world objects remain visible longer")
+	assert_eq(e.ns.graphics.presets.beyondUltra.groundEffectDist, 500)
+	assert_eq(e.ns.graphics.presets.beyondUltra.terrainLodDist, 2000)
+	assert_eq(e.ns.graphics.presets.beyondUltra.reflectionMode, 4, "the client-posted fifth reflection mode is staged")
 end)
 
 T.register("graphics: validation is atomic and unrelated CVars are never accepted", function()
@@ -211,7 +217,7 @@ T.register("graphics: controls fit the full-width page without overlapping and p
 		widgets[#widgets + 1] = row.input
 		widgets[#widgets + 1] = row.slider or row.toggle or row.mode
 	end
-	for _, key in ipairs({ "graphicsPreset", "graphicsBalancedPreset", "graphicsHerbPreset", "graphicsDefaults", "graphicsRefresh", "graphicsApply", "graphicsRestore", "graphicsExport", "graphicsSelectAll" }) do
+	for _, key in ipairs({ "graphicsPreset", "graphicsBalancedPreset", "graphicsHerbPreset", "graphicsBeyondUltra", "graphicsDefaults", "graphicsRefresh", "graphicsApply", "graphicsRestore", "graphicsExport", "graphicsSelectAll" }) do
 		widgets[#widgets + 1] = f.controls[key]
 	end
 	for i, widget in ipairs(widgets) do

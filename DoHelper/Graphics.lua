@@ -12,7 +12,7 @@ local definitions = {
 	{ "lodObjectCullSize", "Object culling size", 1, 100, 1, "LOWER: retains smaller objects. Higher: fewer objects." },
 	{ "terrainLodDist", "Terrain detail distance", 128, 5248, 5248, "Higher: keeps detailed terrain farther away." },
 	{ "ResampleAlwaysSharpen", "Always sharpen", 0, 1, 1, "Off reverses sharpening; effect depends on resampling." },
-	{ "reflectionMode", "Water reflection mode", 0, 3, 3, "0 screen-space; 1 sky; 2 + terrain; 3 + buildings." },
+	{ "reflectionMode", "Water reflection mode", 0, 4, 3, "Higher modes add reflection detail; client support and effects vary." },
 }
 local byName = {}
 for _, row in ipairs(definitions) do
@@ -42,6 +42,17 @@ local PRESETS = {
 		terrainLodDist = 128,
 		ResampleAlwaysSharpen = 0,
 		reflectionMode = 0,
+	},
+	beyondUltra = {
+		-- Supported overlap from the community's Forever macro guide. Other
+		-- macro CVars remain excluded until verified in this client's CVar API.
+		groundEffectDensity = 256,
+		groundEffectFade = 600,
+		groundEffectDist = 500,
+		lodObjectFadeScale = 300,
+		lodObjectCullSize = 1,
+		terrainLodDist = 2000,
+		reflectionMode = 4,
 	},
 }
 for _, entry in ipairs(G.entries) do PRESETS.dense[entry.name] = entry.preset end
@@ -182,7 +193,7 @@ function G.BuildOptionsUI(f)
 		elseif entry.name == "reflectionMode" then
 			row.mode = button("graphicsReflection", "Mode 0", 280, y + 3, 112, function()
 				local value = number(draft[entry.name]) or 0
-				value = (math.floor(value) + 1) % 4
+				value = (math.floor(value) + 1) % (entry.max + 1)
 				input:SetText(tostring(value)); row.mode:SetText("Mode " .. value)
 			end)
 		else
@@ -240,17 +251,21 @@ function G.BuildOptionsUI(f)
 		end
 		refreshing = false
 	end
-	button("graphicsPreset", "Dense + realistic", 10, -394, 148, function()
+	button("graphicsPreset", "Dense + realistic", 10, -394, 112, function()
 		stage(function(entry) return PRESETS.dense[entry.name] end)
 		message:SetText("Dense, high-detail settings staged. Expect a substantial performance cost; click Apply graphics to use them.")
 	end)
-	button("graphicsBalancedPreset", "Balanced", 166, -394, 148, function()
+	button("graphicsBalancedPreset", "Balanced", 128, -394, 112, function()
 		stage(function(entry) return PRESETS.balanced[entry.name] end)
 		message:SetText("Balanced scenery staged. Click Apply graphics to use it.")
 	end)
-	button("graphicsHerbPreset", "Herb visibility", 322, -394, 148, function()
+	button("graphicsHerbPreset", "Herb visibility", 246, -394, 112, function()
 		stage(function(entry) return PRESETS.herbs[entry.name] end)
 		message:SetText("Minimum ground clutter staged; small and distant objects are preserved. Some effects cannot be fully disabled with these CVars.")
+	end)
+	button("graphicsBeyondUltra", "Beyond Ultra", 364, -394, 112, function()
+		stage(function(entry) return PRESETS.beyondUltra[entry.name] end)
+		message:SetText("Supported Beyond Ultra macro settings staged. Unverified macro CVars are excluded; click Apply graphics to use supported values.")
 	end)
 	button("graphicsDefaults", "Stage game defaults", 10, -426, 148, function()
 		local missing = 0

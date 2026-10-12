@@ -54,7 +54,7 @@ is blocked in combat.
 | `lodObjectCullSize` | 1–100, community range | 1 | **Lower** retains smaller objects; higher culls more objects. |
 | `terrainLodDist` | 128–5248 | 5248 | Higher: detailed terrain extends farther; lower: earlier detail reduction. |
 | `ResampleAlwaysSharpen` | 0 / 1 | 1 | 1 enables always-on resample sharpening; 0 reverses it. |
-| `reflectionMode` | 0–3 | 3 | 0 screen-space; 1 sky; 2 sky + terrain; 3 also large world objects/buildings. 0 is not necessarily "off". |
+| `reflectionMode` | 0–4 | 3 | 0–3 add reflection detail by mode; 4 is the higher mode used in the Forever macro guide. Client support/effects vary. |
 
 **Dense + realistic** uses the high-detail values above and can significantly
 reduce FPS. **Balanced** stages moderate clutter, terrain detail and reflections.
@@ -62,6 +62,10 @@ reduce FPS. **Balanced** stages moderate clutter, terrain detail and reflections
 and preserves small and distant objects so gathering nodes are less likely to be
 culled. It is not a full graphics-off switch: `groundEffectDensity` bottoms out
 at 16, and reflection mode 0 still uses screen-space reflections.
+**Beyond Ultra** stages the supported overlap with the Forever guide's macros:
+ground clutter, terrain/object LOD, and reflection mode 4. The guide's other
+macro CVars are intentionally not written until they are exposed and verified
+for this client; Apply still checks readback and rolls back refused values.
 
 These are bounded UI ranges, **not guaranteed limits for every Forever/retail
 build**. Defaults and actual behavior depend on the client and other graphics
